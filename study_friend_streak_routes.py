@@ -43,6 +43,20 @@ def register_study_friend_streak_routes(app, db):
     def pair(user_id, peer_id):
         return min(int(user_id), int(peer_id)), max(int(user_id), int(peer_id))
 
+    def lock_user(user_id):
+        # Serialize invite/accept operations for each account so concurrent
+        # requests cannot race past the active/pending streak limit.
+        db.session.execute(
+            text('SELECT id FROM public."user" WHERE id=:u FOR UPDATE'),
+            {"u": user_id},
+        ).first()
+
+    def active_count(user_id):
+        return int(db.session.execute(text("""
+            SELECT COUNT(*) FROM study_friend_streak
+            WHERE status='active' AND (user_a_id=:u OR user_b_id=:u)
+        """), {"u": user_id}).scalar() or 0)
+
     def member(conversation_id, user_id):
         return ConversationParticipant.query.filter_by(
             conversation_id=conversation_id, user_id=user_id, left_at=None
@@ -152,6 +166,7 @@ def register_study_friend_streak_routes(app, db):
             return jsonify({"error": "Shared streaks currently support one-to-one chats"}), 400
         if row:
             return jsonify({"error": "A shared streak already exists for this chat"}), 409
+        lock_user(user_id)
         count = db.session.execute(text("""
             SELECT COUNT(*) FROM study_friend_streak
             WHERE status IN ('active','pending') AND (user_a_id=:u OR user_b_id=:u)
@@ -177,11 +192,17 @@ def register_study_friend_streak_routes(app, db):
         pid, row = load_for_conversation(conversation_id, user_id)
         if not row or row["status"] != "pending" or row["invited_by"] == user_id:
             return jsonify({"error": "No pending shared streak invitation"}), 404
-        db.session.execute(text("""
+        lock_user(user_id)
+        if active_count(user_id) >= MAX_ACTIVE_SHARED_STREAKS:
+            return jsonify({"error": "You already have the maximum number of active shared streaks"}), 409
+        updated = db.session.execute(text("""
             UPDATE study_friend_streak
             SET status='active', updated_at=CURRENT_TIMESTAMP
-            WHERE id=:id
-        """), {"id": row["id"]})
+            WHERE id=:id AND status='pending' AND invited_by != :u
+        """), {"id": row["id"], "u": user_id})
+        if updated.rowcount != 1:
+            db.session.rollback()
+            return jsonify({"error": "Invitation is no longer pending"}), 409
         db.session.commit()
         return jsonify({"status": "active", "minimum_minutes": MIN_SHARED_STUDY_MINUTES})
 
