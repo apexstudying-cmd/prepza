@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 import os
+import uuid
 from zoneinfo import ZoneInfo
 from flask import jsonify, session
 from sqlalchemy import text
@@ -36,33 +37,8 @@ def register_study_friend_streak_routes(app, db):
         return datetime.now(tz).date()
 
     def ensure_schema():
-        db.session.execute(text("""
-            CREATE TABLE IF NOT EXISTS study_friend_streak (
-                id BIGSERIAL PRIMARY KEY,
-                user_a_id INTEGER NOT NULL,
-                user_b_id INTEGER NOT NULL,
-                invited_by INTEGER NOT NULL,
-                status VARCHAR(20) NOT NULL DEFAULT 'pending',
-                current_streak INTEGER NOT NULL DEFAULT 0,
-                longest_streak INTEGER NOT NULL DEFAULT 0,
-                last_shared_date DATE,
-                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(user_a_id, user_b_id)
-            )
-        """))
-        db.session.execute(text("""
-            CREATE TABLE IF NOT EXISTS study_friend_streak_activity (
-                id VARCHAR(36) PRIMARY KEY,
-                streak_id BIGINT NOT NULL,
-                user_a_id INTEGER NOT NULL,
-                user_b_id INTEGER NOT NULL,
-                activity_date DATE NOT NULL,
-                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(streak_id, activity_date)
-            )
-        """))
-        db.session.commit()
+        """Compatibility hook: shared-streak schema is managed by Alembic."""
+        return
 
     def pair(user_id, peer_id):
         return min(int(user_id), int(peer_id)), max(int(user_id), int(peer_id))
@@ -130,7 +106,7 @@ def register_study_friend_streak_routes(app, db):
         you = studied(viewer_id, today)
         friend = studied(pid, today)
         return {
-            "id": int(row["id"]),
+            "id": str(row["id"]),
             "status": row["status"],
             "invited_by": int(row["invited_by"]),
             "peer_id": pid,
@@ -184,9 +160,10 @@ def register_study_friend_streak_routes(app, db):
             return jsonify({"error": "You already have the maximum number of active shared streaks"}), 409
         a, b = pair(user_id, pid)
         db.session.execute(text("""
-            INSERT INTO study_friend_streak(user_a_id,user_b_id,invited_by,status)
-            VALUES(:a,:b,:u,'pending')
-        """), {"a": a, "b": b, "u": user_id})
+            INSERT INTO study_friend_streak(id,user_a_id,user_b_id,invited_by,status)
+            VALUES(:id,:a,:b,:u,'pending')
+            ON CONFLICT(user_a_id,user_b_id) DO NOTHING
+        """), {"id": str(uuid.uuid4()), "a": a, "b": b, "u": user_id})
         db.session.commit()
         return jsonify({"status": "pending", "minimum_minutes": MIN_SHARED_STUDY_MINUTES}), 201
 
