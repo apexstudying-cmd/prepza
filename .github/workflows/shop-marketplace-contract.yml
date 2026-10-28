@@ -42,4 +42,4 @@ jobs:
       - name: Test Shop image object cache-control policy
         run: python -m pytest tests/test_shop_image_cache_contract.py -q
       - name: Compile Shop backend and build-time wiring script
-        run: python -m py_compile shop_marketplace.py scripts/apply_shop_frontend.py alembic/versions/20261027_shop_marketplace.py
+        run: python -m py_compile shop_marketplace.py object_storage.py scripts/apply_shop_frontend.py alembic/versions/20261027_shop_marketplace.py
