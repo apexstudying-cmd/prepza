@@ -99,7 +99,7 @@ def register_study_friend_streak_routes(app, db):
                 qualifying_by_user[int(user_id)].add(activity_date)
         shared_days = qualifying_by_user[row["user_a_id"]] & qualifying_by_user[row["user_b_id"]]
         streak = consecutive_shared_days(today, shared_days)
-        last_shared = max(shared_days) if shared_days else None
+        last_shared = today if today in shared_days else (today - timedelta(days=1) if today - timedelta(days=1) in shared_days else None)
         if row["status"] == "active":
             db.session.execute(text("""
                 UPDATE study_friend_streak
