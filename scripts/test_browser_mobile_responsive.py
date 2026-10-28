@@ -229,7 +229,7 @@ def main() -> int:
                         page.get_by_role("button", name="Sell an item").click(timeout=5000)
                         page.get_by_role("heading", name="List a product").wait_for(timeout=10000)
                         page.get_by_text(
-                            "Posting fee: KES 100 per listing, including your first.",
+                            "Posting fee: KES 100 per item for each 30-day period, including your first.",
                             exact=False,
                         ).wait_for(timeout=5000)
                         upload_input = page.locator('input[type="file"]')
