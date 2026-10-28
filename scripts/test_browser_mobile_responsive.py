@@ -7,6 +7,7 @@ only from a numeric assertion.
 from __future__ import annotations
 
 import base64
+import json
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
@@ -45,6 +46,48 @@ def main() -> int:
                     page_errors: list[str] = []
                     page.on("pageerror", lambda error: page_errors.append(str(error)))
                     try:
+                        browse_request_count = 0
+                        cached_listing = {
+                            "id": 990001,
+                            "title": "QA cached listing",
+                            "description": "Synthetic public browse fixture for cache regression.",
+                            "category": "Electronics",
+                            "condition": "good",
+                            "price_kes": 1200,
+                            "location_area": "Near campus",
+                            "images": [],
+                            "status": "active",
+                            "seller_id": 990002,
+                            "seller_name": "QA seller",
+                            "whatsapp_url": None,
+                            "saved": True,
+                            "is_mine": True,
+                            "posting_fee_kes": 100,
+                            "posting_fee_paid": True,
+                            "posting_fee_expires_at": "2099-01-01T00:00:00+00:00",
+                            "posting_payment_reference": "must-not-survive-in-cache",
+                            "posting_payment_review_note": "private payment review detail",
+                            "moderation_note": "private moderation detail",
+                        }
+
+                        def shop_browse_route(route):
+                            nonlocal browse_request_count
+                            request = route.request
+                            endpoint = request.url.split("?", 1)[0]
+                            if request.method != "GET" or not endpoint.endswith("/api/shop/listings"):
+                                route.continue_()
+                                return
+                            browse_request_count += 1
+                            if browse_request_count == 1:
+                                route.fulfill(
+                                    status=200,
+                                    content_type="application/json",
+                                    body=json.dumps({"listings": [cached_listing]}),
+                                )
+                            else:
+                                route.abort("failed")
+
+                        page.route("**/api/shop/listings*", shop_browse_route)
                         login(page, fixture)
                         page.get_by_role(
                             "navigation", name="Primary navigation"
@@ -134,6 +177,7 @@ def main() -> int:
                             "Find useful things near campus. Connect directly with sellers.",
                             exact=True,
                         ).wait_for(timeout=10000)
+                        page.get_by_text("QA cached listing", exact=True).wait_for(timeout=5000)
                         shop_dimensions = page.evaluate(
                             """() => ({
                               viewportWidth: window.innerWidth,
@@ -147,6 +191,37 @@ def main() -> int:
                             failures.append(f"{name}: Shop body overflow: {shop_dimensions}")
                         page.screenshot(
                             path=str(ARTIFACTS / f"shop-{name}.png"),
+                            full_page=True,
+                            animations="disabled",
+                        )
+
+                        # Prove an older same-query snapshot is shown while revalidation
+                        # runs, and remains visible with a clear stale notice when offline.
+                        page.get_by_role("button", name="‹ Home").click(timeout=5000)
+                        page.get_by_role("navigation", name="Primary navigation").wait_for(state="visible", timeout=5000)
+                        page.evaluate(
+                            """() => {
+                              const original = Date.now.bind(Date);
+                              window.__prepzaOriginalDateNow = original;
+                              Date.now = () => window.__prepzaOriginalDateNow() + 6 * 60 * 1000;
+                            }"""
+                        )
+                        page.get_by_role("button", name="Shop").first.click(timeout=5000)
+                        page.get_by_text("QA cached listing", exact=True).wait_for(timeout=5000)
+                        page.get_by_text(
+                            "Showing recently viewed listings. Reconnect to refresh availability and status.",
+                            exact=True,
+                        ).wait_for(timeout=5000)
+                        page.evaluate(
+                            """() => {
+                              if (window.__prepzaOriginalDateNow) {
+                                Date.now = window.__prepzaOriginalDateNow;
+                                delete window.__prepzaOriginalDateNow;
+                              }
+                            }"""
+                        )
+                        page.screenshot(
+                            path=str(ARTIFACTS / f"shop-stale-cache-{name}.png"),
                             full_page=True,
                             animations="disabled",
                         )
