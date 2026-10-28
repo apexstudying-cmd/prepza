@@ -10,6 +10,18 @@ Status:
 
 Rule: require evidence before marking production work complete.
 
+## Local developer tooling checkpoint (2026-10-28)
+
+- [x] Install and verify AWS CLI v2.39.0 in the Windows user-local install location; official script and downloaded MSI signatures verified.
+- [x] Configure AWS CLI profile `prepza-dev` with application default region `eu-north-1`; browser login and `sts get-caller-identity` succeeded. Never record identity output or credentials here.
+- [x] Configure AWS Agent Toolkit in `us-east-1`; available-skills listing succeeded.
+- [x] Record sanitized setup state, agent detection, incomplete Codex MCP setup, safety limits, and follow-up steps in [AWS Agent Toolkit Setup](ops/AWS_AGENT_TOOLKIT_SETUP.md).
+- [ ] Inspect and reconcile official AWS starter rules and MCP profile configuration with existing project/agent rules; preserve existing instructions and unrelated MCP entries.
+- [ ] Verify read-only AWS MCP access in the actual coding agent before inventory work. The current ChatGPT conversation is not automatically connected to the local MCP server.
+- Guardrail: no AWS resource provisioning, purchases, production deployment, billable AI calls, or GPU workloads without explicit approval.
+
+
+
 ## 1. Repository and audit work
 - [x] Day 1 launch audit
 - [x] Day 2 functionality-readiness audit
