@@ -103,7 +103,7 @@
     {
       "id": "shop_marketplace",
       "status": "IN_PROGRESS",
-      "evidence": "KES 100 now buys a 30-day period per item, manually renewed. Migration adds expiry and gives already-paid legacy listings a transition 30-day period; public browse/saved/report/detail paths exclude expired listings; payment fulfillment sets expiry and records the fulfilled reference, while stale duplicate success/failure callbacks are guarded. Added pure 30-day expiry test. CI on the latest SHA is not yet green; keep release BLOCKED. UX/UI research is docs/ux/SHOP_UX_UI_STANDARD.md. Commercial seller pricing hypotheses are documented separately and are not live tiers. Paystack/R2 provider checks remain NOT_TESTED. The real-world integration test now simulates expiry, public hiding, manual renewal and duplicate webhook idempotency. Latest migration rehearsal must pass on the current main SHA before Shop is certified."
+      "evidence": "KES 100 buys a manually renewed 30-day period per item, including the first listing; no buyer checkout or Prepza-held purchase funds. Listing expiry and payment-callback idempotency are implemented, but the Shop gate is not certified. On runtime commit 74f9b79943ff16d11fd1b52e9ba2a510c39c4aa4, the browse cache was tightened to store only public listing fields (viewer saved/is_mine flags and payment/moderation details are excluded), use same-query snapshots during revalidation/failure, ignore out-of-order browse responses, and invalidate after moderation. Added tests/test_shop_browse_cache_contract.py and wired it into Shop Marketplace Contract CI and qa/release_manifest.json. CI/build/browser outcomes for this new revision have not yet been verified here; keep this gate IN_PROGRESS and release BLOCKED. R2 image-cache headers and real Paystack/R2 provider checks remain NOT_TESTED. Commercial seller pricing options remain hypotheses, not live tiers."
     },
     {
       "id": "payment_recovery_idempotency",
@@ -154,6 +154,6 @@
     "Finish source-grounded documentation consistency audit across NEXT_STEPS, actualtest, notes, B2B audit, architecture walkthrough, QA trace manifest, and release_status.json.",
     "Keep the 400-user performance test DEFERRED until functional, browser, recovery, provider and CI gates are green. Do not deploy or freeze release while any required gate remains NOT_TESTED or IN_PROGRESS."
   ],
-  "current_main_commit": "e1d9ef42b533c9fb3fb14de2a4a3d66e30714015",
+  "current_main_commit": "74f9b79943ff16d11fd1b52e9ba2a510c39c4aa4",
   "verification_note": "Updated 2026-10-27: Shop documentation and visible listing copy agree on KES 100 for every listing, direct seller contact/no buyer checkout, legacy zero-fee protection and Prepza design tokens. Latest frontend commit a5f4af067e74a664131af05e05c81af03c267f15 is awaiting CI; release stays BLOCKED until latest-SHA Shop contracts, browser integration and mobile visual checks pass. External provider checks remain NOT_TESTED. No live payments or billable GPU workloads without explicit approval; shared streak remains NOT_RELEASED; 400-user load remains DEFERRED."
 }
