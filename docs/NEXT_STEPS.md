@@ -72,7 +72,7 @@ Rule: require evidence before marking production work complete.
 - [x] Prove fresh local bootstrap
 - [~] Reconcile/document historical migrations versus the current Alembic deployment procedure
 - [x] Test a representative future Alembic migration: Shop schema upgrade passed in [Existing Database Migration Rehearsal run 40514771584](https://github.com/apexstudying-cmd/prepza/actions/runs/40514771584); production-like restored snapshot remains a separate optional confidence check
-- [x] Upgrade a populated prior-Alembic-revision database to current head and verify schema/data invariants in [Existing Database Migration Rehearsal run 40514771584](https://github.com/apexstudying-cmd/prepza/actions/runs/40514771584) (passed 2026-10-27); this includes the Shop tables and posting-payment review fields. A sanitized production-like historical snapshot is still useful additional confidence, not claimed by this CI fixture
+- [x] Upgrade a populated prior-Alembic-revision database to current head and verify schema/data invariants in [PostgreSQL Backup Restore Rehearsal run 40712703724](https://github.com/apexstudying-cmd/prepza/actions/runs/40712703724) (passed 2026-10-28); this includes Shop tables/payment columns and preserved existing document data. A sanitized production-like historical snapshot is still useful additional confidence, not claimed by this CI fixture.
 - [ ] Establish production migration checklist
 - [ ] Test migration procedure against a disposable restored database
 - [ ] Never stamp production/self-hosted DB without independent schema verification
@@ -325,7 +325,7 @@ Rule: require evidence before marking production work complete.
 - [~] Repeatable QA registry — structural trace implemented; final cross-document reconciliation and clean full regression remain open.
 - [x] E2EE security regression — current runtime commit `e1d9ef42b533c9fb3fb14de2a4a3d66e30714015` passed [E2EE Security Regression](https://github.com/apexstudying-cmd/prepza/actions/runs/40502457061); broader multi-device protocol remains outside launch scope.
 - [x] Personal streak — dedicated PostgreSQL regression is recorded PASS in `qa/release_status.json`; broader shared streak remains intentionally NOT_RELEASED.
-- [ ] Shared Streak — determine launch scope, registration, canonical schema ownership, frontend wiring, then test if in scope.
+- [~] Shared Streak — now in launch scope by user request. Backend routes are registered from chat runtime startup and the chat-header control is wired through the frontend build patch. Focused contract CI and frontend/browser regressions are pending; canonical Alembic schema ownership, lifecycle/concurrency tests, and a two-user browser journey remain open.
 - [x] Browser/offline Study Hub lifecycle — reload, visibility, inactivity, offline/reconnect and cross-screen activity coverage passed; see `qa/release_status.json`.
 - [x] Storage/backup/restore — PostgreSQL backup restore and application smoke test passed in run [40329949883](https://github.com/apexstudying-cmd/prepza/actions/runs/40329949883).
 - [~] Cross-system journeys — browser/offline, payment webhook recovery/idempotency, B2B ledger and realtime reconnect evidence are green; external provider-side execution and final consolidated clean regression remain.
@@ -384,7 +384,7 @@ New evidence reconciled into the tracker:
 - Full disposable PostgreSQL/Alembic QA: **PASS (74/74)**.
 - E2EE identity lifecycle: **IN PROGRESS**.
 - Personal streak deep regression: **IN PROGRESS**.
-- Shared Streak: **IN PROGRESS / scope and wiring decision required**.
+- Shared Streak: **IN PROGRESS**. Launch scope was approved on 2026-10-28; route registration and chat-header UI are now on main. Continue with schema ownership, lifecycle/concurrency integration tests and a two-user browser journey; do not mark PASS from structural checks alone.
 - Browser/offline Study Hub lifecycle: **NOT TESTED**.
 - Backup/restore, cross-system journeys, CI verification, existing-DB migration rehearsal and final clean regression: **NOT TESTED**.
 - 400-user performance: **DEFERRED** until functional/browser/recovery gates are green.
@@ -604,7 +604,7 @@ The `b2b_monetization_integrity` release gate is IN_PROGRESS. Overall release re
 - [~] Every product listing, including the first, costs KES 100 per 30-day period; manual per-item renewal is implemented and must be verified server-side through Paystack. No free-post allowance or automatic recurring charge.
 - [~] Frontend and backend are both implemented: browse/search/detail, draft creation, optimized image upload, seller edit/pause/sold/remove, saved listings, WhatsApp/in-app chat, reporting and admin moderation. Verify the full journey and mobile/tablet visuals before marking complete.
 - [~] Verify Paystack amount/currency mismatch quarantine, stale checkout retry, and audited admin payment reconciliation; a provider-successful mismatch must never be treated as paid automatically.
-- [x] Prove the populated-database upgrade path through `20261027_shop_marketplace` in [Existing Database Migration Rehearsal run 40514771584](https://github.com/apexstudying-cmd/prepza/actions/runs/40514771584); the full browser regression still separately needs to pass.
+- [x] Prove the populated-database upgrade path through current head `20261029_shop_period_payment` in [PostgreSQL Backup Restore Rehearsal run 40712703724](https://github.com/apexstudying-cmd/prepza/actions/runs/40712703724); existing document data was preserved and Shop tables/payment columns were verified.
 - [ ] Pass the full Shop browser journey against the latest main SHA: first and subsequent listing periods each require KES 100; expired listings are hidden until renewed; legacy zero-fee drafts cannot publish; mocked Paystack success/failure/retry/idempotency, moderation, saved/report flows, ownership denial and direct chat.
 - [ ] Configure staging R2 test bucket/prefix and verify upload/read/delete with restricted credentials; do not use production objects for tests.
 - [ ] Configure Paystack test-mode checkout/webhook evidence for the posting fee; never test live buyer payments because Shop does not process product purchases.
@@ -627,5 +627,5 @@ Deployment note (27 October 2026): Render's `prepza` service has auto-deploy ena
 - [ ] Run safe R2 staging upload/read/delete/head and verify actual Cache-Control plus presigned GET behavior; do not use production objects or fabricate provider evidence.
 
 - [~] Monthly per-item Shop fee: KES 100 buys 30 days; renewals are manual (no automatic charge). Migration grants existing paid listings a 30-day transition period; expiry and payment-callback idempotency are implemented. The integrated full-browser regression passed on `3e77f70` and its Shop journey covers expiry, renewal, and duplicate callback behavior. The populated-database rehearsal's workflow assertion was stale (it expected `20261007_doc_material` rather than the current Shop head `20261029_shop_period_payment`); fix the assertion and rerun that workflow before closing the migration gate.
-- [ ] Verify integration coverage and latest-head migration rehearsal for expiry visibility, renewal payment success/failure, replayed or stale Paystack callbacks, and upgrade of populated databases.
+- [x] Verify latest-head populated-database migration and Shop expiry/renewal/replayed-callback journeys: migration/backup restore passed in run 40712703724, and Shop contract plus full browser/cross-system regression passed on code 3e77f70. Real Paystack/R2 provider-side verification remains open.
 - [x] Research commercial seller pricing: retain KES 100/30 days for casual sellers initially; commercial shop subscription tiers are hypotheses only and must be validated before implementation. See `docs/architecture/shop.md`.
