@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "last_verified_date": "2026-10-27",
-  "last_verified_commit": "12fc05fca6cc61a1dc5db1dc9e51a6973a9baadc",
+  "last_verified_date": "2026-10-28",
+  "last_verified_commit": "ef5a3d820cf6c689b519bff5b0ae7e97680cfb92",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -103,7 +103,7 @@
     {
       "id": "shop_marketplace",
       "status": "IN_PROGRESS",
-      "evidence": "The approved fee is KES 100 per item for each manually renewed 30-day period, including the first; Prepza does not handle buyer purchases or hold purchase funds. Browse snapshots are tab-memory only, query-keyed, sanitized to public fields, stale-fallback with a warning, protected against out-of-order responses, and invalidated after key mutations. Shop image objects opt into private one-day immutable Cache-Control and presigned GET URLs last 24 hours; contract tests cover helper metadata, URL lifetime, fee rules, and browse-cache behavior. On integrated code 3bc3b866, Shop Marketplace Contract passed (run 40701583898), Frontend Build passed (run 40701583937), and Release Browser and Cross-System Regression passed including phone/tablet checks (run 40701583921). On latest docs commit 557daf93, Frontend Build, Screen Loading Audit, Realtime Runtime Regression, E2EE Security Regression, Student/Admin/B2B contracts, AI economics and Kokoro validation passed. Actual R2 provider-side headers/object operations remain unverified without safe staging credentials; current latest-head populated-database migration and explicit expiry/renewal/replayed-callback evidence must also be reconciled. Keep this gate IN_PROGRESS and release BLOCKED until these remaining items are verified or formally dispositioned."
+      "evidence": "User-approved contract: KES 100 per item for every manually renewed 30-day period including the first; no free first listing, no automatic recurring charge, no buyer checkout or Prepza-held purchase funds. Browse snapshots are tab-memory only, query-keyed and sanitized to public fields, show stale fallback warnings, invalidate after mutations, and now guard cache writes against superseded requests. Shop image uploads set private one-day immutable Cache-Control and presigned GET URLs last 24 hours; contract tests cover the policy and URL lifetime. Shop Marketplace Contract passed on code 3e77f70 (run 40704322072), including the new cache-race regression; Release Browser and Cross-System Regression passed on the same code (run 40704322080), including phone/tablet and Shop integration journeys. Frontend Build, Realtime Runtime, E2EE, Screen Loading, and focused student/admin/B2B/AI/Kokoro checks passed on code/docs commits immediately preceding current docs-only HEAD. Provider-side R2 headers/object operations and real Paystack sandbox behavior remain NOT_TESTED without safe staging credentials. The existing-database rehearsal workflow assertion was corrected to expect current Alembic head 20261029_shop_period_payment and verify Shop tables/payment columns; the resulting workflow run is pending, so migration gate remains IN_PROGRESS."
     },
     {
       "id": "payment_recovery_idempotency",
@@ -147,13 +147,14 @@
     }
   ],
   "next_actions": [
-    "Run Shop contract tests and the disposable PostgreSQL integration/browser journey on the current main SHA; verify the first and subsequent listing fee are both KES 100, with no free-post bypass.",
+    "Verify PostgreSQL Backup Restore Rehearsal run 40712504298 for the existing-database upgrade job after updating the expected head to 20261029_shop_period_payment and checking Shop tables/payment columns.",
+    "Run Shop contract and full browser/cross-system regression on the latest code SHA after the migration-workflow correction; preserve the KES 100 first-and-every-listing rule and stale-cache race guard.",
     "Complete controlled external-provider verification using test-only Paystack, SES, bounded OpenAI, dedicated R2 QA and configured audio-worker health checks. Do not trigger live payments or billable GPU inference without explicit approval; if access is unavailable, leave external_provider_verification NOT_TESTED and record the blocker.",
     "Resolve B2B viewability scope: current browser timer/offscreen behavior and server-side rapid-click debounce pass, but backend cannot independently prove viewport visibility. Keep b2b_monetization_integrity IN_PROGRESS; do not claim tamper-proof viewability or CPA/conversion billing.",
     "After provider verification is complete or explicitly dispositioned, run the dedicated clean full regression against the release-candidate runtime SHA, consolidating disposable PostgreSQL, frontend build, realtime, E2EE, calling, migration, backup/restore, and browser evidence.",
     "Finish source-grounded documentation consistency audit across NEXT_STEPS, actualtest, notes, B2B audit, architecture walkthrough, QA trace manifest, and release_status.json.",
     "Keep the 400-user performance test DEFERRED until functional, browser, recovery, provider and CI gates are green. Do not deploy or freeze release while any required gate remains NOT_TESTED or IN_PROGRESS."
   ],
-  "current_main_commit": "5f9e0ce85d960dc6a2774568b851c5fff0dfb1ae",
-  "verification_note": "Updated 2026-10-27: Shop documentation and visible listing copy agree on KES 100 for every listing, direct seller contact/no buyer checkout, legacy zero-fee protection and Prepza design tokens. Latest frontend commit a5f4af067e74a664131af05e05c81af03c267f15 is awaiting CI; release stays BLOCKED until latest-SHA Shop contracts, browser integration and mobile visual checks pass. External provider checks remain NOT_TESTED. No live payments or billable GPU workloads without explicit approval; shared streak remains NOT_RELEASED; 400-user load remains DEFERRED."
+  "current_main_commit": "ef5a3d820cf6c689b519bff5b0ae7e97680cfb92",
+  "verification_note": "Updated 2026-10-28: Shop browse-cache race fix and regression passed Shop Marketplace Contract and Release Browser/Cross-System Regression on code SHA 3e77f70. Image object cache policy and 24-hour presigned URL lifetime are contract-tested, but real R2 provider behavior remains unverified. Corrected an obsolete existing-database workflow assertion that expected 20261007_doc_material; it now expects 20261029_shop_period_payment and verifies Shop tables/payment columns. Await the PostgreSQL Backup Restore Rehearsal run before closing the migration gate. Release remains BLOCKED: external providers NOT_TESTED, B2B viewability and documentation audit IN_PROGRESS, 400-user load DEFERRED, shared streak NOT_RELEASED. No live payments or billable GPU workloads without explicit approval."
 }
