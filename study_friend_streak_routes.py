@@ -132,6 +132,7 @@ def register_study_friend_streak_routes(app, db):
         return {
             "id": int(row["id"]),
             "status": row["status"],
+            "invited_by": int(row["invited_by"]),
             "peer_id": pid,
             "peer_name": getattr(peer, "display_name", None) or "Study partner",
             "current_streak": current,
