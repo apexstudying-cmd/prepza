@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react'
 
 type ImageRef = { key: string; url: string | null }
 type Listing = { id: number; title: string; description: string | null; category: string; condition: string; price_kes: number; location_area: string; images: ImageRef[]; status: string; seller_id: number; seller_name: string; whatsapp_url?: string | null; saved: boolean; is_mine: boolean; posting_fee_kes: number; posting_fee_paid: boolean; posting_fee_expires_at?: string | null; posting_payment_reference?: string | null; posting_payment_review_note?: string | null; moderation_note?: string | null }
@@ -14,6 +14,27 @@ const money = (amount: number) => 'KSh ' + Math.round(amount).toLocaleString('en
 const BROWSE_CACHE_TTL_MS = 5 * 60 * 1000
 const browseSnapshots = new Map<string, { listings: Listing[]; savedAt: number }>()
 const invalidateBrowseSnapshots = () => browseSnapshots.clear()
+// Cache only fields safe for public browse. Viewer flags and payment/moderation
+// details must never leak across account changes through this module-level cache.
+const toPublicBrowseSnapshot = (items: Listing[]): Listing[] => items.map(item => ({
+  id: item.id,
+  title: item.title,
+  description: item.description,
+  category: item.category,
+  condition: item.condition,
+  price_kes: item.price_kes,
+  location_area: item.location_area,
+  images: (item.images || []).map(image => ({ key: image.key, url: image.url })),
+  status: item.status,
+  seller_id: item.seller_id,
+  seller_name: item.seller_name,
+  ...(item.whatsapp_url ? { whatsapp_url: item.whatsapp_url } : {}),
+  saved: false,
+  is_mine: false,
+  posting_fee_kes: item.posting_fee_kes,
+  posting_fee_paid: item.posting_fee_paid,
+  posting_fee_expires_at: item.posting_fee_expires_at,
+}))
 const filterCurrentListings = (items: Listing[]) => items.filter(item => item.status === 'active' && Boolean(item.posting_fee_expires_at && Date.parse(item.posting_fee_expires_at) > Date.now()))
 const conditionLabel = (value: string) => CONDITIONS.find(item => item.value === value)?.label || value
 const ui: Record<string, CSSProperties> = {
@@ -59,6 +80,7 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
   const [paymentReviewNotes, setPaymentReviewNotes] = useState<Record<number, string>>({})
   const [reports, setReports] = useState<any[]>([])
   const [query, setQuery] = useState('')
+  const browseRequestId = useRef(0)
   const [category, setCategory] = useState('')
   const [condition, setCondition] = useState('')
   const [location, setLocation] = useState('')
@@ -77,6 +99,7 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
 
   const feedback = () => { setError(''); setNotice('') }
   const loadBrowse = async () => {
+    const requestId = ++browseRequestId.current
     const params = new URLSearchParams()
     if (query.trim()) params.set('q', query.trim())
     if (category) params.set('category', category)
@@ -86,18 +109,27 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
     const path = '/api/shop/listings?' + params.toString()
     const cacheKey = params.toString()
     const cached = browseSnapshots.get(cacheKey)
-    if (cached && Date.now() - cached.savedAt <= BROWSE_CACHE_TTL_MS) {
+    if (cached) {
+      // Render this exact query's snapshot immediately while revalidating.
+      // Older snapshots remain usable only as clearly-labelled fallback data.
       setListings(filterCurrentListings(cached.listings))
       setLoading(false)
+      setError(Date.now() - cached.savedAt <= BROWSE_CACHE_TTL_MS
+        ? ''
+        : 'Showing recently viewed listings while availability is refreshed.')
     }
     try {
       const fresh = (await shopApi<{ listings: Listing[] }>(path)).listings || []
-      browseSnapshots.set(cacheKey, { listings: fresh, savedAt: Date.now() })
+      browseSnapshots.set(cacheKey, { listings: toPublicBrowseSnapshot(fresh), savedAt: Date.now() })
+      if (requestId !== browseRequestId.current) return
       setListings(filterCurrentListings(fresh))
       setError('')
     } catch (cause) {
+      if (requestId !== browseRequestId.current) return
       if (!cached) throw cause
-      // Keep previously loaded public listings visible when offline or the API is unavailable.
+      // Fall back to this query's cached public snapshot, never the previous query's rows.
+      setListings(filterCurrentListings(cached.listings))
+      setLoading(false)
       setError('Showing recently viewed listings. Reconnect to refresh availability and status.')
     }
   }
@@ -261,6 +293,7 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
   const moderate = async (id: number, action: 'approve' | 'reject' | 'remove') => {
     try {
       await shopApi('/api/shop/admin/listings/' + id + '/moderate', { method: 'POST', headers: { 'X-CSRF-Token': csrf }, body: JSON.stringify({ action }) })
+      invalidateBrowseSnapshots()
       await loadAdmin(); setNotice(action === 'approve' ? 'Listing approved and published.' : action === 'remove' ? 'Reported listing removed.' : 'Moderation decision saved.')
     } catch (e: any) { setError(e?.message || 'Could not moderate listing.') }
   }
