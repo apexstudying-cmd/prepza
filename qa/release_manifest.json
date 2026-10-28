@@ -439,13 +439,23 @@
             "test_browse_cache_writes_sanitized_snapshots_and_falls_back_for_same_query",
             "test_public_browse_cache_is_invalidated_after_moderation_changes"
           ]
+        },
+        {
+          "kind": "browser_test",
+          "path": "scripts/test_browser_mobile_responsive.py",
+          "anchors": [
+            "Exercise the actual Shop route at each responsive viewport",
+            "Prove an older same-query snapshot is shown while revalidation",
+            "Showing recently viewed listings. Reconnect to refresh availability and status."
+          ]
         }
       ],
       "required_test_commands": [
         "python -m pytest tests/test_shop_marketplace.py -q",
         "python -m pytest tests/test_local_qa_real_world.py -k shop_every_listing_paid_posting_fee_and_direct_contact -q",
         "python -m pytest tests/test_local_qa_real_world.py -k shop_every_listing_paid_posting_fee_and_direct_contact -q",
-        "python -m pytest tests/test_shop_browse_cache_contract.py -q"
+        "python -m pytest tests/test_shop_browse_cache_contract.py -q",
+        "python scripts/test_browser_mobile_responsive.py"
       ],
       "notes": "Implementation in progress. User-approved contract: KES 100 per item per 30-day listing period, manual per-item renewal, expired listings hidden until renewal and re-publication; no free first listing or automatic recurring charges. Direct seller contact only; no buyer checkout or Prepza-held funds. Release certification requires disposable PostgreSQL browser journey, migration/expiry enforcement, idempotent renewal payment tests, image-storage verification, and staging Paystack/R2 checks."
     }
