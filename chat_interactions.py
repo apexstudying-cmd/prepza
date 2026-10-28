@@ -208,3 +208,11 @@ def _chat_metadata_after_request(response):
 
     return response
 
+# Register the shared-study streak API after core chat models and CSRF helpers
+# are available. The feature is wired here because this module is imported by
+# app.py only after the base application models/routes have been defined.
+try:
+    from study_friend_streak_routes import register_study_friend_streak_routes
+    register_study_friend_streak_routes(app, db)
+except Exception:
+    app.logger.exception("Shared study streak route registration failed")
