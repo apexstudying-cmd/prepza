@@ -249,13 +249,21 @@
             "EXPECTED_HEAD = \"20261030_shared_study_streak\"",
             "study_friend_streak_activity"
           ]
+        },
+        {
+          "kind": "integration_test",
+          "path": "tests/test_local_qa_real_world.py",
+          "anchors": [
+            "test_shared_study_streak_invite_accept_and_nairobi_qualification",
+            "study-streak/accept"
+          ]
         }
       ],
       "required_test_commands": [
         "python -m pytest tests/test_shared_study_streak_contract.py -q",
         "python -m py_compile study_friend_streak_routes.py chat_interactions.py tools/apply_shared_study_streak.py"
       ],
-      "notes": "Scope has been moved into launch work at the user's request. Backend route registration, invite/accept/decline endpoints, one-to-one chat membership checks, a Nairobi-day continuity helper, and a chat-header control are implemented on main. Alembic revision 20261030_shared_study_streak now ensures both shared-streak tables exist for fresh and upgraded databases; routes no longer perform request-time DDL. Focused contract CI, populated-database migration rehearsal, and full frontend/browser runtime checks must pass. Lifecycle/concurrency coverage and a two-user browser journey remain open; structural checks alone are not runtime certification."
+      "notes": "Scope has been moved into launch work at the user's request. Backend route registration, invite/accept/decline endpoints, one-to-one chat membership checks, CSRF on mutations, pending/active cap protection, Nairobi-day continuity logic, and a chat-header control are implemented on main. Alembic revision 20261030_shared_study_streak aligns with the canonical UUID-string schema. Shared Study Streak Contract passed on code f6a5822b (run 40732829197); Frontend Build passed on the same code (run 40732829186). The populated-database migration rehearsal passed at the new Alembic head in run 40732199472. The two-user PostgreSQL route journey was added to tests/test_local_qa_real_world.py and is being exercised by Release Browser and Cross-System Regression; keep this feature IN_PROGRESS until that run passes and the final code SHA is regression-tested."
     },
     {
       "id": "b2b_monetization",
