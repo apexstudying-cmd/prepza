@@ -77,8 +77,8 @@ export default function SharedStudyStreak({ conversationId, isGroup, csrfToken, 
         </div>
         <div style={{ marginTop: 10, fontSize: 11, color: '#4b5563' }}>Today: You {streak.today.you_studied ? '✓' : 'not yet'} · {streak.peer_name} {streak.today.friend_studied ? '✓' : 'not yet'}</div>
       </>}
-      {streak?.status === 'pending' && <div style={{ marginTop: 12, padding: 10, borderRadius: 10, background: '#f4f6fa', fontSize: 12 }}>{streak.invited_by === userId ? 'Waiting for ' + streak.peer_name + ' to accept your invitation.' : streak.peer_name + ' invited you to start a shared streak.'}
-        {streak.invited_by !== userId && <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+      {streak?.status === 'pending' && <div style={{ marginTop: 12, padding: 10, borderRadius: 10, background: '#f4f6fa', fontSize: 12 }}>{userId === null ? 'Loading invitation…' : streak.invited_by === userId ? 'Waiting for ' + streak.peer_name + ' to accept your invitation.' : streak.peer_name + ' invited you to start a shared streak.'}
+        {userId !== null && streak.invited_by !== userId && <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
           <button type="button" disabled={busy} onClick={() => void act('accept')} style={{ flex: 1, border: 0, borderRadius: 9, padding: 9, background: '#c9a84c', color: '#101b35', fontWeight: 800 }}>Accept</button>
           <button type="button" disabled={busy} onClick={() => void act('decline')} style={{ flex: 1, border: '1px solid #d9dee7', borderRadius: 9, padding: 9, background: '#fff', color: '#101b35', fontWeight: 800 }}>Decline</button>
         </div>}
