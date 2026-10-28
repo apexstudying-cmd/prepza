@@ -79,8 +79,13 @@ jobs:
           test "$preserved" = "1"
           material_column="$(psql "$DB_URL" -Atqc "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='document_content' AND column_name='material_id'")"
           test "$material_column" = "1"
-          test "$(python -m alembic current | tail -n 1 | awk '{print $1}')" = "20261007_doc_material"
-          echo "Existing database upgrade passed: prior revision data preserved and current Alembic head applied."
+          test "$(python -m alembic current | tail -n 1 | awk '{print $1}')" = "20261029_shop_period_payment"
+          for table in shop_listing shop_saved_listing shop_report; do
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -Atqc "SELECT to_regclass('public.$table')" | grep -qx "public.$table"
+          done
+          shop_columns="$(psql "$DB_URL" -Atqc "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='shop_listing' AND column_name IN ('posting_fee_paid', 'posting_payment_reference', 'posting_payment_reviewed_by', 'posting_payment_reviewed_at', 'posting_payment_review_note', 'posting_period_payment_reference')")"
+          test "$shop_columns" = "6"
+          echo "Existing database upgrade passed: prior revision data preserved, current Shop Alembic head applied, and Shop tables/payment columns verified."
 
   backup-restore:
     name: PostgreSQL custom dump and disposable restore
