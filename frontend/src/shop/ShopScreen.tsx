@@ -120,8 +120,9 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
     }
     try {
       const fresh = (await shopApi<{ listings: Listing[] }>(path)).listings || []
-      browseSnapshots.set(cacheKey, { listings: toPublicBrowseSnapshot(fresh), savedAt: Date.now() })
+      // A superseded request must not overwrite a newer snapshot for the same query.
       if (requestId !== browseRequestId.current) return
+      browseSnapshots.set(cacheKey, { listings: toPublicBrowseSnapshot(fresh), savedAt: Date.now() })
       setListings(filterCurrentListings(fresh))
       setError('')
     } catch (cause) {
