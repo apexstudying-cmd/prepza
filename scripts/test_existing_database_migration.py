@@ -12,7 +12,7 @@ import sys
 from sqlalchemy import create_engine, inspect, text
 
 PREVIOUS_REVISION = "20261005_chat_attach_source_doc"
-EXPECTED_HEAD = "20261029_shop_period_payment"
+EXPECTED_HEAD = "20261030_shared_study_streak"
 FIXTURE_ID = 987_654_321
 CONTENT_HASH = "existing-db-migration-rehearsal-v1"
 
@@ -161,7 +161,7 @@ def verify(engine) -> None:
         # migration as well, proving the new tables and payment-review audit
         # fields can be added without disturbing legacy document/material rows.
         tables = set(inspect(connection).get_table_names(schema="public"))
-        required_shop_tables = {"shop_listing", "shop_saved_listing", "shop_report"}
+        required_shop_tables = {"shop_listing", "shop_saved_listing", "shop_report", "study_friend_streak", "study_friend_streak_activity"}
         missing_shop_tables = required_shop_tables - tables
         if missing_shop_tables:
             raise AssertionError(
@@ -171,6 +171,9 @@ def verify(engine) -> None:
             item["name"]
             for item in inspect(connection).get_columns("shop_listing", schema="public")
         }
+        streak_columns = {item["name"] for item in inspect(connection).get_columns("study_friend_streak", schema="public")}
+        if not {"id", "user_a_id", "user_b_id", "invited_by", "status", "current_streak", "longest_streak"} <= streak_columns:
+            raise AssertionError("Shared streak schema columns are missing")
         required_shop_columns = {
             "posting_payment_reviewed_by",
             "posting_payment_reviewed_at",
