@@ -18,6 +18,7 @@ import hashlib
 import hmac
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import inspect, text
@@ -33,6 +34,9 @@ from app import (
     Program,
     University,
     User,
+    Conversation,
+    ConversationParticipant,
+    StudyTimeLog,
 )
 
 
@@ -289,6 +293,10 @@ def test_route_inventory_contains_critical_boundaries():
         ("/groups", "POST"),
         ("/groups", "GET"),
         ("/chats", "GET"),
+        ("/chats/<int:conversation_id>/study-streak", "GET"),
+        ("/chats/<int:conversation_id>/study-streak", "POST"),
+        ("/chats/<int:conversation_id>/study-streak/accept", "POST"),
+        ("/chats/<int:conversation_id>/study-streak/decline", "POST"),
         ("/opportunities", "GET"),
         ("/admin/opportunities", "GET"),
         ("/organisations/<int:organisation_id>/opportunities", "POST"),
@@ -2307,3 +2315,75 @@ def test_shop_every_listing_paid_posting_fee_and_direct_contact(world, monkeypat
     )
     assert forbidden_edit.status_code == 404
 
+
+
+
+def test_shared_study_streak_invite_accept_and_nairobi_qualification(world):
+    student_a = world["student_a"]
+    student_b = world["student_b"]
+    conversation = Conversation(
+        is_group=False,
+        name=None,
+        created_by=student_a.id,
+        status="accepted",
+        e2ee_mode="legacy",
+        key_epoch=0,
+    )
+    db.session.add(conversation)
+    db.session.flush()
+    db.session.add_all([
+        ConversationParticipant(conversation_id=conversation.id, user_id=student_a.id, role="member"),
+        ConversationParticipant(conversation_id=conversation.id, user_id=student_b.id, role="member"),
+    ])
+    db.session.flush()
+
+    today = datetime.now(ZoneInfo("Africa/Nairobi")).date()
+    StudyTimeLog.query.filter(
+        StudyTimeLog.user_id.in_([student_a.id, student_b.id]),
+        StudyTimeLog.activity_date == today,
+    ).delete(synchronize_session=False)
+    db.session.commit()
+
+    inviter = _client_for(student_a.id)
+    invitee = _client_for(student_b.id)
+    path = f"/chats/{conversation.id}/study-streak"
+
+    try:
+        initial = inviter.get(path)
+        assert initial.status_code == 200
+        assert initial.json == {"supported": True, "streak": None}
+
+        sent = inviter.post(path, headers=_csrf(student_a.id))
+        assert sent.status_code == 201
+        assert sent.json["status"] == "pending"
+
+        pending = inviter.get(path).json["streak"]
+        assert pending["status"] == "pending"
+        assert pending["invited_by"] == student_a.id
+
+        self_accept = inviter.post(path + "/accept", headers=_csrf(student_a.id))
+        assert self_accept.status_code == 404
+
+        accepted = invitee.post(path + "/accept", headers=_csrf(student_b.id))
+        assert accepted.status_code == 200
+        assert accepted.json["status"] == "active"
+
+        db.session.add_all([
+            StudyTimeLog(user_id=student_a.id, activity_date=today, feature="reading", study_time_seconds=600),
+            StudyTimeLog(user_id=student_b.id, activity_date=today, feature="reading", study_time_seconds=600),
+        ])
+        db.session.commit()
+
+        active = inviter.get(path).json["streak"]
+        assert active["status"] == "active"
+        assert active["current_streak"] == 1
+        assert active["longest_streak"] == 1
+        assert active["today"]["both_studied"] is True
+    finally:
+        StudyTimeLog.query.filter(
+            StudyTimeLog.user_id.in_([student_a.id, student_b.id]),
+            StudyTimeLog.activity_date == today,
+        ).delete(synchronize_session=False)
+        ConversationParticipant.query.filter_by(conversation_id=conversation.id).delete(synchronize_session=False)
+        db.session.delete(conversation)
+        db.session.commit()
