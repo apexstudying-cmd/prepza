@@ -7,6 +7,8 @@ on:
       - "shop_marketplace.py"
       - "tests/test_shop_marketplace.py"
       - "tests/test_shop_browse_cache_contract.py"
+      - "tests/test_shop_image_cache_contract.py"
+      - "object_storage.py"
       - "alembic/versions/**"
       - "tests/test_local_qa_real_world.py"
       - "scripts/test_existing_database_migration.py"
@@ -32,10 +34,12 @@ jobs:
           python-version: "3.13"
           cache: pip
       - name: Install isolated contract-test dependencies
-        run: python -m pip install --upgrade pip pytest Flask SQLAlchemy
+        run: python -m pip install --upgrade pip pytest Flask SQLAlchemy boto3
       - name: Test Shop posting fee and seller contact contracts
         run: python -m pytest tests/test_shop_marketplace.py -q
       - name: Test Shop browse cache privacy and stale fallback
         run: python -m pytest tests/test_shop_browse_cache_contract.py -q
+      - name: Test Shop image object cache-control policy
+        run: python -m pytest tests/test_shop_image_cache_contract.py -q
       - name: Compile Shop backend and build-time wiring script
         run: python -m py_compile shop_marketplace.py scripts/apply_shop_frontend.py alembic/versions/20261027_shop_marketplace.py
