@@ -177,20 +177,47 @@
     {
       "id": "shared_streak",
       "name": "Shared 1:1 study streak",
-      "release_scope": "not_released",
+      "release_scope": "release",
       "layers": [
+        {
+          "kind": "frontend",
+          "path": "frontend/src/crypto/SharedStudyStreak.tsx",
+          "anchors": [
+            "Invite to shared streak",
+            "current_streak",
+            "longest_streak",
+            "Waiting for "
+          ]
+        },
+        {
+          "kind": "frontend_wiring",
+          "path": "tools/apply_shared_study_streak.py",
+          "anchors": [
+            "apply_shared_study_streak.py",
+            "SharedStudyStreak conversationId"
+          ]
+        },
         {
           "kind": "backend_module",
           "path": "study_friend_streak_routes.py",
           "anchors": [
             "invite_study_streak",
             "accept_study_streak",
+            "decline_study_streak",
+            "consecutive_shared_days",
             "MIN_SHARED_STUDY_MINUTES",
             "MAX_ACTIVE_SHARED_STREAKS"
           ]
         },
         {
-          "kind": "legacy_migration",
+          "kind": "runtime_registration",
+          "path": "chat_interactions.py",
+          "anchors": [
+            "register_study_friend_streak_routes(app, db)"
+          ]
+        },
+        {
+          "kind": "legacy_schema",
           "path": "migrations/20260925_study_friend_streak.sql",
           "anchors": [
             "study_friend_streak",
@@ -198,15 +225,28 @@
           ]
         },
         {
-          "kind": "validation",
-          "path": "scripts/validate_shared_study_context.py",
+          "kind": "test",
+          "path": "tests/test_shared_study_streak_contract.py",
           "anchors": [
-            "Shared-study context validation passed."
+            "test_shared_streak_keeps_yesterday_alive_until_today_ends",
+            "test_shared_streak_routes_are_registered_during_chat_runtime_startup",
+            "test_shared_streak_chat_component_is_included_in_frontend_build"
+          ]
+        },
+        {
+          "kind": "ci",
+          "path": ".github/workflows/shared-study-streak-contract.yml",
+          "anchors": [
+            "Shared Study Streak Contract",
+            "test_shared_study_streak_contract.py"
           ]
         }
       ],
-      "required_test_commands": [],
-      "notes": "Intentionally NOT_RELEASED for the frozen launch scope. Route registration, canonical schema ownership, frontend wiring, lifecycle tests and concurrency tests are not complete; do not treat this as a required launch feature."
+      "required_test_commands": [
+        "python -m pytest tests/test_shared_study_streak_contract.py -q",
+        "python -m py_compile study_friend_streak_routes.py chat_interactions.py tools/apply_shared_study_streak.py"
+      ],
+      "notes": "Scope has been moved into launch work at the user's request. Backend route registration, invite/accept/decline endpoints, one-to-one chat membership checks, a Nairobi-day continuity helper, and a chat-header control are implemented on main. Contract CI and the full frontend/browser runtime checks must pass; database migration ownership, lifecycle/concurrency coverage and real two-user browser verification remain open. Do not mark PASS based on structural tests alone."
     },
     {
       "id": "b2b_monetization",
