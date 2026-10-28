@@ -52,3 +52,12 @@ def test_r2_put_bytes_does_not_change_cache_policy_for_other_callers(monkeypatch
         "Body": b"pdf-bytes",
         "ContentType": "application/pdf",
     }
+
+
+def test_shop_listing_upload_opts_into_private_one_day_image_caching():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "shop_marketplace.py").read_text(encoding="utf-8")
+
+    assert 'r2_put_bytes("shop-listings", key, raw, mime, cache_control="private, max-age=86400, immutable")' in source
