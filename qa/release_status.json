@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_verified_date": "2026-10-28",
-  "last_verified_commit": "ef5a3d820cf6c689b519bff5b0ae7e97680cfb92",
+  "last_verified_commit": "959d4ed0ef7fe00733ac64d21ab15232a5beda7a",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -87,8 +87,8 @@
     },
     {
       "id": "existing_database_migration",
-      "status": "IN_PROGRESS",
-      "evidence": "The prior migration rehearsal passed on the earlier Shop schema head, but the first rehearsal including the new expiry/period-payment revisions failed only because scripts/test_existing_database_migration.py still expected the old revision ID. The assertion has now been updated to 20261029_shop_period_payment; rerun is queued and this gate remains IN_PROGRESS until it passes."
+      "status": "PASS",
+      "evidence": "GitHub Actions PostgreSQL Backup Restore Rehearsal run 40712703724 passed on commit 959d4ed0ef7fe00733ac64d21ab15232a5beda7a (2026-10-28). The populated database was upgraded from 20261005_chat_attach_source_doc through Alembic head 20261029_shop_period_payment; existing document data was preserved; the Shop listing/saved/report tables and six payment/expiry-related columns were verified. The backup/restore job also passed in the same run."
     },
     {
       "id": "clean_full_regression",
@@ -156,5 +156,5 @@
     "Keep the 400-user performance test DEFERRED until functional, browser, recovery, provider and CI gates are green. Do not deploy or freeze release while any required gate remains NOT_TESTED or IN_PROGRESS."
   ],
   "current_main_commit": "ef5a3d820cf6c689b519bff5b0ae7e97680cfb92",
-  "verification_note": "Updated 2026-10-28: Shop browse-cache race fix and regression passed Shop Marketplace Contract and Release Browser/Cross-System Regression on code SHA 3e77f70. Image object cache policy and 24-hour presigned URL lifetime are contract-tested, but real R2 provider behavior remains unverified. Corrected an obsolete existing-database workflow assertion that expected 20261007_doc_material; it now expects 20261029_shop_period_payment and verifies Shop tables/payment columns. Await the PostgreSQL Backup Restore Rehearsal run before closing the migration gate. Release remains BLOCKED: external providers NOT_TESTED, B2B viewability and documentation audit IN_PROGRESS, 400-user load DEFERRED, shared streak NOT_RELEASED. No live payments or billable GPU workloads without explicit approval."
+  "verification_note": "Updated 2026-10-28: Shop Marketplace Contract and Release Browser/Cross-System Regression passed on code SHA 3e77f70. PostgreSQL Backup Restore Rehearsal run 40712703724 passed on 959d4ed, including populated-database upgrade through 20261029_shop_period_payment, Shop tables/payment columns, and backup/restore. Render auto-deploy attempts for recent main commits are failing before build because the Render pipeline build minutes are exhausted; no new deployment succeeded. Shop remains IN_PROGRESS pending real Paystack/R2 staging evidence; external_provider_verification remains NOT_TESTED; B2B viewability and documentation audit remain IN_PROGRESS; 400-user load DEFERRED; shared streak NOT_RELEASED. Release remains BLOCKED. No live payments or billable GPU workloads without explicit approval."
 }
