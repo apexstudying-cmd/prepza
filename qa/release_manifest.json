@@ -441,14 +441,6 @@
           ]
         },
         {
-          "kind": "database_migration",
-          "path": "alembic/versions/20261029_shop_period_payment.py",
-          "anchors": [
-            "20261029_shop_period_payment",
-            "posting_period_payment_reference"
-          ]
-        },
-        {
           "kind": "contract_test",
           "path": "tests/test_shop_browse_cache_contract.py",
           "anchors": [
