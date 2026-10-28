@@ -43,3 +43,15 @@ def test_public_browse_cache_is_invalidated_after_moderation_changes():
     moderate_block = source[moderate_start:moderate_end]
 
     assert "invalidateBrowseSnapshots()" in moderate_block
+
+
+def test_superseded_browse_responses_cannot_overwrite_newer_cache_entries():
+    source = SHOP_SCREEN.read_text(encoding="utf-8")
+    load_start = source.index("  const loadBrowse = async")
+    load_end = source.index("\n  const loadMine", load_start)
+    load = source[load_start:load_end]
+
+    # Request sequencing must happen before cache mutation, not only before UI state.
+    assert load.index("if (requestId !== browseRequestId.current) return") < load.index(
+        "browseSnapshots.set(cacheKey, { listings: toPublicBrowseSnapshot(fresh), savedAt: Date.now() })"
+    )
