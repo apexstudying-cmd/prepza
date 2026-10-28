@@ -14,7 +14,7 @@ def main():
             raise SystemExit("Shared streak patch: chat import anchor missing or ambiguous")
         source = source.replace(anchor, anchor + "\n" + import_line, 1)
 
-    marker = "<SharedStudyStreak conversationId={detail.id} isGroup={detail.is_group} csrfToken={csrfToken} />"
+    marker = "<SharedStudyStreak conversationId={detail.id} isGroup={detail.is_group} csrfToken={csrfToken} userId={meId} />"
     if marker not in source:
         header_start = '<header className="prepza-wa-head">'
         header_end = "</header>"
