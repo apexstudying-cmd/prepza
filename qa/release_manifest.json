@@ -217,11 +217,12 @@
           ]
         },
         {
-          "kind": "legacy_schema",
-          "path": "migrations/20260925_study_friend_streak.sql",
+          "kind": "database_migration",
+          "path": "alembic/versions/20261030_shared_study_streak.py",
           "anchors": [
-            "study_friend_streak",
-            "study_friend_streak_activity"
+            "20261030_shared_study_streak",
+            "CREATE TABLE IF NOT EXISTS public.study_friend_streak",
+            "CREATE TABLE IF NOT EXISTS public.study_friend_streak_activity"
           ]
         },
         {
@@ -240,13 +241,21 @@
             "Shared Study Streak Contract",
             "test_shared_study_streak_contract.py"
           ]
+        },
+        {
+          "kind": "migration_test",
+          "path": "scripts/test_existing_database_migration.py",
+          "anchors": [
+            "EXPECTED_HEAD = \"20261030_shared_study_streak\"",
+            "study_friend_streak_activity"
+          ]
         }
       ],
       "required_test_commands": [
         "python -m pytest tests/test_shared_study_streak_contract.py -q",
         "python -m py_compile study_friend_streak_routes.py chat_interactions.py tools/apply_shared_study_streak.py"
       ],
-      "notes": "Scope has been moved into launch work at the user's request. Backend route registration, invite/accept/decline endpoints, one-to-one chat membership checks, a Nairobi-day continuity helper, and a chat-header control are implemented on main. Contract CI and the full frontend/browser runtime checks must pass; database migration ownership, lifecycle/concurrency coverage and real two-user browser verification remain open. Do not mark PASS based on structural tests alone."
+      "notes": "Scope has been moved into launch work at the user's request. Backend route registration, invite/accept/decline endpoints, one-to-one chat membership checks, a Nairobi-day continuity helper, and a chat-header control are implemented on main. Alembic revision 20261030_shared_study_streak now ensures both shared-streak tables exist for fresh and upgraded databases; routes no longer perform request-time DDL. Focused contract CI, populated-database migration rehearsal, and full frontend/browser runtime checks must pass. Lifecycle/concurrency coverage and a two-user browser journey remain open; structural checks alone are not runtime certification."
     },
     {
       "id": "b2b_monetization",
