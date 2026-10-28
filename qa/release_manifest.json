@@ -390,12 +390,29 @@
         },
         {
           "kind": "database_migration",
-          "path": "alembic/versions/20261028_shop_listing_expiry.py",
+          "path": "alembic/versions/20261027_shop_marketplace.py",
           "anchors": [
             "20261027_shop_marketplace",
             "shop_listing",
             "shop_saved_listing",
             "shop_report"
+          ]
+        },
+        {
+          "kind": "database_migration",
+          "path": "alembic/versions/20261028_shop_listing_expiry.py",
+          "anchors": [
+            "20261028_shop_listing_expiry",
+            "posting_fee_expires_at",
+            "op.add_column"
+          ]
+        },
+        {
+          "kind": "database_migration",
+          "path": "alembic/versions/20261029_shop_period_payment.py",
+          "anchors": [
+            "20261029_shop_period_payment",
+            "posting_period_payment_reference"
           ]
         },
         {
