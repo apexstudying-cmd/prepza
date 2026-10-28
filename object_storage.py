@@ -81,13 +81,18 @@ def r2_get_bytes(logical_bucket, path):
     return response["Body"].read()
 
 
-def r2_put_bytes(logical_bucket, path, data, content_type):
-    _r2_client().put_object(
-        Bucket=os.environ["PREPZA_R2_BUCKET"].strip(),
-        Key=_r2_key(logical_bucket, path),
-        Body=data,
-        ContentType=content_type,
-    )
+def r2_put_bytes(logical_bucket, path, data, content_type, cache_control=None):
+    params = {
+        "Bucket": os.environ["PREPZA_R2_BUCKET"].strip(),
+        "Key": _r2_key(logical_bucket, path),
+        "Body": data,
+        "ContentType": content_type,
+    }
+    # Callers opt in per object type; do not change caching for study documents
+    # or other assets that use the default storage helper behavior.
+    if cache_control:
+        params["CacheControl"] = str(cache_control)
+    _r2_client().put_object(**params)
     return True
 
 
