@@ -98,6 +98,7 @@ def process_document(document_content_id):
     through start_processing's background thread.
     """
     from app import db, DocumentContent, DocumentPageText, GeneratedMaterial
+    from sqlalchemy import inspect
 
     content = db.session.get(DocumentContent, document_content_id)
     if not content:
@@ -118,9 +119,12 @@ def process_document(document_content_id):
 
         page_texts, page_count = _extract_pdf_pages(file_bytes, job)
         text = "\n\n".join(page_texts)
-        prior_pages = DocumentPageText.query.filter_by(
-            document_content_id=content.id
-        ).order_by(DocumentPageText.page_number.asc()).all()
+        page_storage_available = inspect(db.engine).has_table("document_page_text")
+        prior_pages = []
+        if page_storage_available:
+            prior_pages = DocumentPageText.query.filter_by(
+                document_content_id=content.id
+            ).order_by(DocumentPageText.page_number.asc()).all()
         prior_page_texts = [row.page_text for row in prior_pages]
         source_changed = extracted_text_changed(
             prior_page_texts, content.extracted_text, page_texts
@@ -129,22 +133,23 @@ def process_document(document_content_id):
             content.content_hash, page_texts, extractor_version=EXTRACTOR_VERSION
         )
 
-        # Replace page rows atomically with the combined extraction update. If
-        # re-extraction changes the source text, old generated material must
-        # no longer be served as current study content.
-        DocumentPageText.query.filter_by(document_content_id=content.id).delete(
-            synchronize_session=False
-        )
-        db.session.flush()
-        for page_number, page_text in enumerate(page_texts, start=1):
-            db.session.add(DocumentPageText(
-                document_content_id=content.id,
-                page_number=page_number,
-                page_text=page_text,
-                content_hash=content.content_hash,
-                source_version=source_version,
-                extractor_version=EXTRACTOR_VERSION,
-            ))
+        # Keep legacy extraction healthy if the operator has not yet applied
+        # the additive page-text migration. Retrieval stays unavailable until
+        # the migration is applied, but existing combined-text features work.
+        if page_storage_available:
+            DocumentPageText.query.filter_by(document_content_id=content.id).delete(
+                synchronize_session=False
+            )
+            db.session.flush()
+            for page_number, page_text in enumerate(page_texts, start=1):
+                db.session.add(DocumentPageText(
+                    document_content_id=content.id,
+                    page_number=page_number,
+                    page_text=page_text,
+                    content_hash=content.content_hash,
+                    source_version=source_version,
+                    extractor_version=EXTRACTOR_VERSION,
+                ))
         if source_changed:
             GeneratedMaterial.query.filter_by(
                 document_content_id=content.id, status="ready"
