@@ -29,6 +29,15 @@ on:
       - 'frontend/public/**'
       - 'tools/**'
       - 'app.py'
+      - 'document_pipeline.py'
+      - 'study_retrieval.py'
+      - 'study_retrieval_service.py'
+      - 'study_retrieval_routes.py'
+      - 'request_observability.py'
+      - 'migrations/*.sql'
+      - 'tests/test_study_retrieval*.py'
+      - 'tests/test_request_observability.py'
+      - 'tests/test_document_pipeline_runtime.py'
       - 'alembic/**'
       - 'schema/local_baseline.sql'
       - 'Dockerfile'
@@ -75,6 +84,35 @@ jobs:
 
       - name: Apply Alembic migrations to disposable database
         run: docker compose -f docker-compose.vps.yml run --rm app python -m alembic upgrade head
+
+      - name: Apply additive page-text and observability SQL migrations to disposable PostgreSQL
+        run: |
+          docker compose -f docker-compose.vps.yml run --rm app python - <<'PY'
+          from pathlib import Path
+          from app import app, db
+
+          migration_paths = [
+              Path("migrations/20261029_document_page_text.sql"),
+              Path("migrations/20261029_request_observability.sql"),
+          ]
+          with app.app_context():
+              connection = db.engine.raw_connection()
+              try:
+                  cursor = connection.cursor()
+                  for path in migration_paths:
+                      cursor.execute(path.read_text(encoding="utf-8"))
+                      print(f"Applied disposable CI migration: {path.name}")
+                  cursor.execute("SELECT to_regclass('public.document_page_text'), to_regclass('public.request_observability_event')")
+                  page_table, event_table = cursor.fetchone()
+                  if not page_table or not event_table:
+                      raise RuntimeError("Expected retrieval/observability tables are missing")
+                  connection.commit()
+              except Exception:
+                  connection.rollback()
+                  raise
+              finally:
+                  connection.close()
+          PY
 
       - name: Start app
         run: |
