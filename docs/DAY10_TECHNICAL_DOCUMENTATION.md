@@ -403,3 +403,102 @@ The repository at the audited checkpoint is a substantial integrated application
 Its implementation is ahead of its live-infrastructure proof.
 
 The remaining work is therefore primarily deployment verification, external-provider verification, backup/restore proof, and measured runtime/capacity evidence, rather than documenting those items as though they already exist in production.
+
+---
+
+## Addendum — RAG, embeddings, grounded tutoring, and Morio identity
+**Reviewed against GitHub main on 2026-10-29.** This addendum is a newer source review, not a rewrite of the historical 2026-10-01 checkpoint above. The dated sections above describe the audited source checkpoint stated at the top; use this addendum and the current verified system walkthrough for the later findings.
+
+### 15. How an AI answers from a student's notes
+
+An LLM does not automatically see a student's files or remember every uploaded note. The application must deliberately provide the relevant text or retrieve it from an authorized knowledge store. The model then generates an answer using the instructions and context included in that request.
+
+The current E2EE scoped-study route in `e2ee_ada_routes.py` demonstrates **explicit in-context grounding**:
+1. The student deliberately selects study text/pages and asks a question.
+2. The browser sends the selected text, page range, question, document/attachment reference, and encryption key epoch to the route.
+3. The server checks the signed-in user, active conversation membership, selected-context declaration, document ownership/share status, page range, and current E2EE key epoch.
+4. The selected text and question are placed directly into the model request. The system instruction says to use the supplied context plus general academic knowledge, not claim access to other private data, and acknowledge when the excerpt is insufficient.
+5. The model response is returned to the student and usage is logged.
+
+This is useful grounding, but it is **not a general-purpose RAG pipeline**: the route does not search a corpus of note chunks or query an embedding/vector index. It sends the explicitly selected excerpt. It also intentionally does not read encrypted chat history or decrypt messages on the server.
+
+Document-material generation has a separate pipeline: source document content is used to generate structured summaries, quizzes, flashcards, mind maps, or podcast scripts; matching completed artifacts can be reused. This should not be described as semantic RAG unless a retrieval stage is actually implemented and tested.
+
+### 16. RAG and embeddings — terms and implementation status
+
+- **RAG (Retrieval-Augmented Generation):** retrieve relevant source passages first, then add those passages to the model input so the response can be grounded in the right source material.
+- **Chunking:** divide a long PDF/lecture note into manageable, overlapping or section-aware passages, preserving metadata such as document, course, page, heading, and owner.
+- **Embedding:** use an embedding model to turn text into a numerical vector that represents semantic relationships. Similar ideas can have nearby vectors even when they use different words.
+- **Vector index/database:** store chunk vectors and metadata so the system can retrieve likely-relevant passages efficiently.
+- **Keyword/full-text search:** find exact terms and lexical matches. This is useful and complementary to embeddings; it is not the same thing as embeddings.
+- **Reranking:** score a shortlist of candidate passages more carefully so the most useful evidence is placed in the prompt.
+- **Grounding/citations:** keep source/page metadata with retrieved passages, instruct the model to answer from evidence, and show students which note/page supports the answer.
+- **Prompt/system instruction:** application-controlled guidance about the assistant's role, identity, boundaries, and response style. It steers the model but is not a security boundary by itself.
+- **Conversation/learning memory:** separately stored, permissioned information about prior questions, progress, preferences, misconceptions, and mastery. This is not the same as RAG over course notes and should be designed with explicit privacy and retention rules.
+
+**Current source-review finding:** the reusable forum-answer cache in `ai_service.py` explicitly uses PostgreSQL full-text search (`tsvector`) and `pg_trgm` similarity, and its comments state “no embeddings.” Repository code search did not identify a production note-embedding/vector retrieval pipeline. Do not claim embeddings-based RAG is implemented. The scoped E2EE tutor sends selected text directly in the request; that is context grounding, not corpus retrieval.
+
+### 17. Recommended target flow for Prepza's study tutor
+
+The intended future flow, subject to implementation and tests, is:
+
+```text
+Student asks Morio a question
+        |
+        v
+Authenticate + authorize the student's course/documents
+        |
+        v
+Detect scope (selected excerpt, current document, course notes,
+or explicitly shared E2EE material)
+        |
+        v
+Retrieve candidate chunks (keyword search + semantic embeddings)
+        |
+        v
+Filter by owner/course/access permissions; rerank and deduplicate
+        |
+        v
+Build a bounded prompt with source/page metadata
+        |
+        v
+Generate answer using the configured model
+        |
+        v
+Return explanation + citations to note/page + uncertainty if evidence is weak
+        |
+        v
+Log usage and quality signals without leaking private note content
+```
+
+Important engineering choices before production:
+- Preserve strict per-user, course, and sharing boundaries in every retrieval query; never let one student's private notes appear in another student's context.
+- Keep the E2EE boundary intact. Server-side indexing of encrypted private messages/documents must not silently bypass the protocol. For E2EE chats, only explicitly selected context should be sent to the AI operation, with clear consent and scope.
+- Store source metadata and chunk/version identifiers so citations remain traceable after a document is updated or removed.
+- Use hybrid retrieval (keyword plus embeddings) rather than assuming embeddings alone will find exact formulae, course codes, names, or numeric facts.
+- Add evaluations for retrieval recall, answer correctness, citation correctness, insufficient-context behavior, access-control isolation, prompt injection in uploaded notes, latency, and cost.
+- Keep RAG optional for small/selected excerpts where direct context is simpler and more reliable. Do not add a vector database until an evaluation demonstrates that it improves retrieval quality enough to justify operational complexity.
+
+### 18. Assistant identity: requested change from Ada to Morio
+
+The product direction requested on 2026-10-29 is for the student-facing AI tutor to identify itself as **Morio**, not Ada or ChatGPT. This is a product identity/prompt/UI change, not a change of underlying model provider.
+
+**Current implementation is not yet renamed end-to-end.** In `e2ee_ada_routes.py`, the tutoring system prompt explicitly says “You are Ada, Prepza's study tutor,” the route and API are Ada-named, and the frontend has Ada-specific components and an `@Ada` chat trigger. The podcast already has a distinct character named Morio, whose default voice mapping is `am_adam`; that podcast character/voice is not proof that the main chat tutor has been renamed.
+
+Recommended migration: define one canonical display identity (“Morio”) and a small set of central prompt constants; update student-visible tutor introductions and UI labels, then route/telemetry copy and tests. Avoid blindly renaming internal route/module names in the same change because they are compatibility contracts and may be used by the frontend or existing tests. Add regression tests asserting that the student-facing tutor introduces itself as Morio and does not self-identify as Ada or ChatGPT, while preserving provider/model transparency where technically or legally appropriate. Test the ordinary tutor, E2EE scoped tutor, errors/empty states, and podcast character labels separately.
+
+### 19. Learning resources
+
+- Google Cloud Tech — [Build RAG apps with embeddings (YouTube)](https://www.youtube.com/watch?v=A7qjjkjjZu0): embeddings, chunking, vector search, and production considerations.
+- 3Blue1Brown — [Large Language Models explained briefly (YouTube)](https://www.youtube.com/watch?v=LPZh9BOjkQs): beginner-friendly model and chatbot foundations.
+- Anthropic — [Retrieval augmented generation guide](https://platform.claude.com/cookbook/capabilities-retrieval-augmented-generation-guide): hands-on chunking, embeddings, retrieval, and reranking.
+- Anthropic — [Contextual Retrieval](https://www.anthropic.com/research/contextual-retrieval): why chunk context and hybrid keyword/semantic search matter.
+- Anthropic — [Prompting best practices](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/prompt-templates-and-variables): role/system prompts, examples, structured context, and identity instructions.
+- OpenAI — [Prompt engineering guide](https://developers.openai.com/api/docs/guides/prompt-engineering): provider-neutral concepts for giving a model relevant context and constraining its response.
+
+### 20. Work remaining for this AI area
+
+1. Implement and regression-test the requested Morio identity across student-facing tutor prompts and UI.
+2. Map each tutoring entry point to its actual source context and explicitly document whether it uses selected text, whole-document text, cached answers, or retrieval.
+3. Design a privacy-aware hybrid RAG prototype for non-E2EE study notes, with chunk/page citations and an evaluation set, before choosing a vector store.
+4. Keep RAG/embedding work separate from the remaining release gates for Paystack, SES, OpenAI, R2, and the configured Kokoro/GPU provider. External-provider verification still requires safe credentials and explicit approval for any potentially billable or live operation.
