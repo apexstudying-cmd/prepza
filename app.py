@@ -10306,5 +10306,8 @@ register_e2ee_production_hardening(app, db, Conversation, ConversationParticipan
 from shop_marketplace import register_shop_routes
 register_shop_routes(app, db, User, Payment, Conversation, ConversationParticipant, limiter, create_paystack_transaction, sync_paystack_payment_status)
 
+from study_retrieval_routes import register_study_retrieval_routes
+register_study_retrieval_routes(app, db, login_required, require_csrf)
+
 from request_observability import register_request_observability
 register_request_observability(app, db, require_admin, RequestObservabilityEvent)
