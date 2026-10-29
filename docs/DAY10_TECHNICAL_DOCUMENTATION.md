@@ -483,7 +483,7 @@ Important engineering choices before production:
 
 The product direction requested on 2026-10-29 is for the student-facing AI tutor to identify itself as **Morio**, not Ada or ChatGPT. This is a product identity/prompt/UI change, not a change of underlying model provider.
 
-**Current implementation is not yet renamed end-to-end.** In `e2ee_ada_routes.py`, the tutoring system prompt explicitly says “You are Ada, Prepza's study tutor,” the route and API are Ada-named, and the frontend has Ada-specific components and an `@Ada` chat trigger. The podcast already has a distinct character named Morio, whose default voice mapping is `am_adam`; that podcast character/voice is not proof that the main chat tutor has been renamed.
+**Implementation update (2026-10-29):** the primary document tutor prompt in `ai_service.py` and the explicitly scoped E2EE study prompt now identify the student-facing tutor as Morio. The Home quick action, document-study labels, chat composer mention (`@Morio`), shared/direct study panels, loading/error copy, and responsive-browser acceptance check have been updated to Morio. Internal module, function, and endpoint names that contain `Ada` remain for compatibility; they are not intended as user-visible identity. The browser/cross-system regression is required before this change is considered release-verified. The podcast character named Morio is a separate feature and its voice mapping does not prove the tutor implementation.
 
 Recommended migration: define one canonical display identity (“Morio”) and a small set of central prompt constants; update student-visible tutor introductions and UI labels, then route/telemetry copy and tests. Avoid blindly renaming internal route/module names in the same change because they are compatibility contracts and may be used by the frontend or existing tests. Add regression tests asserting that the student-facing tutor introduces itself as Morio and does not self-identify as Ada or ChatGPT, while preserving provider/model transparency where technically or legally appropriate. Test the ordinary tutor, E2EE scoped tutor, errors/empty states, and podcast character labels separately.
 
@@ -502,3 +502,42 @@ Recommended migration: define one canonical display identity (“Morio”) and a
 2. Map each tutoring entry point to its actual source context and explicitly document whether it uses selected text, whole-document text, cached answers, or retrieval.
 3. Design a privacy-aware hybrid RAG prototype for non-E2EE study notes, with chunk/page citations and an evaluation set, before choosing a vector store.
 4. Keep RAG/embedding work separate from the remaining release gates for Paystack, SES, OpenAI, R2, and the configured Kokoro/GPU provider. External-provider verification still requires safe credentials and explicit approval for any potentially billable or live operation.
+
+
+---
+
+## 21. System prompts, MCP tools, access control, guardrails, routing, caching, and observability
+
+These are separate layers of an AI application. They complement RAG; none is a substitute for source retrieval or access-control enforcement.
+
+### System prompt
+Application-controlled instructions define the assistant's role, teaching style, evidence policy, and output format. The primary document tutor and scoped E2EE study tutor now say Morio. Prompts are guidance, not a security boundary: the backend must still enforce access, quotas, tool permissions, and data scope.
+
+### Tools and MCP
+A model tool is a narrowly defined function that the application can execute on the model's behalf, such as looking up an authorized course topic or retrieving a note passage. **MCP (Model Context Protocol)** is a standard way for an AI application to connect to external tools and data sources; it is not itself an LLM, embedding model, or RAG database.
+
+**Current status:** this source review did not verify an MCP-connected tool server for Morio. Prepza has application routes and internal functions, but do not describe those as MCP tools. If we add tools, use an explicit allowlist, JSON-schema validation, per-user authorization at execution time, timeouts, rate limits, audit events, and human confirmation for consequential actions. Tool output is untrusted input and must not be allowed to override system instructions.
+
+### Access and privacy
+Existing boundaries include authenticated sessions, document access checks, CSRF on mutations, chat membership checks, explicit selection for the E2EE tutor, bounded text/page ranges, and E2EE key-epoch validation. For future RAG, enforce the same owner/course/share constraints *before* passages reach the model. A prompt saying “do not reveal another student's notes” is not an adequate authorization control.
+
+Do not silently index server-inaccessible E2EE plaintext. Preserve the current explicit-selection disclosure model for encrypted chats unless a separately reviewed design changes it with informed consent.
+
+### Guardrails
+Prepza already has spend caps, daily tutor limits, route-level rate limits, bounded selected context, provider error handling, and structured output contracts for some generation types. These protect cost and some malformed inputs. They do not eliminate hallucinations, prompt injection, unsafe tool arguments, or incorrect citations. Future RAG needs tests for cross-user isolation, malicious instructions inside uploaded notes, insufficient evidence, unsupported claims, citation correctness, and output validation.
+
+### Cache and router
+- `route_and_generate()` routes by AI task, selects the configured primary model, and can try a configured fallback after provider failure. It currently uses the OpenAI-only provider policy; quality-based escalation is documented as future work.
+- `AIRequest.cacheable_system` enables provider prompt-cache behavior where supported. This is distinct from caching a final answer.
+- Study artifact fingerprints and exact artifact reuse avoid repeating equivalent summary/quiz/flashcard/mind-map/podcast generations. The forum-answer reuse cache uses PostgreSQL text/similarity search; it is not embeddings-based note RAG.
+- A future RAG retrieval cache must be keyed by authorized user/scope, document version, query/embedding version, and relevant permission state; it must be invalidated when source documents or access rights change.
+
+### Observability
+The AI service returns model/provider, token usage, cache token usage, computed cost, latency, and fallback/escalation metadata; centralized usage logging records usage economics. That is a useful foundation, not complete end-to-end observability. We still need consistent request/trace IDs, prompt/version metadata, retrieval candidate and citation diagnostics (without logging raw private note content), tool-call audit trails, latency/error dashboards, and alerting for spend, provider failures, and retrieval-quality regressions.
+
+### Implementation order
+1. Finish the Morio browser/mobile regression and correct any failures.
+2. Keep the current direct-document tutoring flow working; distinguish it from semantic RAG in product copy and QA.
+3. Build a small hybrid-retrieval prototype for non-E2EE notes with page citations and strict access tests; use mocked embeddings in CI and do not make billable embedding calls without approval.
+4. Add MCP tools only when a concrete student workflow benefits from them and after permission/audit contracts are tested.
+5. Expand observability before relying on retrieval or tools for launch-critical answers.

@@ -22,6 +22,15 @@ def test_scoped_tutor_prompt_uses_morio_and_preserves_context_boundaries():
     assert "MAX_PAGE_SPAN = 50" in text
 
 
+def test_main_document_tutor_prompt_uses_morio():
+    text = source("ai_service.py")
+    start = text.index("def _build_tutor_system_prompt")
+    end = text.index("def _format_mastery_context", start)
+    prompt = text[start:end]
+    assert "You are Morio, Prepza's AI tutor." in prompt
+    assert "You are Ada" not in prompt
+
+
 def test_group_mention_and_visible_copy_use_morio():
     text = source("frontend/src/crypto/inChatAdaEnhancer.tsx")
     assert "MORIO_MENTION_RE = /(^|\\s)@morio\\b/i" in text
@@ -59,6 +68,7 @@ def test_home_and_prebuild_patch_keep_morio_label():
 if __name__ == "__main__":
     checks = [
         test_scoped_tutor_prompt_uses_morio_and_preserves_context_boundaries,
+        test_main_document_tutor_prompt_uses_morio,
         test_group_mention_and_visible_copy_use_morio,
         test_home_study_screens_and_composer_use_morio,
         test_direct_tutor_uses_morio_and_keeps_internal_event_compatible,

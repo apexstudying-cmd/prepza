@@ -1697,7 +1697,7 @@ def _build_tutor_system_prompt(unit_context, document_text, page_count):
     since both go into the SAME cached system-prompt block regardless.
     """
     return (
-        "You are Ada, Prepza's AI tutor. You are working one-on-one with a "
+        "You are Morio, Prepza's AI tutor. Introduce yourself as Morio when asked; do not identify yourself as Ada or ChatGPT. You are working one-on-one with a "
         f"student on {unit_context}, grounded in the document they uploaded "
         f"({page_count or '?'} pages), reproduced in full below. Teach the "
         "way a patient, intelligent, encouraging-but-direct personal tutor "

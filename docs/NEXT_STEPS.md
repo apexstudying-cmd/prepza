@@ -1,6 +1,6 @@
 # Prepza — Persistent Engineering Execution Tracker
 
-Last updated: 2026-10-28
+Last updated: 2026-10-29
 Branch: main
 
 Status:
@@ -9,6 +9,14 @@ Status:
 - [ ] not yet completed
 
 Rule: require evidence before marking production work complete.
+
+## AI tutor identity and architecture checkpoint (2026-10-29)
+
+- [~] Morio identity: main document-tutor prompt, scoped E2EE prompt, student-facing Home/document/chat labels, and `@Morio` mention updated. The internal Ada-named routes/functions remain compatibility details. Frontend build, Chat UX Contract, Student Frontend Contract (including Morio identity tests), E2EE security, and other focused contracts have passed on recent commits; the exact current-SHA responsive/offline/cross-system browser run is still pending.
+- [x] Added a Morio identity regression contract to `scripts/test_morio_identity_contract.py` and wired it into Student Frontend Contract CI.
+- [~] RAG/embeddings: direct document tutor already supplies the selected document's extracted text as prompt context, and the E2EE tutor supplies explicitly selected text. No production embedding/vector-index pipeline was verified; hybrid RAG remains future implementation work.
+- [x] Documented system prompts, MCP tools, access boundaries, guardrails, cache/router behavior, and observability in `docs/DAY10_TECHNICAL_DOCUMENTATION.md`.
+- Guardrail: use mocked embeddings in CI; do not make billable OpenAI embedding calls, live payments, or GPU workloads without explicit approval.
 
 ## Local developer tooling checkpoint (2026-10-28)
 
