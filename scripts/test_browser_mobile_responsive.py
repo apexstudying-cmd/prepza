@@ -146,7 +146,7 @@ def main() -> int:
 
                         tool_icons = page.evaluate(
                             """() => {
-                              const labels = ['Upload', 'My Study', 'Library', 'Ada', 'Shop'];
+                              const labels = ['Upload', 'My Study', 'Library', 'Morio', 'Shop'];
                               return labels.map(label => {
                                 const button = Array.from(document.querySelectorAll('button')).find(
                                   candidate => Array.from(candidate.querySelectorAll('span')).some(
