@@ -9,8 +9,8 @@ def main() -> None:
     # current chat architecture. Keep this step idempotent; never rewrite the
     # composer through brittle string matching.
     text = DIRECT.read_text(encoding='utf-8')
-    if 'textarea[placeholder="Message…"]' not in text or 'Direct chat @Ada mention trigger' in text:
-        print('CHAT_ADA_MENTION_PATCH_ALREADY_READY')
+    if 'textarea[placeholder="Message…"]' not in text or 'Direct chat @Morio mention trigger' in text:
+        print('CHAT_MORIO_MENTION_PATCH_ALREADY_READY')
         return
 
     marker = "  useEffect(() => {\n    if (!open || !chat) return\n"
@@ -24,7 +24,7 @@ def main() -> None:
       const textarea = document.querySelector('[data-prepza-chat-composer="true"]') as HTMLTextAreaElement | null
       if (!textarea) return
       bound = textarea
-      onInput = () => { if (/(^|\\s)@ada\\b/i.test(textarea.value)) setOpen(true) }
+      onInput = () => { if (/(^|\\s)@morio\\b/i.test(textarea.value)) setOpen(true) }
       textarea.addEventListener('input', onInput)
       onInput()
     }
@@ -42,8 +42,8 @@ def main() -> None:
 """
     if marker not in text:
         raise SystemExit('ADA_MENTION_PATCH_FAILED: direct Ada insertion anchor missing')
-    DIRECT.write_text(text.replace(marker, '  // Direct chat @Ada mention trigger\n' + mention_effect + marker, 1), encoding='utf-8')
-    print('CHAT_ADA_MENTION_PATCH_APPLIED')
+    DIRECT.write_text(text.replace(marker, '  // Direct chat @Morio mention trigger\n' + mention_effect + marker, 1), encoding='utf-8')
+    print('CHAT_MORIO_MENTION_PATCH_APPLIED')
 
 if __name__ == '__main__':
     main()
