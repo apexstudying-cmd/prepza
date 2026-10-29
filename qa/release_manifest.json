@@ -535,6 +535,80 @@
         "python -m pytest tests/test_shop_image_cache_contract.py -q"
       ],
       "notes": "Implementation in progress. User-approved contract: KES 100 per item per 30-day listing period, manual per-item renewal, expired listings hidden until renewal and re-publication; no free first listing or automatic recurring charges. Direct seller contact only; no buyer checkout or Prepza-held funds. Release certification requires disposable PostgreSQL browser journey, migration/expiry enforcement, idempotent renewal payment tests, image-storage verification, and staging Paystack/R2 checks."
+    },
+    {
+      "id": "morio_identity",
+      "name": "Morio student-facing tutor identity",
+      "release_scope": "release",
+      "layers": [
+        {
+          "kind": "backend_prompt",
+          "path": "ai_service.py",
+          "anchors": [
+            "You are Morio, Prepza's AI tutor.",
+            "Ground every answer in the document text below"
+          ]
+        },
+        {
+          "kind": "scoped_e2ee_prompt",
+          "path": "e2ee_ada_routes.py",
+          "anchors": [
+            "You are Morio, Prepza's AI study tutor.",
+            "explicit_user_context"
+          ]
+        },
+        {
+          "kind": "frontend",
+          "path": "frontend/src/crypto/WhatsAppChatExperience.tsx",
+          "anchors": [
+            ">Morio</div>",
+            "}>@Morio</button>"
+          ]
+        },
+        {
+          "kind": "frontend",
+          "path": "frontend/src/crypto/inChatAdaEnhancer.tsx",
+          "anchors": [
+            "MORIO_MENTION_RE",
+            "Morio · Shared study"
+          ]
+        },
+        {
+          "kind": "frontend",
+          "path": "frontend/src/crypto/directInChatAdaEnhancer.tsx",
+          "anchors": [
+            "Study with Morio",
+            "Ask Morio"
+          ]
+        },
+        {
+          "kind": "frontend_patch",
+          "path": "scripts/apply_shop_frontend.py",
+          "anchors": [
+            "label: 'Morio', action: () => setScreen('ai-tutor')"
+          ]
+        },
+        {
+          "kind": "test",
+          "path": "scripts/test_morio_identity_contract.py",
+          "anchors": [
+            "test_main_document_tutor_prompt_uses_morio",
+            "test_home_study_screens_and_composer_use_morio"
+          ]
+        },
+        {
+          "kind": "ci",
+          "path": ".github/workflows/student-frontend-contract.yml",
+          "anchors": [
+            "Morio identity contract",
+            "test_morio_identity_contract.py"
+          ]
+        }
+      ],
+      "required_test_commands": [
+        "python scripts/test_morio_identity_contract.py"
+      ],
+      "notes": "Student-facing main and scoped E2EE tutor prompts, Home/document/chat labels, @Morio mention, and study panels now use Morio. Internal Ada-named routes/functions remain compatibility details. Frontend build, identity contract, E2EE security, responsive mobile/tablet, full disposable PostgreSQL QA, and online/offline generated-material browser journeys passed on runtime commit fe8bbbb195d2090c481052172b8af5ec9176e9bc. RAG embeddings/vector retrieval remain a separate future implementation and are not claimed by this identity gate."
     }
   ]
 }

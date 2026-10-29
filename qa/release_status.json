@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "last_verified_date": "2026-10-28",
-  "last_verified_commit": "959d4ed0ef7fe00733ac64d21ab15232a5beda7a",
+  "last_verified_date": "2026-10-29",
+  "last_verified_commit": "fe8bbbb195d2090c481052172b8af5ec9176e9bc",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -47,8 +47,8 @@
     },
     {
       "id": "shared_streak",
-      "status": "IN_PROGRESS",
-      "evidence": "User requested Shared Streak be brought into launch work on 2026-10-28. Backend GET/invite/accept/decline routes are registered from chat_interactions.py; mutations require CSRF, all routes verify active conversation membership, invitation limits count pending and active pairs, and acceptance is serialized per user. The API uses UUID string IDs matching the baseline schema and preserves yesterday's streak while today's study is in progress. The chat-header control is wired through the frontend build patch. Alembic revision 20261030_shared_study_streak manages the tables without request-time DDL. Shared Study Streak Contract passed on code f6a5822b (run 40732829197); Frontend Build passed on f6a5822b (run 40732829186); populated-database migration/backup rehearsal passed at the new head in run 40732199472. A real two-user PostgreSQL route test was added to tests/test_local_qa_real_world.py and the full Release Browser/Cross-System Regression run 40732721591 is still in progress; no runtime PASS is claimed until that finishes green."
+      "status": "PASS",
+      "evidence": "Shared Study Streak Contract passed on f6a5822b (run 40732829197); Frontend Build passed on f6a5822b (run 40732829186); populated-database migration/backup rehearsal passed at the new head in run 40732199472. The full two-user PostgreSQL route journey and Nairobi-day qualification ran inside Release Browser and Cross-System Regression run 40856781684 on runtime commit fe8bbbb195d2090c481052172b8af5ec9176e9bc; the complete browser/cross-system job passed."
     },
     {
       "id": "realtime_chat",
@@ -144,6 +144,11 @@
       "id": "redis_worker_failure_recovery",
       "status": "PASS",
       "evidence": "GitHub Actions Redis Worker Reconnect Recovery run 3 passed on 2026-10-26 at code commit 9d041e5c60a2bff2ea6379acae61d51e780afd65. The test used the real chat_event_worker.py and Redis 8 with durable disposable test state, restarted Redis while the worker was active, then verified the worker stayed alive, published a post-restart stream event to the correct conversation, and acknowledged it. The first run exposed and reproduced an unhandled ConnectionError in _claim_stale_messages; chat_event_queue.py now treats redis timeout/connection errors in this reclaim path as transient."
+    },
+    {
+      "id": "morio_identity",
+      "status": "PASS",
+      "evidence": "PASS on runtime commit fe8bbbb195d2090c481052172b8af5ec9176e9bc: primary document tutor prompt and scoped E2EE tutor prompt identify as Morio; Student Frontend Contract including scripts/test_morio_identity_contract.py passed (run 40856781899); Frontend Build passed (run 40856781852); E2EE Security Regression passed (run 40856781660); Chat UX Contract passed (run 40856781873); responsive phone/tablet, B2B browser journey, full disposable PostgreSQL QA, and online/offline generated-artifact browser journeys passed in Release Browser and Cross-System Regression run 40856781684. Internal Ada-named API/module contracts remain for compatibility. RAG/embeddings are not part of this gate."
     }
   ],
   "next_actions": [
