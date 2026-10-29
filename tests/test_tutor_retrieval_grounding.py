@@ -66,3 +66,20 @@ def test_page_citation_validator_downgrades_unretrieved_page_numbers():
     )
     assert reply == "The answer is supported by [p. 2] and [page reference not verified]."
     assert invalid_count == 1
+
+
+
+def test_tutor_generation_observability_correlates_requests_without_logging_content():
+    source = (ROOT / "ai_service.py").read_text(encoding="utf-8")
+    start = source.index("def generate_tutor_reply(")
+    end = source.index("\ndef ", start + 5)
+    tutor = source[start:end]
+
+    assert '"event": "tutor_generation_completed"' in tutor
+    assert '"event": "tutor_generation_failed"' in tutor
+    assert '"http_request_id": _current_http_correlation_id()' in tutor
+    assert '"input_tokens": ai_usage.input_tokens' in tutor
+    assert '"output_tokens": ai_usage.output_tokens' in tutor
+    assert '"latency_ms": latency_ms' in tutor
+    assert '"retrieved_page_count": len(retrieved_pages) if retrieval_mode else 0' in tutor
+    assert 'raise AIProviderError("Tutor reply generation failed.") from e' in tutor
