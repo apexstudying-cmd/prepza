@@ -1904,7 +1904,7 @@ function SplashScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(160deg, ${N.navy} 0%, ${N.navy2} 60%, ${N.navy3} 100%)` }}>
       <div style={{ position: 'absolute', top: '18%', width: 220, height: 220, background: 'rgba(201,168,76,0.06)', borderRadius: '50%', filter: 'blur(50px)' }} />
-      <img src={logoImg} alt="Prepza" width={192} height={192} style={{ width: 192, height: 192, borderRadius: 42, marginBottom: 24, boxShadow: '0 18px 60px rgba(201,168,76,0.3)' }} />
+      <img src="/icon-192.png" alt="Prepza" width={192} height={192} style={{ width: 192, height: 192, borderRadius: 42, marginBottom: 24, boxShadow: '0 18px 60px rgba(201,168,76,0.3)' }} />
       <div style={{ fontWeight: 800, fontSize: 30, color: '#fff', letterSpacing: '-1px' }}>{PREPZA_BRANDLINE}</div>
       <div style={{ color: 'rgba(255,255,255,0.52)', fontSize: 11, fontWeight: 600, letterSpacing: .2, marginTop: 9 }}>Our vision</div>
       {state === 'checking' ? (
@@ -2184,8 +2184,9 @@ function HomeScreen({ setScreen, setActiveDocumentId, setActiveOpportunityId }: 
             {[
               { icon: Ic.upload('w-6 h-6'), label: 'Upload', action: () => setScreen('upload') },
               { icon: Ic.book('w-6 h-6'), label: 'My Study', action: () => setScreen('study-materials') },
-              { icon: Ic.flash('w-6 h-6'), label: 'Ada', action: () => setScreen('ai-tutor') },
-              { icon: Ic.podcast('w-6 h-6'), label: 'Podcasts', action: () => setScreen('podcast-library') },
+              { icon: Ic.explore('w-6 h-6'), label: 'Library', action: () => setScreen('library') },
+              { icon: Ic.flash('w-6 h-6'), label: 'Morio', action: () => setScreen('ai-tutor') },
+              { icon: Ic.image('w-6 h-6'), label: 'Shop', action: () => setScreen('shop') },
             ].map((t, i) => (
               <button key={i} onClick={t.action} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                 <div style={{ width: 52, height: 52, borderRadius: 16, background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, border: '1px solid rgba(201,168,76,0.15)' }}>{t.icon}</div>
