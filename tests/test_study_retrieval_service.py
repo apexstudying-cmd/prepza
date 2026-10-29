@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import create_engine, text
 
-from study_retrieval_service import retrieve_authorized_pages
+from study_retrieval_service import load_authorized_pages, retrieve_authorized_pages
 
 
 @pytest.fixture
@@ -164,3 +164,14 @@ def test_document_scope_cannot_bypass_ownership_or_publication(retrieval_db):
         )
     assert published_pages
     assert {page.document_id for page in published_pages} == {20}
+
+
+def test_authorized_page_loading_has_a_hard_row_cap(retrieval_db):
+    with retrieval_db.begin() as conn:
+        conn.execute(text("INSERT INTO document VALUES (11, 100, 1, 'ready', 0)"))
+
+    with retrieval_db.connect() as conn:
+        pages = load_authorized_pages(conn, user_id=100, max_pages=1)
+
+    assert len(pages) == 1
+    assert pages[0].document_id == 11
