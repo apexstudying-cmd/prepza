@@ -122,9 +122,15 @@ def register_request_observability(app, db, require_admin, RequestObservabilityE
                     "status": "unavailable",
                     "error": "Request observability schema is not ready",
                 }), 503
-            recent = RequestObservabilityEvent.query.filter(
+            recent_query = RequestObservabilityEvent.query.filter(
                 RequestObservabilityEvent.occurred_at >= recent_start
-            ).all()
+            )
+            recent_5xx = recent_query.filter(
+                RequestObservabilityEvent.status_code >= 500
+            ).count()
+            recent_slow = recent_query.filter(
+                RequestObservabilityEvent.duration_ms >= SLOW_REQUEST_MS
+            ).count()
             hour_events = (
                 RequestObservabilityEvent.query
                 .filter(RequestObservabilityEvent.occurred_at >= hour_start)
@@ -139,11 +145,6 @@ def register_request_observability(app, db, require_admin, RequestObservabilityE
                 "error": "Request observability schema is not ready",
             }), 503
 
-        recent_5xx = sum(1 for event in recent if event.status_code >= 500)
-        recent_slow = sum(
-            1 for event in recent
-            if event.duration_ms is not None and event.duration_ms >= SLOW_REQUEST_MS
-        )
         alerts = evaluate_alerts(recent_5xx=recent_5xx, recent_slow=recent_slow)
         if alerts:
             logger.warning(json.dumps({
