@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timedelta
 from urllib.parse import urlsplit, urlunsplit
 
-from flask import g, jsonify, request
+from flask import g, has_request_context, jsonify, request
 from sqlalchemy import inspect, text
 
 logger = logging.getLogger("prepza.http_observability")
@@ -18,8 +18,9 @@ def scrub_sentry_event(event, hint):
     """Remove request/user payloads before any Sentry event leaves the process.
 
     Sentry's Flask integration may attach request context even to a generic
-    alert message. Preserve the route path for diagnosis, but drop query,
-    body, cookies, headers, breadcrumbs, extras, and direct user identifiers.
+    alert message. Preserve only the matched route template, never arbitrary
+    path parameters, and drop query, body, cookies, headers, breadcrumbs,
+    extras, and direct user identifiers.
     """
     if not isinstance(event, dict):
         return event
@@ -32,8 +33,13 @@ def scrub_sentry_event(event, hint):
         if isinstance(url, str):
             try:
                 parsed = urlsplit(url)
+                route_template = (
+                    request.url_rule.rule
+                    if has_request_context() and request.url_rule
+                    else "unmatched"
+                )
                 request_data["url"] = urlunsplit(
-                    (parsed.scheme, parsed.netloc, parsed.path, "", "")
+                    (parsed.scheme, parsed.netloc, route_template, "", "")
                 )
             except ValueError:
                 request_data.pop("url", None)
