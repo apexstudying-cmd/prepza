@@ -438,15 +438,15 @@ Document-material generation has a separate pipeline: source document content is
 
 **Current implementation:** the reusable forum-answer cache in `ai_service.py` still uses PostgreSQL full-text search (`tsvector`) and `pg_trgm`; it is not embeddings-based RAG. The new `study_retrieval.py` provides page-aware chunking, lexical ranking, optional injected embedding callbacks, and citation envelopes. `document_pipeline.py` now persists extracted page text in `document_page_text`, alongside the existing combined `extracted_text` field for backward compatibility. Each page row stores the content hash, extractor version, and a document-wide source version.
 
-The new `study_retrieval_service.py` loads page rows through a SQL query that enforces access before text is returned: the requester must own a non-removed, ready document or its exact document must have an approved Library publication matching the requester's university, program, year, and semester. A shared content hash alone grants no access. `POST /api/study/retrieval` requires an authenticated session and CSRF token, takes the user ID from the session, supports optional server-authorized document scope, and returns source/page citations. It currently uses lexical retrieval only, with hard caps of 250 authorized page rows, 20,000 characters per page materialized for ranking, and 500 chunks per request to bound database/memory work; no production embedding vectors are stored and no paid embedding API is called. The scoped E2EE tutor remains separate and continues to use only explicitly selected context.
+The new `study_retrieval_service.py` loads page rows through a SQL query that enforces access before text is returned: the requester must own a non-removed, ready document or its exact document must have an approved Library publication matching the requester's university, program, year, and semester. A shared content hash alone grants no access. `POST /api/study/retrieval` requires an authenticated session and CSRF token, takes the user ID from the session, supports optional server-authorized document scope, and returns source/page citations. The ordinary Morio document tutor now passes its selected document ID from the authenticated route, loads only authorized page rows, ranks passages for the current question, and adds the bounded results in a separate system-message block. The prompt instructs Morio to say when retrieved pages do not establish an answer; a post-generation validator downgrades page numbers that were not among the retrieved pages. It currently uses lexical retrieval only, with hard caps of 250 authorized page rows, 20,000 characters per page materialized for ranking, and 500 chunks per request to bound database/memory work; no production embedding vectors are stored and no paid embedding API is called. The scoped E2EE tutor remains separate and continues to use only explicitly selected context.
 
 **Version invalidation:** when re-extraction changes page text, ready generated materials for that content are marked failed with an explicit regeneration message so they are not silently served as current. First-time page-text backfills that match existing combined text do not invalidate artifacts. Retrieval citation versions are content-addressed from the uploaded content hash, extractor version, page numbers, and extracted page text.
 
 Existing ready PDFs are not silently or automatically re-OCRed after migration. `scripts/backfill_document_page_text.py` defaults to a read-only inventory; its explicit `--apply` mode only backfills documents where every page has sufficient native PDF text. Scanned/mixed PDFs are skipped rather than invoking billable OCR. Rehearse the script on a disposable/staging database and review counts before applying it to production.
 
-### 17. Recommended target flow for Prepza's study tutor
+### 17. Current retrieval flow and remaining production gates
 
-The intended future flow, subject to implementation and tests, is:
+The first lexical, page-cited phase is now implemented in the ordinary Morio document tutor. The runtime flow is:
 
 ```text
 Student asks Morio a question
@@ -459,10 +459,10 @@ Detect scope (selected excerpt, current document, course notes,
 or explicitly shared E2EE material)
         |
         v
-Retrieve candidate chunks (keyword search + semantic embeddings)
+Retrieve authorized page chunks (lexical ranking; embedding adapter remains optional)
         |
         v
-Filter by owner/course/access permissions; rerank and deduplicate
+Apply owner/cohort permissions in SQL before reading page text; rank and deduplicate
         |
         v
 Build a bounded prompt with source/page metadata
@@ -471,13 +471,14 @@ Build a bounded prompt with source/page metadata
 Generate answer using the configured model
         |
         v
-Return explanation + citations to note/page + uncertainty if evidence is weak
+Validate page numbers against retrieved evidence; return explanation + citations + uncertainty when evidence is weak
         |
         v
 Log usage and quality signals without leaking private note content
 ```
 
-Important engineering choices before production:
+Remaining engineering gates before broad production enablement:
+- Apply the additive SQL migrations through the controlled migration process and rehearse the page-text backfill on staging; existing ready documents are not silently re-OCRed.
 - Preserve strict per-user, course, and sharing boundaries in every retrieval query; never let one student's private notes appear in another student's context.
 - Keep the E2EE boundary intact. Server-side indexing of encrypted private messages/documents must not silently bypass the protocol. For E2EE chats, only explicitly selected context should be sent to the AI operation, with clear consent and scope.
 - Store source metadata and chunk/version identifiers so citations remain traceable after a document is updated or removed.
