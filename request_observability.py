@@ -7,11 +7,61 @@ import os
 import time
 import uuid
 from datetime import datetime, timedelta
+from urllib.parse import urlsplit, urlunsplit
 
 from flask import g, jsonify, request
 from sqlalchemy import inspect, text
 
 logger = logging.getLogger("prepza.http_observability")
+
+def scrub_sentry_event(event, hint):
+    """Remove request/user payloads before any Sentry event leaves the process.
+
+    Sentry's Flask integration may attach request context even to a generic
+    alert message. Preserve the route path for diagnosis, but drop query,
+    body, cookies, headers, breadcrumbs, extras, and direct user identifiers.
+    """
+    if not isinstance(event, dict):
+        return event
+
+    sanitized = dict(event)
+    request_data = sanitized.get("request")
+    if isinstance(request_data, dict):
+        request_data = dict(request_data)
+        url = request_data.get("url")
+        if isinstance(url, str):
+            try:
+                parsed = urlsplit(url)
+                request_data["url"] = urlunsplit(
+                    (parsed.scheme, parsed.netloc, parsed.path, "", "")
+                )
+            except ValueError:
+                request_data.pop("url", None)
+        for key in ("query_string", "data", "cookies", "headers", "env"):
+            request_data.pop(key, None)
+        sanitized["request"] = request_data
+
+    user_data = sanitized.get("user")
+    if isinstance(user_data, dict):
+        user_data = dict(user_data)
+        for key in ("id", "email", "username", "ip_address", "name"):
+            user_data.pop(key, None)
+        if user_data:
+            sanitized["user"] = user_data
+        else:
+            sanitized.pop("user", None)
+
+    contexts = sanitized.get("contexts")
+    if isinstance(contexts, dict):
+        contexts = dict(contexts)
+        contexts.pop("request", None)
+        sanitized["contexts"] = contexts
+
+    # Breadcrumbs/extras can accidentally retain student prompts or page text.
+    sanitized.pop("breadcrumbs", None)
+    sanitized.pop("extra", None)
+    return sanitized
+
 SLOW_REQUEST_MS = 5000
 ALERT_WINDOW_MINUTES = 5
 HTTP_5XX_ALERT_THRESHOLD = 5
