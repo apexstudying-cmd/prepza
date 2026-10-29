@@ -1970,7 +1970,9 @@ def _parse_tutor_reply(raw_text):
     return visible_text, concept_name, prerequisite_name
 
 
-def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id, plan_tier="free"):
+def generate_tutor_reply(
+    conversation_id, user_message_text, triggering_user_id, plan_tier="free", document_id=None
+):
     """
     Full pipeline for one tutor-chat turn:
       1. Spend-cap check (blocks fresh generation platform-wide, same
@@ -2000,7 +2002,7 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
     pattern used elsewhere in this codebase.
     """
     from app import (
-        db, TutorConversation, TutorMessage, DocumentContent,
+        db, TutorConversation, TutorMessage, DocumentContent, Document, _can_study_document,
         LearningConcept, LearningEvent, update_concept_mastery,
         get_student_mastery_snapshot, ConceptPrerequisite,
         should_diagnose, get_current_conversation_concept_id,
@@ -2044,10 +2046,63 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
     model = task_config["primary"]
     max_tokens = task_config["max_tokens"]
 
+    retrieval_mode = False
+    retrieval_context = ""
+    if document_id is not None:
+        requested_document = db.session.get(Document, document_id)
+        if (
+            not requested_document
+            or requested_document.document_content_id != content.id
+            or not _can_study_document(triggering_user_id, requested_document)
+        ):
+            raise AIProviderError("Document not found or not available to this student.")
+
+        try:
+            from sqlalchemy import inspect
+            if inspect(db.engine).has_table("document_page_text"):
+                from study_retrieval_service import load_authorized_pages, retrieve_authorized_pages
+                authorized_pages = load_authorized_pages(
+                    db.session, user_id=triggering_user_id, document_id=document_id
+                )
+                if authorized_pages:
+                    retrieved_pages = retrieve_authorized_pages(
+                        db.session,
+                        user_id=triggering_user_id,
+                        query=user_message_text,
+                        document_id=document_id,
+                        authorized_pages=authorized_pages,
+                        top_k=5,
+                    )
+                    retrieval_mode = True
+                    if retrieved_pages:
+                        retrieval_context = "RETRIEVED SOURCE EXCERPTS (source pages are authoritative; cite as [p. N]):\\n\\n" + "\\n\\n".join(
+                            f"[Source page {page.page_number}]\\n{page.text}"
+                            for page in retrieved_pages
+                        )
+                    else:
+                        retrieval_context = (
+                            "No relevant source passages matched this question. Do not make "
+                            "document-specific claims without evidence. Tell the student the "
+                            "retrieved pages do not establish an answer and invite a narrower question."
+                        )
+        except Exception as exc:
+            db.session.rollback()
+            _ai_observability_logger.warning(json.dumps({
+                "event": "tutor_retrieval_failed",
+                "document_id": document_id,
+                "http_request_id": _current_http_correlation_id(),
+                "exception_type": type(exc).__name__,
+            }, separators=(",", ":"), sort_keys=True))
+            raise AIProviderError(
+                "Secure document retrieval is temporarily unavailable; please try again shortly."
+            ) from exc
+
     system_prompt = _build_tutor_system_prompt(
         unit_context="their coursework",
-        document_text=content.extracted_text,
+        document_text="" if retrieval_mode else content.extracted_text,
         page_count=content.page_count,
+        retrieval_mode=retrieval_mode,
+        include_document_text=not retrieval_mode,
     )
 
     mastery_snapshot = get_student_mastery_snapshot(triggering_user_id, content.id)
@@ -2058,6 +2113,10 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
         "text": system_prompt,
         "cache_control": {"type": "ephemeral"},
     }]
+    if retrieval_mode:
+        # Keep changing query-specific evidence outside the cacheable instruction
+        # prefix so a source change cannot poison another question's cache entry.
+        system.append({"type": "text", "text": retrieval_context})
     if mastery_context_text:
         # Deliberately a SEPARATE, uncached system block - mastery
         # scores change nearly every turn, so folding this into the
@@ -2111,7 +2170,10 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
     max_tokens = min(max_tokens, int(plan_config["ada_max_output_tokens"]))
 
     estimated_input_tokens = max(
-        1, (len(system_prompt) + sum(len(str(m["content"])) for m in messages)) // 3
+        1, (
+            sum(len(str(block.get("text", ""))) for block in system)
+            + sum(len(str(m["content"])) for m in messages)
+        ) // 3
     )
     estimated_units = calculate_ada_units(
         input_tokens=estimated_input_tokens,
@@ -2134,7 +2196,11 @@ def generate_tutor_reply(conversation_id, user_message_text, triggering_user_id,
             "Ada is temporarily unavailable for your plan. Please try again shortly."
         )
 
-    prompt_cache_key = f"prepza-ada-doc-{getattr(content, 'content_hash', content.id)}"
+    prompt_cache_key = (
+        f"prepza-morio-rag-v1-{content.page_count or 'unknown'}"
+        if retrieval_mode else
+        f"prepza-ada-doc-{getattr(content, 'content_hash', content.id)}"
+    )
     start = time.monotonic()
     try:
         provider, provider_name = _get_provider()
