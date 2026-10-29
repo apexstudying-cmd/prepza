@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from ai_service import _build_tutor_system_prompt
+from ai_service import _build_tutor_system_prompt, _validate_tutor_page_citations
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -48,3 +48,21 @@ def test_main_tutor_passes_document_scope_into_authorized_retrieval():
     assert "user_id=triggering_user_id, document_id=document_id" in tutor
     assert "authorized_pages=authorized_pages" in tutor
     assert "Secure document retrieval is temporarily unavailable" in tutor
+
+
+def test_page_citation_validator_preserves_only_retrieved_page_numbers():
+    reply, invalid_count = _validate_tutor_page_citations(
+        "The definition is on [p. 2], and the example is on [p. 7].",
+        {2, 7},
+    )
+    assert reply == "The definition is on [p. 2], and the example is on [p. 7]."
+    assert invalid_count == 0
+
+
+def test_page_citation_validator_downgrades_unretrieved_page_numbers():
+    reply, invalid_count = _validate_tutor_page_citations(
+        "The answer is supported by [p. 2] and [p. 99].",
+        {2},
+    )
+    assert reply == "The answer is supported by [p. 2] and [page reference not verified]."
+    assert invalid_count == 1
