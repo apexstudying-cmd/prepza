@@ -732,7 +732,9 @@
           "path": "request_observability.py",
           "anchors": [
             "def evaluate_alerts",
+            "def _dispatch_external_alerts",
             "def register_request_observability",
+            "http_observability_alert_threshold_crossed",
             "/admin/observability"
           ]
         },
@@ -768,7 +770,8 @@
           "anchors": [
             "test_alert_rules_activate_at_documented_thresholds",
             "test_http_middleware_generates_server_owned_id_without_logging_private_url_data",
-            "test_http_alert_is_logged_automatically_when_threshold_is_crossed"
+            "test_http_alert_is_logged_automatically_when_threshold_is_crossed",
+            "test_external_alert_delivery_is_disabled_without_sentry_configuration"
           ]
         },
         {
@@ -811,7 +814,7 @@
       "required_test_commands": [
         "python -m pytest tests/test_request_observability.py tests/test_ai_observability.py -q"
       ],
-      "notes": "IN_PROGRESS: server-generated X-Request-ID correlates generic AI routing and Morio tutor success/failure/citation events. Admin Operations displays slow/error events and five-minute thresholds; threshold-crossing events are emitted automatically as structured warning logs. AI economics tests cover privacy, correlation and automatic alert crossing. The SQL migration has not yet been applied outside disposable CI, and external log/email/pager delivery plus browser/provider request-ID propagation remain unconfigured."
+      "notes": "IN_PROGRESS: server-generated X-Request-ID correlates generic AI routing and Morio tutor success/failure/citation events. Admin Operations displays slow/error events and five-minute thresholds; threshold crossings are emitted automatically as structured warning logs and sent as Sentry messages when SENTRY_DSN is configured. AI economics tests cover privacy, correlation, threshold crossing, and opt-in external dispatch. The SQL migration has not yet been applied outside disposable CI; Sentry project alert-rule configuration, production delivery verification, and browser/provider request-ID propagation remain outstanding."
     }
   ]
 }
