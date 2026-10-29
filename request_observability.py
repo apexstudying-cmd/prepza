@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import time
 import uuid
 from datetime import datetime, timedelta
@@ -12,7 +11,6 @@ from flask import g, jsonify, request
 from sqlalchemy import text
 
 logger = logging.getLogger("prepza.http_observability")
-_REQUEST_ID_RE = re.compile(r"^[A-Fa-f0-9-]{16,64}$")
 SLOW_REQUEST_MS = 5000
 ALERT_WINDOW_MINUTES = 5
 HTTP_5XX_ALERT_THRESHOLD = 5
@@ -44,10 +42,10 @@ def evaluate_alerts(*, recent_5xx: int, recent_slow: int) -> list[dict]:
 
 
 def _request_id():
-    supplied = request.headers.get("X-Request-ID", "").strip()
-    # Accept only opaque IDs with a narrow character/length contract. Never
-    # log the URL query string, request body, cookies, user ID, or IP address.
-    return supplied if _REQUEST_ID_RE.fullmatch(supplied) else uuid.uuid4().hex
+    # Generate the authoritative ID server-side rather than trusting a client
+    # value that could deliberately collide with another request's trace.
+    # Never log the URL query string, request body, cookies, user ID, or IP.
+    return uuid.uuid4().hex
 
 
 def register_request_observability(app, db, require_admin, RequestObservabilityEvent):
