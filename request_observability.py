@@ -67,7 +67,7 @@ def register_request_observability(app, db, require_admin, RequestObservabilityE
         started = getattr(g, "prepza_request_started", None)
         duration_ms = round(max(0.0, time.monotonic() - started) * 1000, 2) if started is not None else None
         response.headers["X-Request-ID"] = request_id
-        route_name = request.endpoint or "unmatched"
+        route_name = request.url_rule.rule if request.url_rule else "unmatched"
         status_code = int(response.status_code)
 
         record = {
