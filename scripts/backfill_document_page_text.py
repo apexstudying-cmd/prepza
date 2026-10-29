@@ -14,7 +14,7 @@ from sqlalchemy import inspect
 
 from app import app, db, DocumentContent, DocumentPageText, GeneratedMaterial, fetch_private_file_bytes
 from document_pipeline import EXTRACTOR_VERSION, extracted_text_changed, extract_native_pdf_pages
-from study_retrieval_service import make_source_version
+from study_retrieval_service import make_source_version, page_index_matches
 
 
 def backfill(*, apply: bool, limit: int | None = None) -> dict:
@@ -74,17 +74,11 @@ def backfill(*, apply: bool, limit: int | None = None) -> dict:
                     content.content_hash, pages, extractor_version=EXTRACTOR_VERSION
                 )
                 existing_rows = existing_query.order_by(DocumentPageText.page_number.asc()).all()
-                expected_rows = list(enumerate(pages, start=1))
-                if (
-                    len(existing_rows) == len(expected_rows)
-                    and all(
-                        row.page_number == page_number
-                        and row.page_text == page_text
-                        and row.content_hash == content.content_hash
-                        and row.source_version == source_version
-                        and row.extractor_version == EXTRACTOR_VERSION
-                        for row, (page_number, page_text) in zip(existing_rows, expected_rows)
-                    )
+                if page_index_matches(
+                    existing_rows, pages,
+                    content_hash=content.content_hash,
+                    source_version=source_version,
+                    extractor_version=EXTRACTOR_VERSION,
                 ):
                     counts["already_indexed"] += 1
                     continue
