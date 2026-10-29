@@ -126,7 +126,7 @@ def retrieve_authorized_pages(
         allowed_document_ids={page.document_id for page in pages},
         embed_query=embed_query,
         embed_text=embed_text,
-        top_k=top_k,
+        top_k=min(max(top_k * 5, top_k), 50),
     )
     retrieved: list[RetrievedPage] = []
     seen: set[tuple[int, int]] = set()
