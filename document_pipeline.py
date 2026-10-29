@@ -187,7 +187,7 @@ def extracted_text_changed(prior_page_texts, prior_combined_text, new_page_texts
     """Detect content changes without invalidating first-time page-text backfills."""
     if prior_page_texts:
         return list(prior_page_texts) != list(new_page_texts)
-    new_combined = "\\n\\n".join(new_page_texts)
+    new_combined = "\n\n".join(new_page_texts)
     return bool(prior_combined_text and prior_combined_text != new_combined)
 
 
