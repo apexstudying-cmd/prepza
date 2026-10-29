@@ -106,7 +106,7 @@ def register_e2ee_ada_route(app, db, Conversation, ConversationParticipant, Docu
 
         e2ee_mode = state["e2ee_mode"] or "legacy"
         if e2ee_mode not in {"group_v1", "direct_v1"}:
-            return jsonify({"error": "Scoped Ada requires an E2EE conversation"}), 409
+            return jsonify({"error": "Scoped Morio requires an E2EE conversation"}), 409
         if e2ee_mode == "group_v1" and not conversation.is_group:
             return jsonify({"error": "Group E2EE state is inconsistent"}), 409
         if e2ee_mode == "direct_v1" and conversation.is_group:
