@@ -52,13 +52,13 @@ def test_pdf_extraction_preserves_individual_page_text():
 
 def test_reextraction_invalidates_only_when_source_text_changes():
     changed_pages = document_pipeline.extracted_text_changed(
-        ["page one", "page two"], "page one\\n\\npage two", ["page one corrected", "page two"]
+        ["page one", "page two"], "\n\n".join(["page one", "page two"]), ["page one corrected", "page two"]
     )
     unchanged_pages = document_pipeline.extracted_text_changed(
-        ["page one", "page two"], "page one\\n\\npage two", ["page one", "page two"]
+        ["page one", "page two"], "\n\n".join(["page one", "page two"]), ["page one", "page two"]
     )
     first_time_backfill = document_pipeline.extracted_text_changed(
-        [], "page one\\n\\npage two", ["page one", "page two"]
+        [], "\n\n".join(["page one", "page two"]), ["page one", "page two"]
     )
     legacy_content_changed = document_pipeline.extracted_text_changed(
         [], "old extraction", ["new extraction"]
