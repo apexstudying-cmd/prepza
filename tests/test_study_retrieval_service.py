@@ -75,7 +75,7 @@ def test_removed_owner_document_is_not_retrievable(retrieval_db):
 def test_citation_evaluation_dataset_meets_recall_at_five_threshold():
     dataset_path = Path(__file__).parent / "fixtures" / "study_retrieval_eval.json"
     dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
-    assert len(dataset) >= 8
+    assert len(dataset["cases"]) >= 8
 
     from study_retrieval import StudyChunk, hybrid_retrieve
 
