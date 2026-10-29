@@ -645,6 +645,7 @@
           "anchors": [
             "def load_authorized_pages",
             "def retrieve_authorized_pages",
+            "def page_index_matches",
             "lp.university_id = viewer.university_id"
           ]
         },
@@ -671,7 +672,8 @@
           "path": "tests/test_study_retrieval_service.py",
           "anchors": [
             "test_citation_evaluation_dataset_meets_retrieval_quality_thresholds",
-            "test_document_scope_cannot_bypass_ownership_or_publication"
+            "test_document_scope_cannot_bypass_ownership_or_publication",
+            "test_page_index_match_rejects_partial_or_stale_rows"
           ]
         },
         {
