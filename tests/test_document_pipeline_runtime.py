@@ -37,6 +37,38 @@ def test_scanned_pdf_uses_sync_ocr_when_batch_adapter_is_missing():
     assert transcribe.call_count == 3
 
 
+
+def test_pdf_extraction_preserves_individual_page_text():
+    doc = _FakeDoc(3)
+    with patch.object(document_pipeline.fitz, "open", return_value=doc), \
+         patch.object(document_pipeline, "_get_ocr_batch_threshold", return_value=2), \
+         patch.object(document_pipeline, "_render_page_png", side_effect=lambda page: b"png"), \
+         patch.object(document_pipeline, "_transcribe_page_image", side_effect=["page one", "page two", "page three"]):
+        pages, page_count = document_pipeline._extract_pdf_pages(b"pdf", None)
+
+    assert page_count == 3
+    assert pages == ["page one", "page two", "page three"]
+
+
+def test_reextraction_invalidates_only_when_source_text_changes():
+    changed_pages = document_pipeline.extracted_text_changed(
+        ["page one", "page two"], "page one\\n\\npage two", ["page one corrected", "page two"]
+    )
+    unchanged_pages = document_pipeline.extracted_text_changed(
+        ["page one", "page two"], "page one\\n\\npage two", ["page one", "page two"]
+    )
+    first_time_backfill = document_pipeline.extracted_text_changed(
+        [], "page one\\n\\npage two", ["page one", "page two"]
+    )
+    legacy_content_changed = document_pipeline.extracted_text_changed(
+        [], "old extraction", ["new extraction"]
+    )
+
+    assert changed_pages is True
+    assert unchanged_pages is False
+    assert first_time_backfill is False
+    assert legacy_content_changed is True
+
 def test_document_pipeline_has_no_anthropic_provider_reference():
     from pathlib import Path
     source = Path("document_pipeline.py").read_text(encoding="utf-8")
