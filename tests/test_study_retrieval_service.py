@@ -100,3 +100,29 @@ def test_citation_evaluation_dataset_meets_recall_at_five_threshold():
 
     recall_at_five = hits / len(dataset["cases"])
     assert recall_at_five >= 0.8, f"citation Recall@5 was {recall_at_five:.0%}"
+
+
+def test_page_source_version_changes_when_extracted_page_changes():
+    from study_retrieval_service import make_source_version
+
+    original = make_source_version("hash", ["page one", "page two"], extractor_version="pdf-page-text-v1")
+    same = make_source_version("hash", ["page one", "page two"], extractor_version="pdf-page-text-v1")
+    changed = make_source_version("hash", ["page one corrected", "page two"], extractor_version="pdf-page-text-v1")
+    extractor_upgrade = make_source_version("hash", ["page one", "page two"], extractor_version="pdf-page-text-v2")
+
+    assert original == same
+    assert original != changed
+    assert original != extractor_upgrade
+
+
+def test_unauthorized_document_does_not_trigger_embedding_callbacks(retrieval_db):
+    def must_not_run(_value):
+        raise AssertionError("unauthorized text must not reach embedding callbacks")
+
+    with retrieval_db.connect() as conn:
+        pages = retrieve_authorized_pages(
+            conn, user_id=999, query="confidential grades",
+            embed_query=must_not_run, embed_text=must_not_run,
+        )
+
+    assert pages == []
