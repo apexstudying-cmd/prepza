@@ -403,7 +403,8 @@ def route_and_generate(ai_request: AIRequest) -> AIResponse:
     provider, provider_name = _get_provider()
     max_tokens = ai_request.max_tokens or task_config["max_tokens"]
     trace_id = uuid.uuid4().hex
-    correlation_id = ai_request.correlation_id or _current_http_correlation_id()
+    http_request_id = _current_http_correlation_id()
+    correlation_id = ai_request.correlation_id or http_request_id
 
     models_to_try = [task_config["primary"]]
     if task_config.get("fallback"):
@@ -448,6 +449,7 @@ def route_and_generate(ai_request: AIRequest) -> AIResponse:
                 "prompt_version": ai_request.prompt_version,
                 "output_schema_version": ai_request.output_schema_version,
                 "correlation_id": correlation_id,
+                "http_request_id": http_request_id,
                 "attempt": attempt + 1,
                 "escalated": response.escalated,
                 "latency_ms": latency_ms,
