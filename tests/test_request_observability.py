@@ -41,13 +41,13 @@ def test_http_middleware_adds_correlation_header_without_logging_private_url_dat
 
     caplog.set_level(logging.INFO, logger="prepza.http_observability")
     with app.test_client() as client:
-        response = client.get("/health/123?secret=DO_NOT_LOG", headers={"X-Request-ID": "safe-request-id-1234"})
+        response = client.get("/health/123?secret=DO_NOT_LOG", headers={"X-Request-ID": "deadbeef-1234-5678-abcd-123456789abc"})
 
     assert response.status_code == 200
-    assert response.headers["X-Request-ID"] == "safe-request-id-1234"
+    assert response.headers["X-Request-ID"] == "deadbeef-1234-5678-abcd-123456789abc"
     assert "DO_NOT_LOG" not in caplog.text
     assert "123?secret" not in caplog.text
-    assert "safe-request-id-1234" in caplog.text
+    assert "deadbeef-1234-5678-abcd-123456789abc" in caplog.text
     engine.dispose()
 
 
