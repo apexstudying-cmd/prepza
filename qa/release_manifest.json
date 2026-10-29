@@ -670,7 +670,7 @@
           "kind": "citation_evaluation_test",
           "path": "tests/test_study_retrieval_service.py",
           "anchors": [
-            "test_citation_evaluation_dataset_meets_recall_at_five_threshold",
+            "test_citation_evaluation_dataset_meets_retrieval_quality_thresholds",
             "test_document_scope_cannot_bypass_ownership_or_publication"
           ]
         },
@@ -678,7 +678,9 @@
           "kind": "postgres_integration_test",
           "path": "tests/test_local_qa_real_world.py",
           "anchors": [
-            "test_study_retrieval_enforces_document_ownership_with_shared_content"
+            "test_study_retrieval_enforces_document_ownership_with_shared_content",
+            "test_document_reextraction_invalidates_stale_materials_and_replaces_page_index",
+            "test_document_access_denies_direct_id_for_wrong_library_cohort"
           ]
         },
         {
@@ -692,17 +694,18 @@
           "kind": "disposable_postgres_ci",
           "path": ".github/workflows/mobile-responsive-browser.yml",
           "anchors": [
-            "Apply additive page-text and observability SQL migrations to disposable PostgreSQL",
+            "Exercise controlled SQL migration ledger on disposable PostgreSQL",
             "Run full disposable PostgreSQL QA suite"
           ]
         }
       ],
       "required_test_commands": [
         "python -m pytest tests/test_study_retrieval.py tests/test_study_retrieval_service.py -q",
-        "python -m pytest tests/test_local_qa_real_world.py -k study_retrieval_enforces_document_ownership_with_shared_content -q",
+        "python -m pytest tests/test_local_qa_real_world.py -k 'study_retrieval_enforces_document_ownership_with_shared_content or document_reextraction_invalidates_stale_materials_and_replaces_page_index or document_access_denies_direct_id_for_wrong_library_cohort' -q",
+        "python -m pytest tests/test_tutor_retrieval_grounding.py -q",
         "python -m py_compile study_retrieval.py study_retrieval_service.py study_retrieval_routes.py document_pipeline.py scripts/backfill_document_page_text.py"
       ],
-      "notes": "IN_PROGRESS: focused synthetic Recall@5 and access-boundary tests pass; the current disposable PostgreSQL/browser regression is still running. Production migration rehearsal, native-only existing-document backfill, representative real-course citation evaluation and ordinary Morio prompt integration remain outstanding. No paid embeddings or OCR are used by the prototype/backfill."
+      "notes": "IN_PROGRESS: page-preserving lexical retrieval is wired into the ordinary Morio tutor with server-side owner/exact-cohort authorization, insufficient-evidence behavior and retrieved-page citation validation. Synthetic Recall@5/Precision@5/MRR@5, access-boundary, re-extraction invalidation and native-only backfill tests are covered by AI economics and disposable PostgreSQL/browser CI. Production migration rehearsal, reviewed native-only backfill of existing PDFs and representative real-course retrieval/citation-faithfulness evaluation remain outstanding. No paid embeddings or OCR are used."
     },
     {
       "id": "http_observability",
@@ -738,7 +741,9 @@
           "path": "ai_service.py",
           "anchors": [
             "def _current_http_correlation_id",
-            "http_request_id"
+            "http_request_id",
+            "tutor_generation_completed",
+            "tutor_generation_failed"
           ]
         },
         {
@@ -762,14 +767,16 @@
           "path": "tests/test_request_observability.py",
           "anchors": [
             "test_alert_rules_activate_at_documented_thresholds",
-            "test_http_middleware_generates_server_owned_id_without_logging_private_url_data"
+            "test_http_middleware_generates_server_owned_id_without_logging_private_url_data",
+            "test_http_alert_is_logged_automatically_when_threshold_is_crossed"
           ]
         },
         {
           "kind": "ai_correlation_test",
           "path": "tests/test_ai_observability.py",
           "anchors": [
-            "test_http_request_id_is_used_when_ai_request_has_no_explicit_correlation"
+            "test_http_request_id_is_used_when_ai_request_has_no_explicit_correlation",
+            "test_tutor_generation_observability_correlates_requests_without_logging_content"
           ]
         },
         {
@@ -783,21 +790,22 @@
           "kind": "postgres_ci",
           "path": ".github/workflows/mobile-responsive-browser.yml",
           "anchors": [
-            "Apply additive page-text and observability SQL migrations to disposable PostgreSQL"
+            "Exercise controlled SQL migration ledger on disposable PostgreSQL"
           ]
         },
         {
           "kind": "postgres_integration_test",
           "path": "tests/test_local_qa_real_world.py",
           "anchors": [
-            "test_admin_observability_dashboard_surfaces_error_and_latency_alerts"
+            "test_admin_observability_dashboard_surfaces_error_and_latency_alerts",
+            "test_document_access_denies_direct_id_for_wrong_library_cohort"
           ]
         }
       ],
       "required_test_commands": [
         "python -m pytest tests/test_request_observability.py tests/test_ai_observability.py -q"
       ],
-      "notes": "IN_PROGRESS: privacy-safe server-generated request IDs, AI log correlation, slow/error event retention and the Admin Operations panel are implemented. Alert rules are visible in the dashboard and structured logs; outbound email/pager delivery and production migration rehearsal remain unconfigured."
+      "notes": "IN_PROGRESS: server-generated X-Request-ID correlates generic AI routing and Morio tutor success/failure/citation events. Admin Operations displays slow/error events and five-minute thresholds; threshold-crossing events are emitted automatically as structured warning logs. AI economics tests cover privacy, correlation and automatic alert crossing. The SQL migration has not yet been applied outside disposable CI, and external log/email/pager delivery plus browser/provider request-ID propagation remain unconfigured."
     }
   ]
 }
