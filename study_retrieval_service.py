@@ -54,8 +54,14 @@ _AUTHORIZED_PAGE_SQL = text("""
     FROM document_page_text AS p
     JOIN document_content AS c ON c.id = p.document_content_id
     JOIN document AS d ON d.document_content_id = c.id
+    LEFT JOIN "user" AS viewer ON viewer.id = :user_id
     LEFT JOIN library_publication AS lp
-      ON lp.document_id = d.id AND lp.status = 'approved'
+      ON lp.document_id = d.id
+     AND lp.status = 'approved'
+     AND lp.university_id = viewer.university_id
+     AND lp.program_id = viewer.program_id
+     AND lp.year = viewer.year
+     AND lp.semester = viewer.semester
     WHERE d.status = 'ready'
       AND d.is_removed = FALSE
       AND c.status = 'ready'
