@@ -97,6 +97,9 @@ def register_request_observability(app, db, require_admin, RequestObservabilityE
                         "status_code": status_code,
                         "duration_ms": duration_ms,
                     })
+                    connection.execute(text(
+                        "DELETE FROM request_observability_event WHERE occurred_at < :cutoff"
+                    ), {"cutoff": datetime.utcnow() - timedelta(days=14)})
             except Exception as exc:  # telemetry must never change the response
                 logger.warning(json.dumps({
                     "event": "http_observability_persist_failed",
