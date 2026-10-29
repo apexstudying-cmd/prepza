@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
+import document_pipeline
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import make_url
 from werkzeug.security import generate_password_hash
@@ -40,6 +41,7 @@ from app import (
     Document,
     DocumentContent,
     DocumentPageText,
+    GeneratedMaterial,
     RequestObservabilityEvent,
 )
 
@@ -2493,3 +2495,73 @@ def test_admin_observability_dashboard_surfaces_error_and_latency_alerts(world):
     assert {alert["key"] for alert in payload["alerts"]} >= {
         "http_5xx_spike", "slow_request_spike",
     }
+
+
+def test_document_reextraction_invalidates_stale_materials_and_replaces_page_index(world, monkeypatch):
+    content = DocumentContent(
+        content_hash=hashlib.sha256(b"document re-extraction invalidation fixture").hexdigest(),
+        storage_path="qa/document-reextraction-fixture.pdf",
+        file_type="pdf",
+        file_size_bytes=128,
+        page_count=2,
+        status="ready",
+        extracted_text="Original first page.\\n\\nSecond page remains unchanged.",
+    )
+    db.session.add(content)
+    db.session.commit()
+
+    material = GeneratedMaterial(
+        document_content_id=content.id,
+        material_type="summary",
+        status="ready",
+        payload='{"summary":"generated from the original text"}',
+        generation_fingerprint=hashlib.sha256(b"re-extraction-material-fingerprint").hexdigest(),
+        generation_parameters={},
+        generation_version="v2",
+        scope="shared",
+    )
+    db.session.add(material)
+    db.session.commit()
+    content.material_id = material.id
+    db.session.add_all([
+        DocumentPageText(
+            document_content_id=content.id,
+            page_number=1,
+            page_text="Original first page.",
+            content_hash=content.content_hash,
+            source_version="old-source-version",
+            extractor_version=document_pipeline.EXTRACTOR_VERSION,
+        ),
+        DocumentPageText(
+            document_content_id=content.id,
+            page_number=2,
+            page_text="Second page remains unchanged.",
+            content_hash=content.content_hash,
+            source_version="old-source-version",
+            extractor_version=document_pipeline.EXTRACTOR_VERSION,
+        ),
+    ])
+    db.session.commit()
+
+    monkeypatch.setattr(document_pipeline, "_fetch_file_bytes", lambda _path: b"fake-pdf-bytes")
+    monkeypatch.setattr(
+        document_pipeline, "_extract_pdf_pages",
+        lambda _bytes, _job: (["Corrected first page text.", "Second page remains unchanged."], 2),
+    )
+
+    document_pipeline.process_document(content.id)
+
+    db.session.refresh(content)
+    db.session.refresh(material)
+    pages = DocumentPageText.query.filter_by(
+        document_content_id=content.id
+    ).order_by(DocumentPageText.page_number.asc()).all()
+    assert [page.page_text for page in pages] == [
+        "Corrected first page text.",
+        "Second page remains unchanged.",
+    ]
+    assert len({page.source_version for page in pages}) == 1
+    assert pages[0].source_version != "old-source-version"
+    assert material.status == "failed"
+    assert "Source text changed" in material.error_message
+    assert content.material_id is None
