@@ -93,6 +93,9 @@ def test_splash_screen_uses_the_canonical_192px_icon():
     splash = app.split("function SplashScreen", 1)[1].split("// ─── LOGIN", 1)[0]
     assert '<img src="/icon-192.png" alt="Prepza" width={192} height={192}' in splash
     assert "src={logoImg}" not in splash
+    # All React app-shell brand marks use the canonical public PNG, not the SVG import.
+    assert 'src={logoImg}' not in app
+    assert app.count('src="/icon-192.png"') >= 9
 
     manifest = source("frontend/public/manifest.json")
     assert '"src": "/icon-192.png"' in manifest
