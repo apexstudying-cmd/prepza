@@ -185,7 +185,7 @@ Live SES sender verification and delivery still require real environment verific
 
 ## Database migrations and backups
 
-There are currently 41 SQL files under migrations/. They form a historical, hand-managed migration collection rather than an Alembic/Flask-Migrate system.
+The SQL files under `migrations/` form a historical, hand-managed migration collection rather than an Alembic/Flask-Migrate system. The count changes as additive migrations are introduced.
 
 scripts/apply_migrations.py provides a checksum ledger for future migration tracking:
 
@@ -194,6 +194,8 @@ scripts/apply_migrations.py provides a checksum ledger for future migration trac
 - --verify checks the ledger against repository migration files.
 
 The ledger definition itself is excluded from the migration set so it cannot record itself.
+
+The 2026-10-29 retrieval/observability work adds `20261029_document_page_text.sql` and `20261029_request_observability.sql`. These are not applied automatically at application startup. Before enabling page retrieval or expecting persisted request alerts in a deployment, take a verified backup, rehearse the migration against a disposable/staging database, run `python scripts/apply_migrations.py --apply`, and verify with `python scripts/apply_migrations.py --verify`. Do not run `--baseline` against an unknown database. The application keeps legacy combined-text extraction working if the page-text table is not yet present, but the new retrieval endpoint will remain unavailable until its migration is applied.
 
 scripts/backup_postgres.py can create a PostgreSQL custom-format dump and verify it with pg_restore --list. Its --check-only mode only checks local PostgreSQL backup tooling and does not connect to a database.
 
