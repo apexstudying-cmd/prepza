@@ -40,6 +40,7 @@ from app import (
     Document,
     DocumentContent,
     DocumentPageText,
+    RequestObservabilityEvent,
 )
 
 
@@ -2463,3 +2464,32 @@ def test_study_retrieval_enforces_document_ownership_with_shared_content(world):
     )
     assert own_copy_response.status_code == 200
     assert own_copy_response.get_json()["results"][0]["citation"]["document_id"] == doc_b.id
+
+
+def test_admin_observability_dashboard_surfaces_error_and_latency_alerts(world):
+    now = datetime.utcnow()
+    db.session.add_all([
+        RequestObservabilityEvent(
+            request_id=f"qa-5xx-{index:02d}", method="GET", route="/qa/failing",
+            status_code=500, duration_ms=1000, occurred_at=now,
+        )
+        for index in range(5)
+    ] + [
+        RequestObservabilityEvent(
+            request_id=f"qa-slow-{index:02d}", method="GET", route="/qa/slow",
+            status_code=200, duration_ms=6000, occurred_at=now,
+        )
+        for index in range(10)
+    ])
+    db.session.commit()
+
+    client = _client_for(world["admin"].id)
+    response = client.get("/admin/observability")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["summary"]["recent_5xx"] >= 5
+    assert payload["summary"]["recent_slow"] >= 10
+    assert {alert["key"] for alert in payload["alerts"]} >= {
+        "http_5xx_spike", "slow_request_spike",
+    }
