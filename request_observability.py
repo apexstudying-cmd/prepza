@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timedelta
 
 from flask import g, jsonify, request
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 
 logger = logging.getLogger("prepza.http_observability")
 SLOW_REQUEST_MS = 5000
@@ -80,6 +80,10 @@ def register_request_observability(app, db, require_admin, RequestObservabilityE
 
         if status_code >= 500 or (duration_ms is not None and duration_ms >= SLOW_REQUEST_MS):
             try:
+                # Deployments apply SQL migrations separately from app startup.
+                # Keep telemetry non-invasive while the additive table is absent.
+                if not inspect(db.engine).has_table("request_observability_event"):
+                    return response
                 # Use a separate engine transaction. Never commit the request's
                 # application session as a side effect of telemetry collection.
                 with db.engine.begin() as connection:
@@ -113,6 +117,11 @@ def register_request_observability(app, db, require_admin, RequestObservabilityE
         recent_start = now - timedelta(minutes=ALERT_WINDOW_MINUTES)
         hour_start = now - timedelta(hours=1)
         try:
+            if not inspect(db.engine).has_table("request_observability_event"):
+                return jsonify({
+                    "status": "unavailable",
+                    "error": "Request observability schema is not ready",
+                }), 503
             recent = RequestObservabilityEvent.query.filter(
                 RequestObservabilityEvent.occurred_at >= recent_start
             ).all()
