@@ -102,6 +102,41 @@ def register_request_observability(app, db, require_admin, RequestObservabilityE
                     connection.execute(text(
                         "DELETE FROM request_observability_event WHERE occurred_at < :cutoff"
                     ), {"cutoff": datetime.utcnow() - timedelta(days=14)})
+
+                    # Evaluate alert thresholds at the event that crosses them,
+                    # not only when an administrator happens to open the panel.
+                    recent_start = datetime.utcnow() - timedelta(minutes=ALERT_WINDOW_MINUTES)
+                    recent_5xx = connection.execute(text("""
+                        SELECT COUNT(*) FROM request_observability_event
+                        WHERE occurred_at >= :recent_start AND status_code >= 500
+                    """), {"recent_start": recent_start}).scalar_one()
+                    recent_slow = connection.execute(text("""
+                        SELECT COUNT(*) FROM request_observability_event
+                        WHERE occurred_at >= :recent_start AND duration_ms >= :slow_ms
+                    """), {
+                        "recent_start": recent_start,
+                        "slow_ms": SLOW_REQUEST_MS,
+                    }).scalar_one()
+                    crossed = [
+                        alert for alert in evaluate_alerts(
+                            recent_5xx=recent_5xx, recent_slow=recent_slow
+                        )
+                        if (
+                            alert["key"] == "http_5xx_spike"
+                            and recent_5xx == HTTP_5XX_ALERT_THRESHOLD
+                        ) or (
+                            alert["key"] == "slow_request_spike"
+                            and recent_slow == SLOW_REQUEST_ALERT_THRESHOLD
+                        )
+                    ]
+                    if crossed:
+                        logger.warning(json.dumps({
+                            "event": "http_observability_alert_threshold_crossed",
+                            "alert_keys": [alert["key"] for alert in crossed],
+                            "recent_5xx": recent_5xx,
+                            "recent_slow": recent_slow,
+                            "window_minutes": ALERT_WINDOW_MINUTES,
+                        }, separators=(",", ":"), sort_keys=True))
             except Exception as exc:  # telemetry must never change the response
                 logger.warning(json.dumps({
                     "event": "http_observability_persist_failed",
@@ -149,13 +184,6 @@ def register_request_observability(app, db, require_admin, RequestObservabilityE
             }), 503
 
         alerts = evaluate_alerts(recent_5xx=recent_5xx, recent_slow=recent_slow)
-        if alerts:
-            logger.warning(json.dumps({
-                "event": "http_observability_alert_active",
-                "alert_keys": [alert["key"] for alert in alerts],
-                "recent_5xx": recent_5xx,
-                "recent_slow": recent_slow,
-            }, separators=(",", ":"), sort_keys=True))
 
         return jsonify({
             "status": "ok",
