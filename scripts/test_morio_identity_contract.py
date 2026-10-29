@@ -68,7 +68,7 @@ def test_home_and_prebuild_patch_keep_morio_label():
 def test_home_quick_actions_are_the_approved_five_in_order():
     app = source("frontend/src/App.tsx")
     start = app.index("function HomeScreen(")
-    end = app.find("\\nfunction ", start + 1)
+    end = app.find("\nfunction ", start + 1)
     home = app[start:end if end >= 0 else None]
     marker = home.index("AI Study Tools")
     actions_start = home.index("{[", marker)
