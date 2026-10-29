@@ -93,7 +93,7 @@ def test_removed_owner_document_is_not_retrievable(retrieval_db):
     assert all(page.document_id != 40 for page in pages)
 
 
-def test_citation_evaluation_dataset_meets_recall_at_five_threshold():
+def test_citation_evaluation_dataset_meets_retrieval_quality_thresholds():
     dataset_path = Path(__file__).parent / "fixtures" / "study_retrieval_eval.json"
     dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
     assert len(dataset["cases"]) >= 8
@@ -108,20 +108,51 @@ def test_citation_evaluation_dataset_meets_recall_at_five_threshold():
         )
         for page in dataset["corpus"]
     ]
-    hits = 0
+    expected_total = 0
+    retrieved_expected = 0
+    reciprocal_ranks = []
+    precisions = []
     for item in dataset["cases"]:
-        expected = {(source["document_id"], source["page_number"]) for source in item["expected_sources"]}
+        expected = {
+            (source["document_id"], source["page_number"])
+            for source in item["expected_sources"]
+        }
+        expected_total += len(expected)
         results = hybrid_retrieve(
             item["query"], corpus,
             allowed_document_ids={page.document_id for page in corpus},
             top_k=5,
         )
-        retrieved = {(result.chunk.document_id, result.chunk.page_number) for result in results}
-        hits += bool(expected & retrieved)
+        ranked_sources = [
+            (result.chunk.document_id, result.chunk.page_number)
+            for result in results
+        ]
+        found = expected.intersection(ranked_sources)
+        retrieved_expected += len(found)
+        precisions.append(len(found) / max(1, len(ranked_sources)))
+        first_relevant_rank = next(
+            (rank for rank, source in enumerate(ranked_sources, start=1) if source in expected),
+            None,
+        )
+        reciprocal_ranks.append(1 / first_relevant_rank if first_relevant_rank else 0.0)
 
-    recall_at_five = hits / len(dataset["cases"])
+        for result in results:
+            assert result.citation == {
+                "document_id": result.chunk.document_id,
+                "document_version": result.chunk.document_version,
+                "page_number": result.chunk.page_number,
+            }
+
+    recall_at_five = retrieved_expected / max(1, expected_total)
+    mean_reciprocal_rank_at_five = sum(reciprocal_ranks) / len(reciprocal_ranks)
+    mean_precision_at_five = sum(precisions) / len(precisions)
     assert recall_at_five >= 0.8, f"citation Recall@5 was {recall_at_five:.0%}"
-
+    assert mean_reciprocal_rank_at_five >= 0.3, (
+        f"citation MRR@5 was {mean_reciprocal_rank_at_five:.3f}"
+    )
+    assert mean_precision_at_five >= 0.15, (
+        f"citation Precision@5 was {mean_precision_at_five:.0%}"
+    )
 
 def test_page_source_version_changes_when_extracted_page_changes():
     from study_retrieval_service import make_source_version
