@@ -2219,6 +2219,7 @@ def generate_tutor_reply(
         f"prepza-ada-doc-{getattr(content, 'content_hash', content.id)}"
     )
     start = time.monotonic()
+    provider_name = "unknown"
     try:
         provider, provider_name = _get_provider()
         if not model.startswith("openai:"):
@@ -2228,10 +2229,19 @@ def generate_tutor_reply(
             max_tokens=max_tokens, prompt_cache_key=prompt_cache_key,
         )
     except Exception as e:
+        _ai_observability_logger.warning(json.dumps({
+            "event": "tutor_generation_failed",
+            "http_request_id": _current_http_correlation_id(),
+            "model": model,
+            "provider": provider_name,
+            "latency_ms": int(max(0.0, time.monotonic() - start) * 1000),
+            "retrieval_mode": retrieval_mode,
+            "exception_type": type(e).__name__,
+        }, separators=(",", ":"), sort_keys=True))
         refund_ada_budget(db, triggering_user_id, plan_code, estimated_units, entitlement_payment_id=reserve_info.get("entitlement_payment_id"))
         if isinstance(e, AIProviderError):
             raise
-        raise AIProviderError(f"Tutor reply generation failed: {e}")
+        raise AIProviderError("Tutor reply generation failed.") from e
     latency_ms = int((time.monotonic() - start) * 1000)
 
     ai_usage.cost_usd = compute_cost_usd(
@@ -2245,6 +2255,21 @@ def generate_tutor_reply(
         cost_usd=ai_usage.cost_usd, reserved_units=estimated_units,
         entitlement_payment_id=reserve_info.get("entitlement_payment_id"),
     )
+    _ai_observability_logger.info(json.dumps({
+        "event": "tutor_generation_completed",
+        "http_request_id": _current_http_correlation_id(),
+        "model": model,
+        "provider": provider_name,
+        "prompt_version": "morio-tutor-rag-v1" if retrieval_mode else "morio-tutor-document-v1",
+        "latency_ms": latency_ms,
+        "input_tokens": ai_usage.input_tokens,
+        "output_tokens": ai_usage.output_tokens,
+        "cache_read_tokens": ai_usage.cache_read_tokens,
+        "cache_creation_tokens": ai_usage.cache_creation_tokens,
+        "cost_usd": round(float(ai_usage.cost_usd or 0.0), 8),
+        "retrieval_mode": retrieval_mode,
+        "retrieved_page_count": len(retrieved_pages) if retrieval_mode else 0,
+    }, separators=(",", ":"), sort_keys=True))
 
     if retrieval_mode:
         raw_text, invalid_citation_count = _validate_tutor_page_citations(
