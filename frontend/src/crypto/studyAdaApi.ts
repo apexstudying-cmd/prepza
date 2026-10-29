@@ -9,11 +9,11 @@ export type AdaStudyResponse = {
 }
 
 function assertResponse(body: unknown, context: AdaStudyContext): AdaStudyResponse {
-  if (!body || typeof body !== 'object') throw new Error('Ada returned an invalid response.')
+  if (!body || typeof body !== 'object') throw new Error('Morio returned an invalid response.')
   const value = body as Record<string, unknown>
-  if (typeof value.answer !== 'string' || !value.answer.trim()) throw new Error('Ada returned an invalid response.')
-  if (Number(value.key_epoch) !== context.keyEpoch) throw new Error('Ada context is stale. Reopen the study context and retry.')
-  if (value.context_scope !== context.contextScope) throw new Error('Ada returned an invalid study scope.')
+  if (typeof value.answer !== 'string' || !value.answer.trim()) throw new Error('Morio returned an invalid response.')
+  if (Number(value.key_epoch) !== context.keyEpoch) throw new Error('Morio context is stale. Reopen the study context and retry.')
+  if (value.context_scope !== context.contextScope) throw new Error('Morio returned an invalid study scope.')
   return {
     answer: value.answer,
     model_used: typeof value.model_used === 'string' ? value.model_used : undefined,
@@ -26,7 +26,7 @@ export async function askAdaAboutSelectedStudyContext(
   context: AdaStudyContext,
 ): Promise<AdaStudyResponse> {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    throw new Error('Ada needs an internet connection. Your decrypted study document remains available on this device.')
+    throw new Error('Morio needs an internet connection. Your decrypted study document remains available on this device.')
   }
 
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
@@ -41,11 +41,11 @@ export async function askAdaAboutSelectedStudyContext(
     })
 
     const body = await response.json().catch(() => null)
-    if (!response.ok) throw new Error(body?.error || 'Ada could not answer right now.')
+    if (!response.ok) throw new Error(body?.error || 'Morio could not answer right now.')
     return assertResponse(body, context)
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new Error('Ada took too long to respond. Check your connection and try again.')
+      throw new Error('Morio took too long to respond. Check your connection and try again.')
     }
     throw error
   } finally {
