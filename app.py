@@ -21,6 +21,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
+from request_observability import scrub_sentry_event
 import ai_service
 import document_pipeline
 import podcast_audio
@@ -42,6 +43,7 @@ if sentry_dsn:
         dsn=sentry_dsn,
         traces_sample_rate=0,  # Error monitoring only, no performance tracing
         send_default_pii=False,  # Skip sending user IPs/headers by default
+        before_send=scrub_sentry_event,  # Never forward request payloads or direct user identifiers
     )
 
 app = Flask(__name__, static_folder="frontend/dist", static_url_path="")
