@@ -35,6 +35,9 @@ def test_success_returns_trace_id_and_logs_metrics_without_prompt_or_answer(monk
         task="TUTORING",
         system_prompt=secret_prompt,
         user_message="PRIVATE_USER_MESSAGE_SENTINEL",
+        prompt_version="tutoring-2026-10-29",
+        output_schema_version="answer-v2",
+        correlation_id="http-request-test-123",
     ))
 
     assert response.trace_id
@@ -44,6 +47,9 @@ def test_success_returns_trace_id_and_logs_metrics_without_prompt_or_answer(monk
     assert completed["trace_id"] == response.trace_id
     assert completed["task"] == "TUTORING"
     assert completed["provider"] == "openai"
+    assert completed["prompt_version"] == "tutoring-2026-10-29"
+    assert completed["output_schema_version"] == "answer-v2"
+    assert completed["correlation_id"] == "http-request-test-123"
     assert completed["latency_ms"] >= 0
     assert completed["input_tokens"] == 11
     assert completed["output_tokens"] == 7
