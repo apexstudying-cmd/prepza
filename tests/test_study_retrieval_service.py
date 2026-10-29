@@ -77,11 +77,26 @@ def test_citation_evaluation_dataset_meets_recall_at_five_threshold():
     dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
     assert len(dataset) >= 8
 
+    from study_retrieval import StudyChunk, hybrid_retrieve
+
+    corpus = [
+        StudyChunk(
+            document_id=page["document_id"], document_version=page["document_version"],
+            page_number=page["page_number"], chunk_index=0, text=page["text"],
+            start_char=0, end_char=len(page["text"]),
+        )
+        for page in dataset["corpus"]
+    ]
     hits = 0
-    for item in dataset:
+    for item in dataset["cases"]:
         expected = {(source["document_id"], source["page_number"]) for source in item["expected_sources"]}
-        retrieved = {(source["document_id"], source["page_number"]) for source in item["retrieved_sources"]}
+        results = hybrid_retrieve(
+            item["query"], corpus,
+            allowed_document_ids={page.document_id for page in corpus},
+            top_k=5,
+        )
+        retrieved = {(result.chunk.document_id, result.chunk.page_number) for result in results}
         hits += bool(expected & retrieved)
 
-    recall_at_five = hits / len(dataset)
+    recall_at_five = hits / len(dataset["cases"])
     assert recall_at_five >= 0.8, f"citation Recall@5 was {recall_at_five:.0%}"
