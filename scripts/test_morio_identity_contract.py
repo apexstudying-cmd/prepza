@@ -65,6 +65,39 @@ def test_home_and_prebuild_patch_keep_morio_label():
     assert "@morio" in patch
 
 
+def test_home_quick_actions_are_the_approved_five_in_order():
+    app = source("frontend/src/App.tsx")
+    start = app.index("function HomeScreen(")
+    end = app.find("\\nfunction ", start + 1)
+    home = app[start:end if end >= 0 else None]
+    marker = home.index("AI Study Tools")
+    actions_start = home.index("{[", marker)
+    actions_end = home.index("].map((t, i) => (", actions_start)
+    actions = home[actions_start:actions_end]
+
+    expected = [
+        "label: 'Upload'",
+        "label: 'My Study'",
+        "label: 'Library'",
+        "label: 'Morio'",
+        "label: 'Shop'",
+    ]
+    positions = [actions.index(label) for label in expected]
+    assert positions == sorted(positions)
+    assert "label: 'Podcasts'" not in actions
+    assert "label: 'Shop', action: () => setScreen('shop')" in actions
+
+
+def test_splash_screen_uses_the_canonical_192px_icon():
+    app = source("frontend/src/App.tsx")
+    splash = app.split("function SplashScreen", 1)[1].split("// ─── LOGIN", 1)[0]
+    assert '<img src="/icon-192.png" alt="Prepza" width={192} height={192}' in splash
+    assert "src={logoImg}" not in splash
+
+    manifest = source("frontend/public/manifest.json")
+    assert '"src": "/icon-192.png"' in manifest
+
+
 if __name__ == "__main__":
     checks = [
         test_scoped_tutor_prompt_uses_morio_and_preserves_context_boundaries,
@@ -73,6 +106,8 @@ if __name__ == "__main__":
         test_home_study_screens_and_composer_use_morio,
         test_direct_tutor_uses_morio_and_keeps_internal_event_compatible,
         test_home_and_prebuild_patch_keep_morio_label,
+        test_home_quick_actions_are_the_approved_five_in_order,
+        test_splash_screen_uses_the_canonical_192px_icon,
     ]
     for check in checks:
         check()
