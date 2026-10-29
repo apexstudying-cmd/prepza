@@ -112,9 +112,9 @@ def test_http_alert_is_logged_automatically_when_threshold_is_crossed(caplog):
             assert client.get("/synthetic-5xx?private=never-log").status_code == 500
 
     alert_records = [
-        json.loads(record.message)
+        json.loads(record.getMessage())
         for record in caplog.records
-        if "http_observability_alert_threshold_crossed" in record.message
+        if "http_observability_alert_threshold_crossed" in record.getMessage()
     ]
     assert len(alert_records) == 1
     assert alert_records[0]["alert_keys"] == ["http_5xx_spike"]
