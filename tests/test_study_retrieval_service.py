@@ -43,7 +43,7 @@ def retrieval_db():
                 source_version TEXT NOT NULL, content_hash TEXT NOT NULL
             )
         """))
-        conn.execute(text("INSERT INTO \"user\" VALUES (100, 1, 10, 2, 1), (200, 2, 20, 2, 1)"))
+        conn.execute(text("INSERT INTO \"user\" VALUES (100, 1, 10, 2, 1), (200, 2, 20, 2, 1), (300, 3, 30, 2, 1)"))
         conn.execute(text("INSERT INTO document_content VALUES (1, 'ready', 'hash-one'), (2, 'ready', 'hash-two'), (3, 'processing', 'hash-three')"))
         conn.execute(text("INSERT INTO document VALUES (10, 100, 1, 'ready', 0), (20, 200, 2, 'ready', 0), (30, 100, 3, 'processing', 0), (40, 100, 1, 'ready', 1)"))
         conn.execute(text("INSERT INTO library_publication VALUES (1, 20, 'pending', 1, 10, 2, 1)"))
@@ -82,7 +82,7 @@ def test_approved_library_publication_can_be_retrieved_by_non_owner(retrieval_db
     # university/program cohort, even when the content hash is identical.
     with retrieval_db.connect() as conn:
         wrong_cohort = retrieve_authorized_pages(
-            conn, user_id=200, query="exam answer key", document_id=20,
+            conn, user_id=300, query="exam answer key", document_id=20,
         )
     assert wrong_cohort == []
 
