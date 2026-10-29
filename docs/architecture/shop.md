@@ -34,7 +34,7 @@ Repository inspected on `main` using the GitHub-connected repository tools. Rele
 
 ### Architecture implications
 
-1. **Do not add a new permanent bottom-navigation item.** Keep the existing five-item bottom navigation and Explore behavior unchanged. Home's five quick actions are Upload, My Study, Ada, Practice and Shop; Podcasts remains available from My Study. Shop is a dedicated screen launched from Home Quick Actions.
+1. **Do not add a new permanent bottom-navigation item.** Keep the existing five-item bottom navigation and Explore behavior unchanged. Home's five quick actions are Upload, My Study, Library, Morio and Shop; Podcasts remains available from My Study. Shop is a dedicated screen launched from Home Quick Actions.
 2. **Keep Shop separate from Library and Study Hub.** Those are learning-material workflows; physical goods listings need prices, condition, seller information, availability, and handover details.
 3. **Reuse established app boundaries only after contract inspection.** The frontend uses a central `api()` helper and screen-stack navigation. Existing chat and payment flows may be reusable, but their exact contracts must be inspected and tested before wiring Shop into them.
 4. **Do not assume a marketplace backend already exists.** The inspected files establish the existing app structure, billing modules, and storage helpers; they do not prove that listing, order, seller-settlement, or marketplace-moderation tables/routes already exist.
@@ -383,7 +383,7 @@ Market-pricing hypotheses in this document (KES 50–100 boosts, a 5% future sel
 
 The implementation direction is approved for direct work on `main`:
 
-- Home retains exactly five quick actions. Replace Podcasts with Shop; retain Upload, My Study, Library, and Ada. Podcasts remain available through My Study and the existing podcast library. Explore and the five-item bottom navigation are unchanged.
+- Home retains exactly five quick actions: Upload, My Study, Library, Morio, and Shop. Shop replaces the Podcasts shortcut; Podcasts remain available through My Study and the existing podcast library. Morio is the current student-facing AI tutor name (Ada-named routes are internal compatibility details). Explore and the five-item bottom navigation are unchanged.
 - Every product listing costs **KES 100 per 30-day period**, including the seller's first listing. The seller manually renews each item for another 30 days; expired listings are hidden until renewal and re-publication. There is no free-post allowance based on account age or listing count, so creating multiple accounts does not unlock a free listing. The browser never chooses the fee, and a listing cannot be published or remain visible beyond its paid period without server-verified payment. The backend now normalizes legacy zero-fee drafts before checkout/publishing and prevents moderators from approving them unpaid. A rejected/removed listing does not automatically refund the posting fee.
 - Prepza does not handle product purchases. No buyer checkout, cart, wallet, escrow, order payment, seller settlement or delivery promise is part of this MVP. Contact is through a seller-provided WhatsApp link and Prepza's existing in-app chat flow.
 - A listing starts as a private draft, requires at least one photo, then enters moderation. Only approved listings are visible in public browse/search. The seller can edit, pause, mark sold or remove their own listing; authenticated users can save/report; admins can review listings and reports.
