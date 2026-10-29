@@ -16,6 +16,7 @@ Rule: require evidence before marking production work complete.
 - [x] Added a Morio identity regression contract to `scripts/test_morio_identity_contract.py` and wired it into Student Frontend Contract CI.
 - [~] RAG/embeddings: direct document tutor supplies the document's extracted text as prompt context, and the E2EE tutor supplies explicitly selected text. No production embedding/vector-index pipeline was verified; hybrid RAG remains future implementation work.
 - [x] Documented system prompts, MCP tools, access boundaries, guardrails, cache/router behavior, and observability in `docs/DAY10_TECHNICAL_DOCUMENTATION.md`.
+- [~] First privacy-safe AI observability layer implemented in `ai_service.py`: per-request trace ID, structured success/failure/fallback events, token/cache/cost/latency metadata, and no prompt/completion/exception-message logging. Focused fake-provider tests added in `tests/test_ai_observability.py`; acceptance depends on GitHub Actions test results. Remaining: HTTP/job correlation, prompt/schema version metadata, dashboards/alerts.
 - Guardrail: use mocked embeddings in CI; do not make billable OpenAI embedding calls, live payments, or GPU workloads without explicit approval.
 
 ## Local developer tooling checkpoint (2026-10-28)
