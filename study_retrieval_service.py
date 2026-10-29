@@ -19,6 +19,25 @@ MAX_RETRIEVAL_CHUNKS = 500
 MAX_PAGE_TEXT_CHARS = 20_000
 
 
+def page_index_matches(
+    existing_rows, pages: Sequence[str], *, content_hash: str,
+    source_version: str, extractor_version: str,
+) -> bool:
+    """Return true only when every persisted page exactly matches current extraction."""
+    if len(existing_rows) != len(pages) or not pages:
+        return False
+    return all(
+        row.page_number == page_number
+        and row.page_text == page_text
+        and row.content_hash == content_hash
+        and row.source_version == source_version
+        and row.extractor_version == extractor_version
+        for row, (page_number, page_text) in zip(
+            existing_rows, enumerate(pages, start=1)
+        )
+    )
+
+
 @dataclass(frozen=True)
 class AuthorizedPage:
     document_id: int
