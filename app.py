@@ -346,6 +346,31 @@ class DocumentContent(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class DocumentPageText(db.Model):
+    """Page-preserving extracted text for citations and authorized retrieval."""
+    id = db.Column(db.Integer, primary_key=True)
+    document_content_id = db.Column(
+        db.Integer, db.ForeignKey("document_content.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    page_number = db.Column(db.Integer, nullable=False)
+    page_text = db.Column(db.Text, nullable=False)
+    content_hash = db.Column(db.String(64), nullable=False)
+    source_version = db.Column(db.String(64), nullable=False)
+    extractor_version = db.Column(db.String(50), nullable=False)
+    extracted_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    __table_args__ = (
+        db.UniqueConstraint(
+            "document_content_id", "page_number",
+            name="uq_document_page_text_content_page",
+        ),
+        db.Index(
+            "ix_document_page_text_source_version",
+            "document_content_id", "source_version",
+        ),
+    )
+
+
 class Document(db.Model):
     """
     A student's personal reference to a piece of DocumentContent. Several
