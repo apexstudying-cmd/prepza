@@ -74,6 +74,7 @@ def test_retrieval_is_lexical_only_without_embedding_adapter():
     assert results[0].chunk.page_number == 3
     assert results[0].semantic_score is None
     assert results[0].lexical_score > 0
+    assert 0 <= results[0].score <= 1
 
 
 def test_empty_authorized_scope_never_calls_embedding_functions():
