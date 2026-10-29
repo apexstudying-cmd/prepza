@@ -293,6 +293,8 @@ def test_route_inventory_contains_critical_boundaries():
     expected = {
         ("/health", "GET"),
         ("/me", "GET"),
+        ("/api/study/retrieval", "POST"),
+        ("/admin/observability", "GET"),
         ("/groups", "POST"),
         ("/groups", "GET"),
         ("/chats", "GET"),
