@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
@@ -70,6 +71,30 @@ def main() -> int:
     alembic_cfg = Config("alembic.ini")
     command.upgrade(alembic_cfg, "head")
     print("Alembic upgrade head: OK")
+
+    # These two additive tables are managed by the repository's SQL migration
+    # ledger rather than Alembic. Apply them to the disposable QA database too,
+    # otherwise the app's retrieval/observability contracts would be tested
+    # against a schema different from the browser app's database.
+    migration_dir = Path(__file__).resolve().parents[1] / "migrations"
+    additive_migrations = [
+        migration_dir / "20261029_document_page_text.sql",
+        migration_dir / "20261029_request_observability.sql",
+    ]
+    qa_engine = create_engine(qa_url, future=True)
+    try:
+        with qa_engine.begin() as connection:
+            for migration_path in additive_migrations:
+                connection.exec_driver_sql(migration_path.read_text(encoding="utf-8"))
+                print(f"Applied QA SQL migration: {migration_path.name}")
+            page_table, event_table = connection.exec_driver_sql(
+                "SELECT to_regclass('public.document_page_text'), "
+                "to_regclass('public.request_observability_event')"
+            ).one()
+            if not page_table or not event_table:
+                raise RuntimeError("Required retrieval/observability QA tables are missing")
+    finally:
+        qa_engine.dispose()
 
     print("Running full real-world and route semantic QA suite...")
     test_files = [
