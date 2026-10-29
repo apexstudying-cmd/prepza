@@ -1757,6 +1757,23 @@ TUTOR_CONCEPT_MARKER_RE = re.compile(r"\n?\[\[CONCEPT:\s*(.+?)\s*\]\]\s*\Z", re.
 # _parse_tutor_reply()) - PREREQUISITE sits one line above CONCEPT, so
 # it only becomes the new end-of-string once CONCEPT is gone.
 TUTOR_PREREQUISITE_MARKER_RE = re.compile(r"\n?\[\[PREREQUISITE:\s*(.+?)\s*\]\]\s*\Z", re.IGNORECASE)
+TUTOR_PAGE_CITATION_RE = re.compile(r"\[p\.\s*(\d+)\]", re.IGNORECASE)
+
+
+def _validate_tutor_page_citations(reply_text, allowed_page_numbers):
+    """Downgrade page references that were not present in retrieved evidence."""
+    allowed = {int(number) for number in allowed_page_numbers}
+    invalid_count = 0
+
+    def replace(match):
+        nonlocal invalid_count
+        page_number = int(match.group(1))
+        if page_number in allowed:
+            return f"[p. {page_number}]"
+        invalid_count += 1
+        return "[page reference not verified]"
+
+    return TUTOR_PAGE_CITATION_RE.sub(replace, reply_text), invalid_count
 
 
 def _build_tutor_system_prompt(
@@ -2229,6 +2246,17 @@ def generate_tutor_reply(
         entitlement_payment_id=reserve_info.get("entitlement_payment_id"),
     )
 
+    if retrieval_mode:
+        raw_text, invalid_citation_count = _validate_tutor_page_citations(
+            raw_text, {page.page_number for page in retrieved_pages}
+        )
+        _ai_observability_logger.info(json.dumps({
+            "event": "tutor_citation_validation",
+            "document_id": document_id,
+            "http_request_id": _current_http_correlation_id(),
+            "retrieved_page_count": len(retrieved_pages),
+            "invalid_citation_count": invalid_citation_count,
+        }, separators=(",", ":"), sort_keys=True))
     reply_text, concept_name, prerequisite_name = _parse_tutor_reply(raw_text)
 
     assistant_row = TutorMessage(conversation_id=conversation_id, role="assistant", content=reply_text)
