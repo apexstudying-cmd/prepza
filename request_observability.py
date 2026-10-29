@@ -118,6 +118,7 @@ def register_request_observability(app, db, require_admin, RequestObservabilityE
                     return response
                 # Use a separate engine transaction. Never commit the request's
                 # application session as a side effect of telemetry collection.
+                crossed = []
                 with db.engine.begin() as connection:
                     connection.execute(text("""
                         INSERT INTO request_observability_event
@@ -161,15 +162,17 @@ def register_request_observability(app, db, require_admin, RequestObservabilityE
                             and recent_slow == SLOW_REQUEST_ALERT_THRESHOLD
                         )
                     ]
-                    if crossed:
-                        logger.warning(json.dumps({
-                            "event": "http_observability_alert_threshold_crossed",
-                            "alert_keys": [alert["key"] for alert in crossed],
-                            "recent_5xx": recent_5xx,
-                            "recent_slow": recent_slow,
-                            "window_minutes": ALERT_WINDOW_MINUTES,
-                        }, separators=(",", ":"), sort_keys=True))
-                        _dispatch_external_alerts(crossed)
+                # Emit logs and external alerts only after the event transaction
+                # commits, and never hold a database connection during dispatch.
+                if crossed:
+                    logger.warning(json.dumps({
+                        "event": "http_observability_alert_threshold_crossed",
+                        "alert_keys": [alert["key"] for alert in crossed],
+                        "recent_5xx": recent_5xx,
+                        "recent_slow": recent_slow,
+                        "window_minutes": ALERT_WINDOW_MINUTES,
+                    }, separators=(",", ":"), sort_keys=True))
+                    _dispatch_external_alerts(crossed)
             except Exception as exc:  # telemetry must never change the response
                 logger.warning(json.dumps({
                     "event": "http_observability_persist_failed",
