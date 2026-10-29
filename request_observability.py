@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 import uuid
 from datetime import datetime, timedelta
@@ -46,6 +47,37 @@ def _request_id():
     # value that could deliberately collide with another request's trace.
     # Never log the URL query string, request body, cookies, user ID, or IP.
     return uuid.uuid4().hex
+
+
+def _dispatch_external_alerts(alerts):
+    """Send threshold-crossing metadata to Sentry when the existing DSN is configured."""
+    if not os.environ.get("SENTRY_DSN"):
+        return
+    try:
+        import sentry_sdk
+    except Exception as exc:
+        logger.warning(json.dumps({
+            "event": "http_observability_alert_delivery_failed",
+            "alert_keys": [alert["key"] for alert in alerts],
+            "exception_type": type(exc).__name__,
+        }, separators=(",", ":"), sort_keys=True))
+        return
+
+    for alert in alerts:
+        try:
+            sentry_sdk.capture_message(
+                "Prepza HTTP observability alert "
+                f"{alert['key']}: {alert['count']} events in "
+                f"{alert['window_minutes']} minutes (threshold {alert['threshold']}).",
+                level="error" if alert["severity"] == "critical" else "warning",
+            )
+        except Exception as exc:
+            # Never let the external alert sink change the HTTP response.
+            logger.warning(json.dumps({
+                "event": "http_observability_alert_delivery_failed",
+                "alert_key": alert["key"],
+                "exception_type": type(exc).__name__,
+            }, separators=(",", ":"), sort_keys=True))
 
 
 def register_request_observability(app, db, require_admin, RequestObservabilityEvent):
@@ -137,6 +169,7 @@ def register_request_observability(app, db, require_admin, RequestObservabilityE
                             "recent_slow": recent_slow,
                             "window_minutes": ALERT_WINDOW_MINUTES,
                         }, separators=(",", ":"), sort_keys=True))
+                        _dispatch_external_alerts(crossed)
             except Exception as exc:  # telemetry must never change the response
                 logger.warning(json.dumps({
                     "event": "http_observability_persist_failed",
