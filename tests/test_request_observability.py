@@ -152,3 +152,38 @@ def test_external_alert_delivery_is_disabled_without_sentry_configuration(monkey
     }])
 
     capture_message.assert_not_called()
+
+
+def test_sentry_event_scrubber_removes_request_and_user_secrets():
+    from request_observability import scrub_sentry_event
+
+    event = {
+        "message": "Prepza HTTP observability alert http_5xx_spike",
+        "request": {
+            "url": "https://prepza.example/api/route?token=DO_NOT_SEND",
+            "query_string": "token=DO_NOT_SEND",
+            "data": "{\"student_message\":\"DO_NOT_SEND\"}",
+            "cookies": {"session": "DO_NOT_SEND"},
+            "headers": {"Authorization": "Bearer DO_NOT_SEND", "X-Request-ID": "opaque-id"},
+            "method": "POST",
+        },
+        "user": {
+            "id": "student-123",
+            "email": "student@example.test",
+            "ip_address": "192.0.2.10",
+        },
+        "extra": {"prompt": "DO_NOT_SEND"},
+    }
+
+    scrubbed = scrub_sentry_event(event, {})
+
+    assert scrubbed["message"] == event["message"]
+    assert scrubbed["request"]["url"] == "https://prepza.example/api/route"
+    assert scrubbed["request"]["method"] == "POST"
+    assert "query_string" not in scrubbed["request"]
+    assert "data" not in scrubbed["request"]
+    assert "cookies" not in scrubbed["request"]
+    assert "headers" not in scrubbed["request"]
+    assert "user" not in scrubbed or not scrubbed["user"]
+    assert "extra" not in scrubbed
+    assert "DO_NOT_SEND" not in str(scrubbed)
