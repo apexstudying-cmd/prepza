@@ -42,7 +42,9 @@ from app import (
     DocumentContent,
     DocumentPageText,
     GeneratedMaterial,
+    LibraryPublication,
     RequestObservabilityEvent,
+    _can_study_document,
 )
 
 
@@ -2565,3 +2567,64 @@ def test_document_reextraction_invalidates_stale_materials_and_replaces_page_ind
     assert material.status == "failed"
     assert "Source text changed" in material.error_message
     assert content.material_id is None
+
+
+def test_document_access_denies_direct_id_for_wrong_library_cohort(world):
+    content = DocumentContent(
+        content_hash=hashlib.sha256(b"library cohort access QA fixture").hexdigest(),
+        storage_path="qa/library-cohort-access-fixture.pdf",
+        file_type="pdf",
+        file_size_bytes=64,
+        page_count=1,
+        status="ready",
+        extracted_text="Cohort scoped lecture notes.",
+    )
+    db.session.add(content)
+    db.session.flush()
+    document = Document(
+        user_id=world["student_a"].id,
+        document_content_id=content.id,
+        title="Cohort scoped notes",
+        original_filename="cohort-notes.pdf",
+        status="ready",
+        is_removed=False,
+    )
+    db.session.add(document)
+    db.session.flush()
+    publication = LibraryPublication(
+        document_id=document.id,
+        user_id=world["student_a"].id,
+        university_id=world["university_a"].id,
+        program_id=world["program_a"].id,
+        year=2,
+        semester=1,
+        title="Cohort scoped notes",
+        material_type="lecture_notes",
+        status="approved",
+    )
+    same_cohort_viewer = User(
+        email="retrieval-cohort-peer@qa.invalid",
+        password_hash="not-used-in-this-test",
+        university_id=world["university_a"].id,
+        program_id=world["program_a"].id,
+        year=2,
+        semester=1,
+        email_verified=True,
+    )
+    db.session.add_all([publication, same_cohort_viewer])
+    db.session.commit()
+
+    assert _can_study_document(world["student_a"].id, document) is True
+    assert _can_study_document(same_cohort_viewer.id, document) is True
+    assert _can_study_document(world["student_b"].id, document) is False
+
+    # This is the route used by the ordinary Morio tutor. The denial must
+    # happen before it can fall back to combined extracted_text for an
+    # unindexed or out-of-cohort document.
+    client = _client_for(world["student_b"].id)
+    response = client.post(
+        f"/documents/{document.id}/tutor/messages",
+        json={"body": "Summarize these private notes"},
+        headers=_csrf(world["student_b"].id),
+    )
+    assert response.status_code == 404
