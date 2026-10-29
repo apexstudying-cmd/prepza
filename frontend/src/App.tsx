@@ -1953,7 +1953,7 @@ function LoginScreen({ setScreen, oauthError = '' }: { setScreen: (s: Screen) =>
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: `linear-gradient(170deg, ${N.navy} 0%, ${N.navy2} 55%, ${N.bg} 100%)` }} className="scrollbar-hide">
       <div style={{ padding: '20px 28px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 40 }}>
-        <img src={logoImg} alt="Prepza" style={{ width: 72, height: 72, borderRadius: 20, marginBottom: 16, boxShadow: '0 8px 32px rgba(201,168,76,0.25)' }} />
+        <img src="/icon-192.png" alt="Prepza" style={{ width: 72, height: 72, borderRadius: 20, marginBottom: 16, boxShadow: '0 8px 32px rgba(201,168,76,0.25)' }} />
         <div style={{ fontWeight: 800, fontSize: 26, color: '#fff', letterSpacing: '-0.5px' }}>Welcome back</div>
         <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 4, marginBottom: 36 }}>Sign in to continue studying</div>
 
@@ -2105,7 +2105,7 @@ function HomeScreen({ setScreen, setActiveDocumentId, setActiveOpportunityId }: 
       <div style={{ background: N.navy, padding: '0 18px 20px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <img src={logoImg} alt="Prepza" style={{ width: 36, height: 36, borderRadius: 10 }} />
+            <img src="/icon-192.png" alt="Prepza" style={{ width: 36, height: 36, borderRadius: 10 }} />
             <div>
               <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11, fontWeight: 500 }}>Good morning,</div>
               <div style={{ color: '#fff', fontSize: 17, fontWeight: 800, letterSpacing: '-0.3px' }}>{greetingName} 👋</div>
@@ -2787,7 +2787,7 @@ function ProcessingScreen({ setScreen, activeDocumentId }: { setScreen: (s: Scre
         <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '3px solid rgba(201,168,76,0.18)' }} />
         <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '3px solid transparent', borderTopColor: N.gold, animation: 'spin-slow 1.1s linear infinite' }} />
         <div style={{ position: 'absolute', inset: 14, borderRadius: '50%', background: 'rgba(201,168,76,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <img src={logoImg} alt="Prepza" style={{ width: 52, height: 52, borderRadius: 14 }} />
+          <img src="/icon-192.png" alt="Prepza" style={{ width: 52, height: 52, borderRadius: 14 }} />
         </div>
       </div>
       <div style={{ color: '#fff', fontWeight: 800, fontSize: 20, marginBottom: 6, textAlign: 'center' }}>{stageLabel}</div>
@@ -6411,7 +6411,7 @@ function ForgotPasswordScreen({ setScreen }: { setScreen: (s: Screen) => void })
     <div style={{ flex: 1, overflowY: 'auto', background: `linear-gradient(170deg,${N.navy} 0%,${N.navy2} 60%,${N.bg} 100%)` }} className="scrollbar-hide">
       <div style={{ padding: '20px 28px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <button onClick={() => setScreen('login')} style={{ alignSelf: 'flex-start', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, padding: '8px 12px', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 32, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, fontSize: 12 }}>{Ic.back('w-4 h-4')} Back</button>
-        <img src={logoImg} alt="Prepza" style={{ width: 64, height: 64, borderRadius: 18, marginBottom: 20 }} />
+        <img src="/icon-192.png" alt="Prepza" style={{ width: 64, height: 64, borderRadius: 18, marginBottom: 20 }} />
         {!sent ? (
           <>
             <div style={{ fontWeight: 800, fontSize: 24, color: '#fff', textAlign: 'center' }}>Reset Password</div>
@@ -6495,7 +6495,7 @@ function ResetPasswordScreen({ setScreen }: { setScreen: (s: Screen) => void }) 
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: `linear-gradient(170deg,${N.navy} 0%,${N.navy2} 60%,${N.bg} 100%)` }} className="scrollbar-hide">
       <div style={{ padding: '20px 28px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <img src={logoImg} alt="Prepza" style={{ width: 64, height: 64, borderRadius: 18, marginTop: 20, marginBottom: 20 }} />
+        <img src="/icon-192.png" alt="Prepza" style={{ width: 64, height: 64, borderRadius: 18, marginTop: 20, marginBottom: 20 }} />
         {!done ? (
           <>
             <div style={{ fontWeight: 800, fontSize: 24, color: '#fff', letterSpacing: '-0.5px', textAlign: 'center' }}>Set a new password</div>
@@ -6793,7 +6793,7 @@ function SignupScreen({ setScreen, referralCode, referralChannel }: { setScreen:
           <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: 600 }}>{step + 1}/{steps.length}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
-          <img src={logoImg} alt="Prepza" style={{ width: 56, height: 56, borderRadius: 16 }} />
+          <img src="/icon-192.png" alt="Prepza" style={{ width: 56, height: 56, borderRadius: 16 }} />
         </div>
       </div>
       <div style={{ flex: 1, padding: '0 24px 32px', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
@@ -7144,7 +7144,7 @@ function CompleteProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }
           <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: 600 }}>{step + 1}/{steps.length}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
-          <img src={logoImg} alt="Prepza" style={{ width: 56, height: 56, borderRadius: 16 }} />
+          <img src="/icon-192.png" alt="Prepza" style={{ width: 56, height: 56, borderRadius: 16 }} />
         </div>
       </div>
       <div style={{ flex: 1, padding: '0 24px 32px', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
@@ -14069,7 +14069,7 @@ function AdminPlatform({ onExit }: { onExit: () => void }) {
       <div style={{ width: 220, background: N.navy, display: 'flex', flexDirection: 'column', flexShrink: 0, overflowY: 'auto' }} className="scrollbar-hide">
         <div style={{ padding: '20px 16px 14px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <img src={logoImg} alt="Prepza" style={{ width: 32, height: 32, borderRadius: 9 }} />
+            <img src="/icon-192.png" alt="Prepza" style={{ width: 32, height: 32, borderRadius: 9 }} />
             <div>
               <div style={{ fontWeight: 800, fontSize: 14, color: '#fff', letterSpacing: '-0.3px' }}>PREPZA</div>
               <div style={{ fontSize: 10, color: N.gold, fontWeight: 600 }}>Admin Platform</div>
