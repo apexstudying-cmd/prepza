@@ -60,16 +60,19 @@ _AUTHORIZED_PAGE_SQL = text("""
       AND d.is_removed = FALSE
       AND c.status = 'ready'
       AND (d.user_id = :user_id OR lp.id IS NOT NULL)
+      AND (:document_id IS NULL OR d.id = :document_id)
       AND p.page_text <> ''
     ORDER BY d.id, p.page_number
 """)
 
 
-def load_authorized_pages(connection, *, user_id: int) -> list[AuthorizedPage]:
+def load_authorized_pages(connection, *, user_id: int, document_id: int | None = None) -> list[AuthorizedPage]:
     """Load page text only after the database applies the caller's access scope."""
     if user_id is None:
         return []
-    rows = connection.execute(_AUTHORIZED_PAGE_SQL, {"user_id": user_id}).mappings()
+    rows = connection.execute(_AUTHORIZED_PAGE_SQL, {
+        "user_id": user_id, "document_id": document_id,
+    }).mappings()
     return [
         AuthorizedPage(
             document_id=int(row["document_id"]),
@@ -88,6 +91,7 @@ def retrieve_authorized_pages(
     user_id: int,
     query: str,
     top_k: int = 5,
+    document_id: int | None = None,
     embed_query: Callable[[str], Sequence[float]] | None = None,
     embed_text: Callable[[str], Sequence[float]] | None = None,
 ) -> list[RetrievedPage]:
@@ -97,7 +101,7 @@ def retrieve_authorized_pages(
     query has returned. The caller must pass the authenticated session user ID,
     never an untrusted user ID from a request body.
     """
-    pages = load_authorized_pages(connection, user_id=user_id)
+    pages = load_authorized_pages(connection, user_id=user_id, document_id=document_id)
     chunks: list[StudyChunk] = []
     by_identity: dict[tuple[int, int, int], AuthorizedPage] = {}
     for page in pages:
