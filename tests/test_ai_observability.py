@@ -61,7 +61,7 @@ def test_fallback_logs_failed_attempt_and_success_with_same_trace_id(monkeypatch
         ("safe answer", ai_service.AIUsage(input_tokens=2, output_tokens=3)),
     ])
     monkeypatch.setattr(ai_service, "_get_provider", lambda: (provider, "multi"))
-    caplog.set_level(logging.WARNING, logger=ai_service.__name__)
+    caplog.set_level(logging.INFO, logger=ai_service.__name__)
 
     response = ai_service.route_and_generate(ai_service.AIRequest(
         task="TUTORING", system_prompt="system", user_message="question"
