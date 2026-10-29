@@ -547,6 +547,9 @@ def generate_document_material(*, material_type, document_content_id, triggering
             system_prompt=system_prompt,
             user_message=user_message,
             max_tokens=max_tokens,
+            prompt_version=prompt_version,
+            output_schema_version=schema_version,
+            correlation_id=f"ai-job:{job.id}" if job and job.id is not None else None,
         )
         job.progress_percent = 20
         job.progress_stage = "AI is generating your material"
