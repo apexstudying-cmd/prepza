@@ -1131,7 +1131,7 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
       <div style={{display:'flex',gap:8}}>{([['documents','Documents'],['materials','Study Materials']] as const).map(([key,name])=><button key={key} onClick={()=>setTab(key)} style={{flex:1,padding:'8px 10px',borderRadius:11,background:tab===key?N.gold:'rgba(255,255,255,0.08)',color:tab===key?N.navy:'rgba(255,255,255,0.7)',border:'none',fontWeight:800,fontSize:11,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}>{name}</button>)}</div>
     </div>
     <div style={{flex:1,overflowY:'auto',padding:16}} className="scrollbar-hide">
-      {loading ? <GenerationLoading label="Loading your study library…"/> : error && documents.length===0 && offlineDocuments.length===0 ? <GenerationError error={error}/> : tab==='documents' ? <><div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Open a document to read, ask Ada about it, or create study materials.</div>{documents.length===0 && offlineDocuments.length===0 && savedLibrary.length===0?<EmptyState icon="▣" title="No documents yet" sub="Upload your notes, slides, or past papers to start studying." action="Upload document" onAction={()=>setScreen('upload')}/>:<>
+      {loading ? <GenerationLoading label="Loading your study library…"/> : error && documents.length===0 && offlineDocuments.length===0 ? <GenerationError error={error}/> : tab==='documents' ? <><div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Open a document to read, ask Morio about it, or create study materials.</div>{documents.length===0 && offlineDocuments.length===0 && savedLibrary.length===0?<EmptyState icon="▣" title="No documents yet" sub="Upload your notes, slides, or past papers to start studying." action="Upload document" onAction={()=>setScreen('upload')}/>:<>
         {Array.from(new Map([...documents, ...offlineDocuments].map(d=>[d.id,d])).values()).map(d=><button key={d.id} onClick={()=>openDocument(d.id)} style={{width:'100%',textAlign:'left',background:T.card,border:`1px solid ${T.border}`,borderRadius:16,padding:15,marginBottom:10,cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{display:'flex',alignItems:'center',gap:12}}><div aria-hidden="true" style={{width:44,height:44,flexShrink:0,borderRadius:12,background:currentThemeMode==='dark'?'rgba(201,168,76,0.14)':'rgba(11,20,55,0.05)',color:currentThemeMode==='dark'?N.goldL:N.navy,display:'flex',alignItems:'center',justifyContent:'center'}}>{Ic.book('w-5 h-5')}</div><div style={{flex:1,minWidth:0}}><div style={{fontWeight:800,fontSize:13,color:T.text}} className="line-clamp-1">{d.title}</div><div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{d.page_count?`${d.page_count} pages`:'Document'}{d.last_opened_at?` · studied ${new Date(d.last_opened_at).toLocaleDateString()}`:d.created_at?` · ${new Date(d.created_at).toLocaleDateString()}`:''}</div></div><div style={{color:T.textMuted}}>{Ic.chevR()}</div></div></button>)}
         {savedLibrary.length>0 && <div style={{marginTop:18}}>
           <div style={{fontSize:11,fontWeight:800,color:T.textMuted,marginBottom:8,textTransform:'uppercase',letterSpacing:0.5}}>Saved from Prepza Library</div>
@@ -1148,7 +1148,7 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId }: { setScreen: (
 
 
 // ─── DOCUMENT STUDY HUB ─────────────────────────────────────────────────────
-// A document is the student's study home: read it, ask Ada about it, replay
+// A document is the student's study home: read it, ask Morio about it, replay
 // existing materials, or create a new material. Generation remains owned by
 // the existing material screens/reusable-generation backend.
 function DocumentStudyHubScreen({
@@ -1363,10 +1363,10 @@ setDocument({
       </button>
 
       <section style={{ marginBottom: 22 }}>
-        <div style={{ fontWeight: 850, fontSize: 14, color: T.text, marginBottom: 10 }}>Study with Ada</div>
+        <div style={{ fontWeight: 850, fontSize: 14, color: T.text, marginBottom: 10 }}>Study with Morio</div>
         <button onClick={() => setScreen('ai-tutor')} style={{ width: '100%', background: T.card, border: `1px solid ${T.border}`, borderRadius: 15, padding: 14, display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
           <div style={{ width: 42, height: 42, borderRadius: 12, background: `${N.gold}18`, color: N.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, fontWeight: 900 }}>✦</div>
-          <div style={{ flex: 1 }}><div style={{ color: T.text, fontWeight: 800, fontSize: 13 }}>Ask anything about these notes</div><div style={{ color: T.textMuted, fontSize: 11, marginTop: 3 }}>Use Ada while this document is your study context.</div></div>
+          <div style={{ flex: 1 }}><div style={{ color: T.text, fontWeight: 800, fontSize: 13 }}>Ask anything about these notes</div><div style={{ color: T.textMuted, fontSize: 11, marginTop: 3 }}>Use Morio while this document is your study context.</div></div>
           <span style={{ color: T.textMuted }}>›</span>
         </button>
       </section>
@@ -3510,7 +3510,7 @@ function AITutorScreen({ setScreen, activeDocumentId, setActiveDocumentId }: { s
             <button onClick={() => setScreen('home')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
             <div style={{ width: 38, height: 38, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>✦</div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 800, fontSize: 15, color: '#fff' }}>Ada</div>
+              <div style={{ fontWeight: 800, fontSize: 15, color: '#fff' }}>Morio</div>
               <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', fontWeight: 600 }}>Pick a document to start</div>
             </div>
           </div>
@@ -3520,7 +3520,7 @@ function AITutorScreen({ setScreen, activeDocumentId, setActiveDocumentId }: { s
           {pickerError && <GenerationError error={pickerError} />}
           {!pickerLoading && !pickerError && pickerDocs.length === 0 && (
             <div style={{ textAlign: 'center', padding: '32px 20px' }}>
-              <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 14 }}>You don't have any documents ready yet. Upload one to start asking Ada questions.</div>
+              <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 14 }}>You don't have any documents ready yet. Upload one to start asking Morio questions.</div>
               <button onClick={() => setScreen('upload')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 13, border: 'none', borderRadius: 14, padding: '12px 20px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Upload a Document</button>
             </div>
           )}
@@ -3545,7 +3545,7 @@ function AITutorScreen({ setScreen, activeDocumentId, setActiveDocumentId }: { s
           <button onClick={() => setScreen('home')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
           <div style={{ width: 38, height: 38, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>✦</div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 800, fontSize: 15, color: '#fff' }}>Ada</div>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#fff' }}>Morio</div>
             <div style={{ fontSize: 11, color: '#4CC97B', fontWeight: 600 }}>● Online · Ready to help</div>
           </div>
         </div>
@@ -4596,7 +4596,7 @@ function ChatsScreen({ setScreen, setActiveConversationId, setActiveGroupId, set
       <div onClick={() => setScreen('ai-tutor')} style={{ margin: '12px 14px 0', background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, borderRadius: 14, padding: '12px 14px', display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', border: `1px solid ${N.gold}25` }}>
         <div style={{ width: 44, height: 44, background: `rgba(201,168,76,0.18)`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>✦</div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 800, fontSize: 14, color: '#fff' }}>Ada</div>
+          <div style={{ fontWeight: 800, fontSize: 14, color: '#fff' }}>Morio</div>
           <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>Your personal study assistant</div>
         </div>
         <Pill text="AI" color={N.gold} />
@@ -10167,7 +10167,7 @@ const SUBSCRIPTION_PLAN_META: Record<string, { badge?: string; badgeColor?: stri
 
 function subscriptionFeatures(plan: SubscriptionPlan): string[] {
   const features = [
-    'Ada — personalized AI study support',
+    'Morio — personalized AI study support',
     `${Number(plan.podcast_minutes || 0).toLocaleString()} podcast minutes`,
     `${Number(plan.summary_pages || 0).toLocaleString()} summary pages`,
     `${Number(plan.questions || 0).toLocaleString()} questions`,
@@ -16008,7 +16008,7 @@ export default function App() {
 function friendlyGenerationError(error: unknown): string {
   const message = error instanceof ApiError ? error.message : error instanceof Error ? error.message : String(error || '')
   const lower = message.toLowerCase()
-  if (lower.includes("ada's safety limit") || lower.includes("used your ada allowance")) {
+  if (lower.includes("Morio's safety limit") || lower.includes("used your Morio allowance")) {
     return message
   }
   if (lower.includes('generation quota exhausted') || lower.includes('used up this plan')) {
