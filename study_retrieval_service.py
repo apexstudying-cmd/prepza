@@ -104,7 +104,7 @@ def retrieve_authorized_pages(
         page_chunks = chunk_pages(
             document_id=page.document_id,
             document_version=page.source_version,
-            pages=[page.text] * page.page_number,
+            pages=[""] * (page.page_number - 1) + [page.text],
             max_chars=1200,
             overlap_chars=160,
         )
