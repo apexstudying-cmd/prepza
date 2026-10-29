@@ -775,8 +775,7 @@
           "kind": "ai_correlation_test",
           "path": "tests/test_ai_observability.py",
           "anchors": [
-            "test_http_request_id_is_used_when_ai_request_has_no_explicit_correlation",
-            "test_tutor_generation_observability_correlates_requests_without_logging_content"
+            "test_http_request_id_is_used_when_ai_request_has_no_explicit_correlation"
           ]
         },
         {
@@ -798,6 +797,14 @@
           "path": "tests/test_local_qa_real_world.py",
           "anchors": [
             "test_admin_observability_dashboard_surfaces_error_and_latency_alerts"
+          ]
+        },
+        {
+          "kind": "tutor_correlation_test",
+          "path": "tests/test_tutor_retrieval_grounding.py",
+          "anchors": [
+            "test_main_tutor_passes_document_scope_into_authorized_retrieval",
+            "test_tutor_generation_observability_correlates_requests_without_logging_content"
           ]
         }
       ],
