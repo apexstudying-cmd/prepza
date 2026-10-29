@@ -89,3 +89,18 @@ def test_empty_authorized_scope_never_calls_embedding_functions():
         embed_query=should_not_run,
         embed_text=should_not_run,
     ) == []
+
+
+def test_punctuation_only_query_returns_no_candidates():
+    chunks = [StudyChunk(1, "v1", 1, 0, "Some course text.", 0, 17)]
+    assert hybrid_retrieve("?!", chunks, allowed_document_ids={1}) == []
+
+
+def test_lexical_only_retrieval_rejects_zero_lexical_weight():
+    chunks = [StudyChunk(1, "v1", 1, 0, "Some course text.", 0, 17)]
+    import pytest
+    with pytest.raises(ValueError, match="lexical_weight"):
+        hybrid_retrieve(
+            "course text", chunks, allowed_document_ids={1},
+            lexical_weight=0, semantic_weight=1,
+        )
