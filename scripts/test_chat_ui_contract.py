@@ -26,7 +26,7 @@ def test_chat_surface_contains_whatsapp_core_interactions():
         "read receipts": "read_by_count",
         "presence": "onlineUsers",
         "E2EE indicator": "End-to-end encrypted",
-        "Morio entry point": "Morio",
+        "Morio entry point": "@Morio",
         "load earlier": "Load earlier messages",
         "mobile layout": "@media(max-width:760px)",
     }
