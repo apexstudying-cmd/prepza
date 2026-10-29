@@ -23,14 +23,19 @@ tested without a request context.
 
 import os
 import json
+import logging
 import re
 import time
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 
 import requests
+
+
+_ai_observability_logger = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -68,6 +73,7 @@ class AIResponse:
     latency_ms: int
     escalated: bool = False        # True if the fallback model had to be used
     escalation_reason: Optional[str] = None
+    trace_id: Optional[str] = None
 
 
 class AIProviderError(Exception):
@@ -380,6 +386,7 @@ def route_and_generate(ai_request: AIRequest) -> AIResponse:
 
     provider, provider_name = _get_provider()
     max_tokens = ai_request.max_tokens or task_config["max_tokens"]
+    trace_id = uuid.uuid4().hex
 
     models_to_try = [task_config["primary"]]
     if task_config.get("fallback"):
@@ -404,7 +411,7 @@ def route_and_generate(ai_request: AIRequest) -> AIResponse:
                 usage.cache_read_tokens, usage.cache_creation_tokens,
             )
             actual_provider = provider.provider_name(model) if hasattr(provider, "provider_name") else provider_name
-            return AIResponse(
+            response = AIResponse(
                 text=text,
                 model_used=model,
                 provider=actual_provider,
@@ -412,12 +419,45 @@ def route_and_generate(ai_request: AIRequest) -> AIResponse:
                 latency_ms=latency_ms,
                 escalated=(attempt > 0),
                 escalation_reason="primary_model_failed" if attempt > 0 else None,
+                trace_id=trace_id,
             )
+            # Never log prompts, completions, image data, or exception messages.
+            _ai_observability_logger.info(json.dumps({
+                "event": "ai_request_completed",
+                "trace_id": trace_id,
+                "task": ai_request.task,
+                "provider": actual_provider,
+                "model": model,
+                "attempt": attempt + 1,
+                "escalated": response.escalated,
+                "latency_ms": latency_ms,
+                "input_tokens": usage.input_tokens,
+                "output_tokens": usage.output_tokens,
+                "cache_read_tokens": usage.cache_read_tokens,
+                "cache_creation_tokens": usage.cache_creation_tokens,
+                "cost_usd": str(usage.cost_usd),
+            }, sort_keys=True))
+            return response
         except Exception as e:  # noqa: BLE001 - genuinely want to catch+retry any provider failure
             last_error = e
+            _ai_observability_logger.warning(json.dumps({
+                "event": "ai_attempt_failed",
+                "trace_id": trace_id,
+                "task": ai_request.task,
+                "model": model,
+                "attempt": attempt + 1,
+                "exception_type": type(e).__name__,
+            }, sort_keys=True))
             continue
 
-    raise AIProviderError(f"All models failed for task '{ai_request.task}': {last_error}")
+    _ai_observability_logger.error(json.dumps({
+        "event": "ai_request_failed",
+        "trace_id": trace_id,
+        "task": ai_request.task,
+        "attempts": len(models_to_try),
+        "exception_type": type(last_error).__name__ if last_error else "AIProviderError",
+    }, sort_keys=True))
+    raise AIProviderError(f"All models failed for task '{ai_request.task}' (trace_id={trace_id})")
 
 
 # ============================================================
