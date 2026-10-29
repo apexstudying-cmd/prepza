@@ -37,6 +37,9 @@ from app import (
     Conversation,
     ConversationParticipant,
     StudyTimeLog,
+    Document,
+    DocumentContent,
+    DocumentPageText,
 )
 
 
@@ -2387,3 +2390,74 @@ def test_shared_study_streak_invite_accept_and_nairobi_qualification(world):
         ConversationParticipant.query.filter_by(conversation_id=conversation.id).delete(synchronize_session=False)
         db.session.delete(conversation)
         db.session.commit()
+
+
+def test_study_retrieval_enforces_document_ownership_with_shared_content(world):
+    content = DocumentContent(
+        content_hash=hashlib.sha256(b"shared retrieval fixture").hexdigest(),
+        storage_path="qa/shared-retrieval-fixture.pdf",
+        file_type="pdf",
+        file_size_bytes=100,
+        page_count=1,
+        status="ready",
+        extracted_text="Derivatives measure instantaneous rates of change.",
+    )
+    db.session.add(content)
+    db.session.flush()
+
+    doc_a = Document(
+        user_id=world["student_a"].id,
+        document_content_id=content.id,
+        title="Student A calculus notes",
+        original_filename="calculus-a.pdf",
+        status="ready",
+        is_removed=False,
+    )
+    doc_b = Document(
+        user_id=world["student_b"].id,
+        document_content_id=content.id,
+        title="Student B copy of calculus notes",
+        original_filename="calculus-b.pdf",
+        status="ready",
+        is_removed=False,
+    )
+    db.session.add_all([doc_a, doc_b])
+    db.session.flush()
+    db.session.add(DocumentPageText(
+        document_content_id=content.id,
+        page_number=1,
+        page_text="Derivatives measure instantaneous rates of change.",
+        content_hash=content.content_hash,
+        source_version=hashlib.sha256(b"fixture-source-v1").hexdigest(),
+        extractor_version="pdf-page-text-v1",
+    ))
+    db.session.commit()
+
+    owner_client = _client_for(world["student_a"].id)
+    owner_response = owner_client.post(
+        "/api/study/retrieval",
+        json={"query": "derivatives instantaneous rates of change", "document_id": doc_a.id},
+        headers=_csrf(world["student_a"].id),
+    )
+    assert owner_response.status_code == 200
+    result = owner_response.get_json()["results"][0]
+    assert result["citation"] == {
+        "document_id": doc_a.id,
+        "document_version": hashlib.sha256(b"fixture-source-v1").hexdigest(),
+        "page_number": 1,
+    }
+
+    other_client = _client_for(world["student_b"].id)
+    private_response = other_client.post(
+        "/api/study/retrieval",
+        json={"query": "derivatives instantaneous rates of change", "document_id": doc_a.id},
+        headers=_csrf(world["student_b"].id),
+    )
+    assert private_response.status_code == 404
+    own_copy_response = other_client.post(
+        "/api/study/retrieval",
+        json={"query": "derivatives instantaneous rates of change", "document_id": doc_b.id},
+        headers=_csrf(world["student_b"].id),
+    )
+    assert own_copy_response.status_code == 200
+    assert own_copy_response.get_json()["results"][0]["citation"]["document_id"] == doc_b.id
