@@ -1,4 +1,4 @@
-"""Scoped Ada route for E2EE study chats.
+"""Scoped study route for Morio in E2EE study chats.
 
 The server receives plaintext only when a user explicitly selects study text
 and asks Ada about it. It never loads conversation history, decrypts chat
@@ -116,9 +116,9 @@ def register_e2ee_ada_route(app, db, Conversation, ConversationParticipant, Docu
         data = request.get_json(silent=True) or {}
         context_scope = data.get("context_scope")
         if context_scope not in {"selected_document_pages", "selected_chat_document"}:
-            return jsonify({"error": "Ada accepts only explicitly selected study context"}), 400
+            return jsonify({"error": "Morio accepts only explicitly selected study context"}), 400
         if data.get("explicit_user_context") is not True:
-            return jsonify({"error": "Ada context must be explicitly selected by the user"}), 400
+            return jsonify({"error": "Morio context must be explicitly selected by the user"}), 400
 
         try:
             page_start = int(data.get("page_start"))
@@ -127,7 +127,7 @@ def register_e2ee_ada_route(app, db, Conversation, ConversationParticipant, Docu
             selected_text = clean_text(data.get("selected_text"), MAX_SELECTED_TEXT, "selected_text")
             prompt = clean_text(data.get("prompt"), MAX_PROMPT, "prompt")
         except (TypeError, ValueError):
-            return jsonify({"error": "Invalid scoped Ada context"}), 400
+            return jsonify({"error": "Invalid scoped Morio context"}), 400
 
         if page_start < 1 or page_end < page_start:
             return jsonify({"error": "Invalid document page range"}), 400
@@ -168,16 +168,16 @@ def register_e2ee_ada_route(app, db, Conversation, ConversationParticipant, Docu
 
         allowed, used, limit = check_daily_tutor_limit(user_id, plan_tier="free")
         if not allowed:
-            return jsonify({"error": "Daily Ada limit reached", "used": used, "limit": limit}), 429
+            return jsonify({"error": "Daily Morio limit reached", "used": used, "limit": limit}), 429
         if is_spend_cap_reached():
             return jsonify({
-                "error": "Fresh Ada generation is temporarily unavailable",
+                "error": "Morio generation is temporarily unavailable",
                 "monthly_budget_usd": str(get_monthly_ai_budget_usd()),
                 "monthly_spend_usd": str(get_monthly_ai_spend_usd()),
             }), 503
 
         system_prompt = (
-            "You are Ada, Prepza's study tutor. The student has explicitly selected "
+            "You are Morio, Prepza's AI study tutor. Introduce yourself as Morio when asked who you are; do not identify yourself as Ada or ChatGPT. The student has explicitly selected "
             "the study text below and asked a question about it. Answer only from "
             "the supplied context plus general academic knowledge. Do not claim "
             "to have access to the student's chat history, private documents, "
@@ -193,11 +193,11 @@ def register_e2ee_ada_route(app, db, Conversation, ConversationParticipant, Docu
                 user_message=user_message, cacheable_system=True,
             ))
         except AIBudgetExceededError:
-            return jsonify({"error": "Fresh Ada generation is temporarily unavailable"}), 503
+            return jsonify({"error": "Morio generation is temporarily unavailable"}), 503
         except AIRateLimitExceededError:
-            return jsonify({"error": "Daily Ada limit reached"}), 429
+            return jsonify({"error": "Daily Morio limit reached"}), 429
         except AIProviderError:
-            return jsonify({"error": "Ada could not answer right now"}), 502
+            return jsonify({"error": "Morio could not answer right now"}), 502
 
         log_usage(user_id, request_type="tutor_message", model=response.model_used,
                   provider=response.provider, usage=response.usage)
