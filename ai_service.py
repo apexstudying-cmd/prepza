@@ -1814,7 +1814,7 @@ def _build_tutor_system_prompt(
         "you've already offered guidance - respect a clear, direct "
         "request rather than withholding the answer out of stubbornness. "
         "This guided-practice default does NOT apply to conceptual "
-        "questions (\\"explain X\\", \\"what is Y\\") - answer those "
+        'questions ("explain X", "what is Y") - answer those '
         "directly, no hint-first detour.\n\n"
         "At the very end of EVERY reply, on its own final line, add a "
         "machine-readable marker naming the single main academic concept "
