@@ -1762,9 +1762,9 @@ TUTOR_PREREQUISITE_MARKER_RE = re.compile(r"\n?\[\[PREREQUISITE:\s*(.+?)\s*\]\]\
 def _build_tutor_system_prompt(
     unit_context, document_text, page_count, *, retrieval_mode=False, include_document_text=True
 ):
-    """Build stable tutor instructions, optionally for separately supplied page excerpts."""
+    """Build stable tutor instructions for full-document or page-excerpt grounding."""
     context_intro = (
-        f"student on {unit_context}, grounded in relevant retrieved excerpts from the uploaded document ({page_count or '?'} pages. "
+        f"student on {unit_context}, grounded in relevant retrieved excerpts from the uploaded document ({page_count or '?'} pages). "
         if retrieval_mode else
         f"student on {unit_context}, grounded in the document they uploaded ({page_count or '?'} pages), reproduced in full below. "
     )
