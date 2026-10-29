@@ -91,6 +91,7 @@ def backfill(*, apply: bool, limit: int | None = None) -> dict:
                         "status": "failed",
                         "error_message": "Source page text was backfilled; regenerate this study material.",
                     }, synchronize_session=False)
+                    content.material_id = None
                 db.session.commit()
                 counts["backfilled"] += 1
             except Exception:
