@@ -131,6 +131,9 @@ def register_request_observability(app, db, require_admin, RequestObservabilityE
             recent_slow = recent_query.filter(
                 RequestObservabilityEvent.duration_ms >= SLOW_REQUEST_MS
             ).count()
+            hour_event_count = RequestObservabilityEvent.query.filter(
+                RequestObservabilityEvent.occurred_at >= hour_start
+            ).count()
             hour_events = (
                 RequestObservabilityEvent.query
                 .filter(RequestObservabilityEvent.occurred_at >= hour_start)
@@ -160,7 +163,7 @@ def register_request_observability(app, db, require_admin, RequestObservabilityE
             "summary": {
                 "recent_5xx": recent_5xx,
                 "recent_slow": recent_slow,
-                "events_last_hour": len(hour_events),
+                "events_last_hour": hour_event_count,
             },
             "alerts": alerts,
             "recent_events": [{
