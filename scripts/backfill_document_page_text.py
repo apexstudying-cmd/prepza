@@ -30,17 +30,29 @@ def backfill(*, apply: bool, limit: int | None = None) -> dict:
             "document_page_text is missing; apply migrations/20261029_document_page_text.sql first"
         )
 
-    query = (
-        DocumentContent.query
-        .filter_by(status="ready", file_type="pdf")
-        .order_by(DocumentContent.id.asc())
-    )
-    if limit is not None:
-        query = query.limit(limit)
-
     counts = {"candidates": 0, "backfilled": 0, "already_indexed": 0, "scanned_or_empty": 0, "unavailable": 0}
-    for content in query.yield_per(25):
-        counts["candidates"] += 1
+    last_id = 0
+    remaining = limit
+    while True:
+        batch_size = 25 if remaining is None else min(25, remaining)
+        if batch_size <= 0:
+            break
+        batch = (
+            DocumentContent.query
+            .filter(
+                DocumentContent.status == "ready",
+                DocumentContent.file_type == "pdf",
+                DocumentContent.id > last_id,
+            )
+            .order_by(DocumentContent.id.asc())
+            .limit(batch_size)
+            .all()
+        )
+        if not batch:
+            break
+        for content in batch:
+            counts["candidates"] += 1
+            last_id = content.id
         existing = DocumentPageText.query.filter_by(
             document_content_id=content.id
         ).count()
@@ -83,10 +95,12 @@ def backfill(*, apply: bool, limit: int | None = None) -> dict:
                 }, synchronize_session=False)
             db.session.commit()
             counts["backfilled"] += 1
-        except Exception:
-            db.session.rollback()
-            counts["unavailable"] += 1
-            print(f"Backfill failed for document_content_id={content.id}; see application logs.", file=sys.stderr)
+            except Exception:
+                db.session.rollback()
+                counts["unavailable"] += 1
+                print(f"Backfill failed for document_content_id={content.id}; see application logs.", file=sys.stderr)
+        if remaining is not None:
+            remaining -= len(batch)
 
     return counts
 
