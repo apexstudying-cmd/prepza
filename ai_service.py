@@ -469,7 +469,8 @@ def route_and_generate(ai_request: AIRequest) -> AIResponse:
                 "model": model,
                 "prompt_version": ai_request.prompt_version,
                 "output_schema_version": ai_request.output_schema_version,
-                "correlation_id": ai_request.correlation_id,
+                "correlation_id": correlation_id,
+                "http_request_id": http_request_id,
                 "attempt": attempt + 1,
                 "exception_type": type(e).__name__,
             }, sort_keys=True))
@@ -481,7 +482,8 @@ def route_and_generate(ai_request: AIRequest) -> AIResponse:
         "task": ai_request.task,
         "prompt_version": ai_request.prompt_version,
         "output_schema_version": ai_request.output_schema_version,
-        "correlation_id": ai_request.correlation_id,
+        "correlation_id": correlation_id,
+                "http_request_id": http_request_id,
         "attempts": len(models_to_try),
         "exception_type": type(last_error).__name__ if last_error else "AIProviderError",
     }, sort_keys=True))
