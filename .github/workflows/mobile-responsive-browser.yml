@@ -85,33 +85,61 @@ jobs:
       - name: Apply Alembic migrations to disposable database
         run: docker compose -f docker-compose.vps.yml run --rm app python -m alembic upgrade head
 
-      - name: Apply additive page-text and observability SQL migrations to disposable PostgreSQL
+      - name: Exercise controlled SQL migration ledger on disposable PostgreSQL
         run: |
+          # Simulate a legacy database whose previously deployed SQL migrations
+          # have checksums in the ledger, leaving the two new files unapplied.
           docker compose -f docker-compose.vps.yml run --rm app python - <<'PY'
+          import hashlib
           from pathlib import Path
-          from app import app, db
+          from sqlalchemy import create_engine, text
+          import os
 
-          migration_paths = [
-              Path("migrations/20261029_document_page_text.sql"),
-              Path("migrations/20261029_request_observability.sql"),
-          ]
-          with app.app_context():
-              connection = db.engine.raw_connection()
-              try:
-                  cursor = connection.cursor()
-                  for path in migration_paths:
-                      cursor.execute(path.read_text(encoding="utf-8"))
-                      print(f"Applied disposable CI migration: {path.name}")
-                  cursor.execute("SELECT to_regclass('public.document_page_text'), to_regclass('public.request_observability_event')")
-                  page_table, event_table = cursor.fetchone()
+          root = Path.cwd()
+          migration_dir = root / "migrations"
+          ledger_name = "20261001_migration_history.sql"
+          new_migrations = {
+              "20261029_document_page_text.sql",
+              "20261029_request_observability.sql",
+          }
+          engine = create_engine(os.environ["DATABASE_URL"], future=True)
+          try:
+              with engine.begin() as connection:
+                  connection.exec_driver_sql(
+                      (migration_dir / ledger_name).read_text(encoding="utf-8")
+                  )
+                  for path in sorted(migration_dir.glob("*.sql")):
+                      if path.name == ledger_name or path.name in new_migrations:
+                          continue
+                      connection.execute(text("""
+                          INSERT INTO schema_migration (migration_name, checksum)
+                          VALUES (:name, :checksum)
+                          ON CONFLICT (migration_name) DO NOTHING
+                      """), {
+                          "name": path.name,
+                          "checksum": hashlib.sha256(path.read_bytes()).hexdigest(),
+                      })
+          finally:
+              engine.dispose()
+          PY
+          docker compose -f docker-compose.vps.yml run --rm app python scripts/apply_migrations.py --apply
+          docker compose -f docker-compose.vps.yml run --rm app python scripts/apply_migrations.py --verify
+          docker compose -f docker-compose.vps.yml run --rm app python - <<'PY'
+          import os
+          from sqlalchemy import create_engine, text
+
+          engine = create_engine(os.environ["DATABASE_URL"], future=True)
+          try:
+              with engine.connect() as connection:
+                  page_table, event_table = connection.execute(text(
+                      "SELECT to_regclass('public.document_page_text'), "
+                      "to_regclass('public.request_observability_event')"
+                  )).one()
                   if not page_table or not event_table:
                       raise RuntimeError("Expected retrieval/observability tables are missing")
-                  connection.commit()
-              except Exception:
-                  connection.rollback()
-                  raise
-              finally:
-                  connection.close()
+                  print("Controlled SQL migration ledger and required tables verified.")
+          finally:
+              engine.dispose()
           PY
 
       - name: Start app
