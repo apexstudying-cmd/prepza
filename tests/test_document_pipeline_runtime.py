@@ -69,6 +69,24 @@ def test_reextraction_invalidates_only_when_source_text_changes():
     assert first_time_backfill is False
     assert legacy_content_changed is True
 
+
+def test_native_backfill_extracts_text_without_ocr_and_skips_scanned_pages():
+    native_doc = document_pipeline.fitz.open()
+    page = native_doc.new_page()
+    page.insert_text((72, 72), "Native page text is long enough for safe page indexing.")
+    native_bytes = native_doc.tobytes()
+    native_doc.close()
+
+    scanned_doc = document_pipeline.fitz.open()
+    scanned_doc.new_page()
+    scanned_bytes = scanned_doc.tobytes()
+    scanned_doc.close()
+
+    assert document_pipeline.extract_native_pdf_pages(native_bytes) == [
+        "Native page text is long enough for safe page indexing."
+    ]
+    assert document_pipeline.extract_native_pdf_pages(scanned_bytes) is None
+
 def test_document_pipeline_has_no_anthropic_provider_reference():
     from pathlib import Path
     source = Path("document_pipeline.py").read_text(encoding="utf-8")
