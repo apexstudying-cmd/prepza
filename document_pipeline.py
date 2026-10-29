@@ -21,6 +21,8 @@ import base64
 import threading
 from datetime import datetime
 
+from study_retrieval_service import make_source_version
+
 import fitz  # PyMuPDF
 
 import ai_service
@@ -28,6 +30,7 @@ import ai_service
 # Below this many characters of native text, a PDF page is treated as
 # scanned/image-only and sent through vision transcription instead.
 MIN_CHARS_PER_PAGE_BEFORE_OCR = 20
+EXTRACTOR_VERSION = "pdf-page-text-v1"
 
 # Fallback if the "ocr_batch_page_threshold" SystemSetting row is
 # missing (e.g. SQL migration not yet run). Kept in sync with the
@@ -94,7 +97,7 @@ def process_document(document_content_id):
     to call directly (e.g. from an admin retry endpoint) without going
     through start_processing's background thread.
     """
-    from app import db, DocumentContent
+    from app import db, DocumentContent, DocumentPageText, GeneratedMaterial
 
     content = db.session.get(DocumentContent, document_content_id)
     if not content:
@@ -113,7 +116,43 @@ def process_document(document_content_id):
             # clearly beats silently producing empty text.
             raise RuntimeError(f"Text extraction not yet implemented for file_type '{content.file_type}'")
 
-        text, page_count = _extract_pdf_text(file_bytes, job)
+        page_texts, page_count = _extract_pdf_pages(file_bytes, job)
+        text = "\n\n".join(page_texts)
+        prior_pages = DocumentPageText.query.filter_by(
+            document_content_id=content.id
+        ).order_by(DocumentPageText.page_number.asc()).all()
+        prior_page_texts = [row.page_text for row in prior_pages]
+        source_changed = (
+            prior_page_texts != page_texts if prior_pages
+            else bool(content.extracted_text and content.extracted_text != text)
+        )
+        source_version = make_source_version(
+            content.content_hash, page_texts, extractor_version=EXTRACTOR_VERSION
+        )
+
+        # Replace page rows atomically with the combined extraction update. If
+        # re-extraction changes the source text, old generated material must
+        # no longer be served as current study content.
+        DocumentPageText.query.filter_by(document_content_id=content.id).delete(
+            synchronize_session=False
+        )
+        db.session.flush()
+        for page_number, page_text in enumerate(page_texts, start=1):
+            db.session.add(DocumentPageText(
+                document_content_id=content.id,
+                page_number=page_number,
+                page_text=page_text,
+                content_hash=content.content_hash,
+                source_version=source_version,
+                extractor_version=EXTRACTOR_VERSION,
+            ))
+        if source_changed:
+            GeneratedMaterial.query.filter_by(
+                document_content_id=content.id, status="ready"
+            ).update({
+                "status": "failed",
+                "error_message": "Source text changed; regenerate this study material.",
+            }, synchronize_session=False)
 
         content.extracted_text = text
         content.page_count = page_count
@@ -138,6 +177,12 @@ def _fetch_file_bytes(storage_path):
 
 
 def _extract_pdf_text(file_bytes, job):
+    """Compatibility wrapper retaining the original combined-text contract."""
+    pages_text, page_count = _extract_pdf_pages(file_bytes, job)
+    return "\n\n".join(pages_text), page_count
+
+
+def _extract_pdf_pages(file_bytes, job):
     """
     Extracts text page-by-page with PyMuPDF. Pages with near-empty
     native text (scanned/image-only) are transcribed through the OpenAI
@@ -188,7 +233,7 @@ def _extract_pdf_text(file_bytes, job):
     finally:
         doc.close()
 
-    return "\n\n".join(pages_text), page_count
+    return pages_text, page_count
 
 
 def _render_page_png(page):
