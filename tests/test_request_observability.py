@@ -22,7 +22,7 @@ def test_alert_rules_do_not_expose_request_content():
     }]
 
 
-def test_http_middleware_adds_correlation_header_without_logging_private_url_data(caplog):
+def test_http_middleware_generates_server_owned_id_without_logging_private_url_data(caplog):
     import logging
     from flask import Flask
     from sqlalchemy import create_engine
@@ -44,14 +44,17 @@ def test_http_middleware_adds_correlation_header_without_logging_private_url_dat
         response = client.get("/health/123?secret=DO_NOT_LOG", headers={"X-Request-ID": "deadbeef-1234-5678-abcd-123456789abc"})
 
     assert response.status_code == 200
-    assert response.headers["X-Request-ID"] == "deadbeef-1234-5678-abcd-123456789abc"
+    request_id = response.headers["X-Request-ID"]
+    assert len(request_id) == 32
+    assert all(character in "0123456789abcdef" for character in request_id)
+    assert request_id != "deadbeef-1234-5678-abcd-123456789abc"
     assert "DO_NOT_LOG" not in caplog.text
     assert "123?secret" not in caplog.text
-    assert "deadbeef-1234-5678-abcd-123456789abc" in caplog.text
+    assert request_id in caplog.text
     engine.dispose()
 
 
-def test_invalid_client_request_id_is_replaced():
+def test_client_request_id_is_not_trusted():
     from flask import Flask
     from sqlalchemy import create_engine
     from request_observability import register_request_observability
