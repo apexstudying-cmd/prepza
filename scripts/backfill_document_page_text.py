@@ -12,14 +12,7 @@ import sys
 
 from sqlalchemy import inspect
 
-from app import (
-    app,
-    db,
-    DocumentContent,
-    DocumentPageText,
-    GeneratedMaterial,
-    fetch_private_file_bytes,
-)
+from app import app, db, DocumentContent, DocumentPageText, GeneratedMaterial, fetch_private_file_bytes
 from document_pipeline import EXTRACTOR_VERSION, extracted_text_changed, extract_native_pdf_pages
 from study_retrieval_service import make_source_version
 
@@ -30,13 +23,17 @@ def backfill(*, apply: bool, limit: int | None = None) -> dict:
             "document_page_text is missing; apply migrations/20261029_document_page_text.sql first"
         )
 
-    counts = {"candidates": 0, "backfilled": 0, "already_indexed": 0, "scanned_or_empty": 0, "unavailable": 0}
+    counts = {
+        "candidates": 0,
+        "backfilled": 0,
+        "already_indexed": 0,
+        "scanned_or_empty": 0,
+        "unavailable": 0,
+    }
     last_id = 0
     remaining = limit
-    while True:
+    while remaining is None or remaining > 0:
         batch_size = 25 if remaining is None else min(25, remaining)
-        if batch_size <= 0:
-            break
         batch = (
             DocumentContent.query
             .filter(
@@ -50,55 +47,60 @@ def backfill(*, apply: bool, limit: int | None = None) -> dict:
         )
         if not batch:
             break
+
         for content in batch:
             counts["candidates"] += 1
             last_id = content.id
-        existing = DocumentPageText.query.filter_by(
-            document_content_id=content.id
-        ).count()
-        if existing:
-            counts["already_indexed"] += 1
-            continue
-        if not apply:
-            continue
-
-        try:
-            file_bytes = fetch_private_file_bytes(content.storage_path, bucket="documents")
-            if not file_bytes:
-                counts["unavailable"] += 1
+            existing = DocumentPageText.query.filter_by(
+                document_content_id=content.id
+            ).count()
+            if existing:
+                counts["already_indexed"] += 1
                 continue
-            pages = extract_native_pdf_pages(file_bytes)
-            if not pages or (content.page_count and len(pages) != content.page_count):
-                counts["scanned_or_empty"] += 1
+            if not apply:
                 continue
 
-            source_version = make_source_version(
-                content.content_hash, pages, extractor_version=EXTRACTOR_VERSION
-            )
-            prior_text = content.extracted_text or ""
-            source_changed = extracted_text_changed([], prior_text, pages)
-            for page_number, page_text in enumerate(pages, start=1):
-                db.session.add(DocumentPageText(
-                    document_content_id=content.id,
-                    page_number=page_number,
-                    page_text=page_text,
-                    content_hash=content.content_hash,
-                    source_version=source_version,
-                    extractor_version=EXTRACTOR_VERSION,
-                ))
-            if source_changed:
-                GeneratedMaterial.query.filter_by(
-                    document_content_id=content.id, status="ready"
-                ).update({
-                    "status": "failed",
-                    "error_message": "Source page text was backfilled; regenerate this study material.",
-                }, synchronize_session=False)
-            db.session.commit()
-            counts["backfilled"] += 1
+            try:
+                file_bytes = fetch_private_file_bytes(content.storage_path, bucket="documents")
+                if not file_bytes:
+                    counts["unavailable"] += 1
+                    continue
+                pages = extract_native_pdf_pages(file_bytes)
+                if not pages or (content.page_count and len(pages) != content.page_count):
+                    counts["scanned_or_empty"] += 1
+                    continue
+
+                source_version = make_source_version(
+                    content.content_hash, pages, extractor_version=EXTRACTOR_VERSION
+                )
+                prior_text = content.extracted_text or ""
+                source_changed = extracted_text_changed([], prior_text, pages)
+                for page_number, page_text in enumerate(pages, start=1):
+                    db.session.add(DocumentPageText(
+                        document_content_id=content.id,
+                        page_number=page_number,
+                        page_text=page_text,
+                        content_hash=content.content_hash,
+                        source_version=source_version,
+                        extractor_version=EXTRACTOR_VERSION,
+                    ))
+                if source_changed:
+                    GeneratedMaterial.query.filter_by(
+                        document_content_id=content.id, status="ready"
+                    ).update({
+                        "status": "failed",
+                        "error_message": "Source page text was backfilled; regenerate this study material.",
+                    }, synchronize_session=False)
+                db.session.commit()
+                counts["backfilled"] += 1
             except Exception:
                 db.session.rollback()
                 counts["unavailable"] += 1
-                print(f"Backfill failed for document_content_id={content.id}; see application logs.", file=sys.stderr)
+                print(
+                    f"Backfill failed for document_content_id={content.id}; see application logs.",
+                    file=sys.stderr,
+                )
+
         if remaining is not None:
             remaining -= len(batch)
 
