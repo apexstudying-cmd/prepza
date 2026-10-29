@@ -730,8 +730,7 @@
           "anchors": [
             "def evaluate_alerts",
             "def register_request_observability",
-            "/admin/observability",
-            "http_request_id"
+            "/admin/observability"
           ]
         },
         {
@@ -789,8 +788,7 @@
         }
       ],
       "required_test_commands": [
-        "python -m pytest tests/test_request_observability.py tests/test_ai_observability.py -q",
-        "pnpm --dir frontend build"
+        "python -m pytest tests/test_request_observability.py tests/test_ai_observability.py -q"
       ],
       "notes": "IN_PROGRESS: privacy-safe server-generated request IDs, AI log correlation, slow/error event retention and the Admin Operations panel are implemented. Alert rules are visible in the dashboard and structured logs; outbound email/pager delivery and production migration rehearsal remain unconfigured."
     }
