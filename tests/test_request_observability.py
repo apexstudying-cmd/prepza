@@ -187,3 +187,45 @@ def test_sentry_event_scrubber_removes_request_and_user_secrets():
     assert "user" not in scrubbed or not scrubbed["user"]
     assert "extra" not in scrubbed
     assert "DO_NOT_SEND" not in str(scrubbed)
+
+
+
+def test_sentry_scrubber_removes_request_payload_and_uses_route_template():
+    from flask import Flask, jsonify, request
+    from request_observability import scrub_sentry_event
+
+    app = Flask("sentry-privacy-test")
+
+    @app.get("/documents/<int:document_id>")
+    def synthetic_document(document_id):
+        event = {
+            "request": {
+                "url": request.url,
+                "query_string": "token=private-token",
+                "data": "private student prompt",
+                "cookies": {"session": "private-cookie"},
+                "headers": {"Authorization": "private-header"},
+                "env": {"REMOTE_ADDR": "192.0.2.10"},
+            },
+            "user": {
+                "id": "private-user-id",
+                "email": "student@example.invalid",
+                "username": "private-username",
+                "ip_address": "192.0.2.10",
+            },
+            "contexts": {"request": {"url": "private-context"}},
+            "breadcrumbs": [{"message": "private prompt text"}],
+            "extra": {"document_text": "private page text"},
+        }
+        return jsonify(scrub_sentry_event(event, None))
+
+    response = app.test_client().get("/documents/123?token=private-token")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["request"]["url"].endswith("/documents/<int:document_id>")
+    assert "token" not in data["request"]["url"]
+    assert not {"query_string", "data", "cookies", "headers", "env"} & set(data["request"])
+    assert "user" not in data
+    assert "request" not in data["contexts"]
+    assert "breadcrumbs" not in data
+    assert "extra" not in data
