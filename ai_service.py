@@ -374,6 +374,17 @@ def _get_provider():
     return MultiProvider(), "multi"
 
 
+def _current_http_correlation_id():
+    """Return the current Flask request ID without requiring request context."""
+    try:
+        from flask import g, has_request_context
+        if has_request_context():
+            return getattr(g, "prepza_request_id", None)
+    except (ImportError, RuntimeError):
+        return None
+    return None
+
+
 def route_and_generate(ai_request: AIRequest) -> AIResponse:
     """
     Resolves an AIRequest to a task's primary model, calls it, and
@@ -392,6 +403,7 @@ def route_and_generate(ai_request: AIRequest) -> AIResponse:
     provider, provider_name = _get_provider()
     max_tokens = ai_request.max_tokens or task_config["max_tokens"]
     trace_id = uuid.uuid4().hex
+    correlation_id = ai_request.correlation_id or _current_http_correlation_id()
 
     models_to_try = [task_config["primary"]]
     if task_config.get("fallback"):
@@ -435,7 +447,7 @@ def route_and_generate(ai_request: AIRequest) -> AIResponse:
                 "model": model,
                 "prompt_version": ai_request.prompt_version,
                 "output_schema_version": ai_request.output_schema_version,
-                "correlation_id": ai_request.correlation_id,
+                "correlation_id": correlation_id,
                 "attempt": attempt + 1,
                 "escalated": response.escalated,
                 "latency_ms": latency_ms,
