@@ -14,6 +14,9 @@ from sqlalchemy import text
 
 from study_retrieval import StudyChunk, chunk_pages, hybrid_retrieve
 
+MAX_AUTHORIZED_PAGE_ROWS = 250
+MAX_RETRIEVAL_CHUNKS = 500
+
 
 @dataclass(frozen=True)
 class AuthorizedPage:
@@ -68,16 +71,20 @@ _AUTHORIZED_PAGE_SQL = text("""
       AND (d.user_id = :user_id OR lp.id IS NOT NULL)
       AND (:document_id IS NULL OR d.id = :document_id)
       AND p.page_text <> ''
-    ORDER BY d.id, p.page_number
+    ORDER BY d.id DESC, p.page_number ASC
+    LIMIT :max_pages
 """)
 
 
-def load_authorized_pages(connection, *, user_id: int, document_id: int | None = None) -> list[AuthorizedPage]:
+def load_authorized_pages(
+    connection, *, user_id: int, document_id: int | None = None,
+    max_pages: int = MAX_AUTHORIZED_PAGE_ROWS,
+) -> list[AuthorizedPage]:
     """Load page text only after the database applies the caller's access scope."""
-    if user_id is None:
+    if user_id is None or max_pages <= 0:
         return []
     rows = connection.execute(_AUTHORIZED_PAGE_SQL, {
-        "user_id": user_id, "document_id": document_id,
+        "user_id": user_id, "document_id": document_id, "max_pages": max_pages,
     }).mappings()
     return [
         AuthorizedPage(
@@ -125,6 +132,10 @@ def retrieve_authorized_pages(
                 continue
             chunks.append(chunk)
             by_identity[(page.document_id, page.page_number, chunk.chunk_index)] = page
+            if len(chunks) >= MAX_RETRIEVAL_CHUNKS:
+                break
+        if len(chunks) >= MAX_RETRIEVAL_CHUNKS:
+            break
 
     results = hybrid_retrieve(
         query,
