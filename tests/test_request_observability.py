@@ -130,3 +130,25 @@ def test_http_alert_is_logged_automatically_when_threshold_is_crossed(caplog, mo
     assert "private" not in caplog.text
     assert "synthetic" not in caplog.text
     engine.dispose()
+
+
+
+def test_external_alert_delivery_is_disabled_without_sentry_configuration(monkeypatch):
+    from unittest.mock import Mock
+    import sentry_sdk
+    from request_observability import _dispatch_external_alerts
+
+    monkeypatch.delenv("SENTRY_DSN", raising=False)
+    capture_message = Mock()
+    monkeypatch.setattr(sentry_sdk, "capture_message", capture_message)
+
+    _dispatch_external_alerts([{
+        "key": "http_5xx_spike",
+        "severity": "critical",
+        "count": 5,
+        "threshold": 5,
+        "window_minutes": 5,
+        "message": "Synthetic test alert.",
+    }])
+
+    capture_message.assert_not_called()
