@@ -51,13 +51,13 @@ def backfill(*, apply: bool, limit: int | None = None) -> dict:
         for content in batch:
             counts["candidates"] += 1
             last_id = content.id
-            existing = DocumentPageText.query.filter_by(
+            existing_query = DocumentPageText.query.filter_by(
                 document_content_id=content.id
-            ).count()
-            if existing:
-                counts["already_indexed"] += 1
-                continue
+            )
+            existing_count = existing_query.count()
             if not apply:
+                if existing_count:
+                    counts["already_indexed"] += 1
                 continue
 
             try:
@@ -73,8 +73,28 @@ def backfill(*, apply: bool, limit: int | None = None) -> dict:
                 source_version = make_source_version(
                     content.content_hash, pages, extractor_version=EXTRACTOR_VERSION
                 )
+                existing_rows = existing_query.order_by(DocumentPageText.page_number.asc()).all()
+                expected_rows = list(enumerate(pages, start=1))
+                if (
+                    len(existing_rows) == len(expected_rows)
+                    and all(
+                        row.page_number == page_number
+                        and row.page_text == page_text
+                        and row.content_hash == content.content_hash
+                        and row.source_version == source_version
+                        and row.extractor_version == EXTRACTOR_VERSION
+                        for row, (page_number, page_text) in zip(existing_rows, expected_rows)
+                    )
+                ):
+                    counts["already_indexed"] += 1
+                    continue
+
+                # Repair partial/stale indexes atomically rather than treating
+                # any existing row as proof that every page is current.
                 prior_text = content.extracted_text or ""
                 source_changed = extracted_text_changed([], prior_text, pages)
+                if existing_rows:
+                    existing_query.delete(synchronize_session=False)
                 for page_number, page_text in enumerate(pages, start=1):
                     db.session.add(DocumentPageText(
                         document_content_id=content.id,
