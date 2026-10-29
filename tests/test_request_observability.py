@@ -75,3 +75,50 @@ def test_client_request_id_is_not_trusted():
     assert len(request_id) == 32
     assert " " not in request_id
     engine.dispose()
+
+
+
+def test_http_alert_is_logged_automatically_when_threshold_is_crossed(caplog):
+    import json
+    import logging
+    from flask import Flask
+    from sqlalchemy import create_engine, text
+    from request_observability import register_request_observability
+
+    app = Flask("http-observability-alert-test")
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(text("""
+            CREATE TABLE request_observability_event (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                request_id VARCHAR(64) NOT NULL,
+                method VARCHAR(12) NOT NULL,
+                route VARCHAR(160) NOT NULL,
+                status_code INTEGER NOT NULL,
+                duration_ms FLOAT,
+                occurred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+    fake_db = type("FakeDB", (), {"engine": engine})()
+    register_request_observability(app, fake_db, lambda function: function, type("FakeModel", (), {}))
+
+    @app.get("/synthetic-5xx")
+    def synthetic_failure():
+        return {"error": "synthetic"}, 500
+
+    caplog.set_level(logging.WARNING, logger="prepza.http_observability")
+    with app.test_client() as client:
+        for _ in range(5):
+            assert client.get("/synthetic-5xx?private=never-log").status_code == 500
+
+    alert_records = [
+        json.loads(record.message)
+        for record in caplog.records
+        if "http_observability_alert_threshold_crossed" in record.message
+    ]
+    assert len(alert_records) == 1
+    assert alert_records[0]["alert_keys"] == ["http_5xx_spike"]
+    assert alert_records[0]["recent_5xx"] == 5
+    assert "private" not in caplog.text
+    assert "synthetic" not in caplog.text
+    engine.dispose()
