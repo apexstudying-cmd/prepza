@@ -442,6 +442,8 @@ The new `study_retrieval_service.py` loads page rows through a SQL query that en
 
 **Version invalidation:** when re-extraction changes page text, ready generated materials for that content are marked failed with an explicit regeneration message so they are not silently served as current. First-time page-text backfills that match existing combined text do not invalidate artifacts. Retrieval citation versions are content-addressed from the uploaded content hash, extractor version, page numbers, and extracted page text.
 
+Existing ready PDFs are not silently or automatically re-OCRed after migration. `scripts/backfill_document_page_text.py` defaults to a read-only inventory; its explicit `--apply` mode only backfills documents where every page has sufficient native PDF text. Scanned/mixed PDFs are skipped rather than invoking billable OCR. Rehearse the script on a disposable/staging database and review counts before applying it to production.
+
 ### 17. Recommended target flow for Prepza's study tutor
 
 The intended future flow, subject to implementation and tests, is:
