@@ -9,7 +9,7 @@ let installed = false
 let activeChat: ChatState | null = null
 let lastTrafficAt = 0
 const listeners = new Set<(state: ChatState | null) => void>()
-const ADA_MENTION_RE = /(^|\s)@morio\b/i
+const MORIO_MENTION_RE = /(^|\s)@morio\b/i
 
 function emit(state: ChatState | null) { activeChat = state; listeners.forEach(listener => listener(state)) }
 function pathOf(input: RequestInfo | URL): string {
@@ -87,7 +87,7 @@ export default function InChatAdaEnhancer() {
     const input = document.querySelector('input[placeholder="Message…"]') as HTMLInputElement | null
     if (!input) return
     const onInput = () => {
-      if (ADA_MENTION_RE.test(input.value)) setOpen(true)
+      if (MORIO_MENTION_RE.test(input.value)) setOpen(true)
     }
     onInput()
     input.addEventListener('input', onInput)
