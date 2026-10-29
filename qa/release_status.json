@@ -162,6 +162,7 @@
     }
   ],
   "next_actions": [
+    "Home UI verification: rebuild the exact current main commit locally, verify the React splash/login/home brand marks use /icon-192.png, confirm the five Home quick actions are Upload, My Study, Library, Morio and Shop, and commit the intended PNG icon assets if the user's local versions differ. Browser/PWA verification is still pending; do not mark this as passed from source inspection alone.",
     "Staging access needed: apply migrations/20261029_document_page_text.sql and migrations/20261029_request_observability.sql through the controlled backup/restore and migration process, then verify schema. Do not run these against production without explicit deployment approval.",
     "Staging access needed: run the read-only inventory first, then review and execute scripts/backfill_document_page_text.py --apply only for native-text PDFs on staging; scanned/mixed PDFs must remain skipped and must not trigger paid OCR.",
     "Course-material review needed: provide or approve representative course PDFs and expected source pages so retrieval Recall@5/Precision@5/MRR@5 and generated-answer citation faithfulness can be reviewed by a human; keep billable embeddings disabled until a cost/quality decision is approved.",
