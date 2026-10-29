@@ -1762,13 +1762,7 @@ TUTOR_PREREQUISITE_MARKER_RE = re.compile(r"\n?\[\[PREREQUISITE:\s*(.+?)\s*\]\]\
 def _build_tutor_system_prompt(
     unit_context, document_text, page_count, *, retrieval_mode=False, include_document_text=True
 ):
-    """
-    Builds the (cacheable) tutor system prompt: tone/behavior
-    instructions, the concept-marker protocol, and the full document
-    text. Kept as one string (not split into "instructions" + "doc")
-    since both go into the SAME cached system-prompt block regardless.
-    """
-    return (
+    """Build stable tutor instructions, optionally for separately supplied page excerpts."""
     context_intro = (
         f"student on {unit_context}, grounded in relevant retrieved excerpts from the uploaded document ({page_count or '?'} pages. "
         if retrieval_mode else
@@ -1803,31 +1797,30 @@ def _build_tutor_system_prompt(
         "you've already offered guidance - respect a clear, direct "
         "request rather than withholding the answer out of stubbornness. "
         "This guided-practice default does NOT apply to conceptual "
-        "questions (\"explain X\", \"what is Y\") - answer those "
-        "directly, no hint-first detour.\n\n"
+        "questions (\\\"explain X\\\", \\\"what is Y\\\") - answer those "
+        "directly, no hint-first detour.\\n\\n"
         "At the very end of EVERY reply, on its own final line, add a "
         "machine-readable marker naming the single main academic concept "
-        "this turn was about, in this exact format:\n"
-        "[[CONCEPT: <2-5 word concept name, Title Case>]]\n"
+        "this turn was about, in this exact format:\\n"
+        "[[CONCEPT: <2-5 word concept name, Title Case>]]\\n"
         "If the turn was small talk, logistics, or not about a specific "
         "academic concept, write [[CONCEPT: none]] instead. Always include "
         "exactly one such line, always last, always in this exact bracket "
         "format - it is stripped out before the student ever sees your "
         "reply, so it does not need to read naturally as part of the "
-        "conversation.\n\n"
+        "conversation.\\n\\n"
         "Directly above that CONCEPT marker line (making it the "
         "second-to-last line, not the last), add one more marker "
         "naming ONE key prerequisite concept a student would need to "
         "already understand before this turn's concept, in this exact "
-        "format:\n"
-        "[[PREREQUISITE: <2-5 word prerequisite concept name, Title Case>]]\n"
+        "format:\\n"
+        "[[PREREQUISITE: <2-5 word prerequisite concept name, Title Case>]]\\n"
         "If this turn wasn't really about a specific concept, or it "
         "has no clear single prerequisite, write [[PREREQUISITE: none]] "
         "instead. This marker is also stripped out before the student "
-        "sees your reply.\n\n"
+        "sees your reply.\\n\\n"
         + document_block
     )
-
 
 def _format_mastery_context(snapshot):
     """
