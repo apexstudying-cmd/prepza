@@ -193,7 +193,7 @@
           "kind": "frontend_wiring",
           "path": "tools/apply_shared_study_streak.py",
           "anchors": [
-            "apply_shared_study_streak.py",
+            "import SharedStudyStreak from './SharedStudyStreak'",
             "SharedStudyStreak conversationId"
           ]
         },
