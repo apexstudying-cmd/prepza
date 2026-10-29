@@ -2505,7 +2505,7 @@ def test_document_reextraction_invalidates_stale_materials_and_replaces_page_ind
         file_size_bytes=128,
         page_count=2,
         status="ready",
-        extracted_text="Original first page.\\n\\nSecond page remains unchanged.",
+        extracted_text="Original first page.\n\nSecond page remains unchanged.",
     )
     db.session.add(content)
     db.session.commit()
