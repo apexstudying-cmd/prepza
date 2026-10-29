@@ -1,0 +1,169 @@
+{
+  "description": "Curated synthetic citation-retrieval smoke benchmark. Scores retrieval relevance, not factual correctness or human citation faithfulness; expand with anonymized real course materials before launch.",
+  "corpus": [
+    {
+      "document_id": 1,
+      "document_version": "eval-v1",
+      "page_number": 1,
+      "text": "Calculus derivatives measure instantaneous rates of change and use the limit definition."
+    },
+    {
+      "document_id": 1,
+      "document_version": "eval-v1",
+      "page_number": 2,
+      "text": "Integration computes accumulated quantities and the area under a curve."
+    },
+    {
+      "document_id": 2,
+      "document_version": "eval-v1",
+      "page_number": 1,
+      "text": "Bayes theorem updates prior probability using observed evidence and likelihood."
+    },
+    {
+      "document_id": 2,
+      "document_version": "eval-v1",
+      "page_number": 2,
+      "text": "A sample space contains all possible outcomes of a random experiment."
+    },
+    {
+      "document_id": 3,
+      "document_version": "eval-v1",
+      "page_number": 1,
+      "text": "A balance sheet reports assets liabilities and equity at a point in time."
+    },
+    {
+      "document_id": 3,
+      "document_version": "eval-v1",
+      "page_number": 2,
+      "text": "Cash flow statements classify operating investing and financing cash flows."
+    },
+    {
+      "document_id": 4,
+      "document_version": "eval-v1",
+      "page_number": 1,
+      "text": "Photosynthesis converts light energy into chemical energy using chlorophyll."
+    },
+    {
+      "document_id": 4,
+      "document_version": "eval-v1",
+      "page_number": 2,
+      "text": "Cellular respiration releases energy from glucose to produce ATP."
+    },
+    {
+      "document_id": 5,
+      "document_version": "eval-v1",
+      "page_number": 1,
+      "text": "Newton second law relates net force mass and acceleration."
+    },
+    {
+      "document_id": 5,
+      "document_version": "eval-v1",
+      "page_number": 2,
+      "text": "Momentum equals mass multiplied by velocity and is conserved in isolated systems."
+    },
+    {
+      "document_id": 6,
+      "document_version": "eval-v1",
+      "page_number": 1,
+      "text": "A relational database organizes data into tables with rows and columns."
+    },
+    {
+      "document_id": 6,
+      "document_version": "eval-v1",
+      "page_number": 2,
+      "text": "A SQL join combines related rows from two or more tables."
+    }
+  ],
+  "cases": [
+    {
+      "query": "How do derivatives measure instantaneous rates of change?",
+      "expected_sources": [
+        {
+          "document_id": 1,
+          "page_number": 1
+        }
+      ]
+    },
+    {
+      "query": "What does integration calculate for area under a curve?",
+      "expected_sources": [
+        {
+          "document_id": 1,
+          "page_number": 2
+        }
+      ]
+    },
+    {
+      "query": "How does Bayes theorem use prior probability and evidence?",
+      "expected_sources": [
+        {
+          "document_id": 2,
+          "page_number": 1
+        }
+      ]
+    },
+    {
+      "query": "What are all possible outcomes in a sample space?",
+      "expected_sources": [
+        {
+          "document_id": 2,
+          "page_number": 2
+        }
+      ]
+    },
+    {
+      "query": "Which statement reports assets liabilities and equity?",
+      "expected_sources": [
+        {
+          "document_id": 3,
+          "page_number": 1
+        }
+      ]
+    },
+    {
+      "query": "What are operating investing and financing cash flows?",
+      "expected_sources": [
+        {
+          "document_id": 3,
+          "page_number": 2
+        }
+      ]
+    },
+    {
+      "query": "How does chlorophyll convert light energy during photosynthesis?",
+      "expected_sources": [
+        {
+          "document_id": 4,
+          "page_number": 1
+        }
+      ]
+    },
+    {
+      "query": "What process releases energy from glucose to make ATP?",
+      "expected_sources": [
+        {
+          "document_id": 4,
+          "page_number": 2
+        }
+      ]
+    },
+    {
+      "query": "Which law relates net force mass and acceleration?",
+      "expected_sources": [
+        {
+          "document_id": 5,
+          "page_number": 1
+        }
+      ]
+    },
+    {
+      "query": "How does a SQL join combine rows from related tables?",
+      "expected_sources": [
+        {
+          "document_id": 6,
+          "page_number": 2
+        }
+      ]
+    }
+  ]
+}
