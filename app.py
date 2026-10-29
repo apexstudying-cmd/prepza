@@ -4254,11 +4254,27 @@ def _approved_library_publication(document):
 
 
 def _can_study_document(user_id, document):
+    """Authorize owner access or a publication scoped to the viewer's exact cohort."""
     if not document or document.is_removed:
         return False
     if document.user_id == user_id:
         return True
-    return bool(_approved_library_publication(document))
+
+    publication = _approved_library_publication(document)
+    viewer = db.session.get(User, user_id) if user_id is not None else None
+    if not publication or not viewer:
+        return False
+
+    viewer_scope = (
+        viewer.university_id, viewer.program_id, viewer.year, viewer.semester
+    )
+    publication_scope = (
+        publication.university_id, publication.program_id,
+        publication.year, publication.semester,
+    )
+    # Library discovery already requires a complete academic profile. Apply the
+    # same rule to direct-ID routes so they cannot bypass the cohort filter.
+    return all(value is not None for value in viewer_scope) and viewer_scope == publication_scope
 
 
 
