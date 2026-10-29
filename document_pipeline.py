@@ -122,9 +122,8 @@ def process_document(document_content_id):
             document_content_id=content.id
         ).order_by(DocumentPageText.page_number.asc()).all()
         prior_page_texts = [row.page_text for row in prior_pages]
-        source_changed = (
-            prior_page_texts != page_texts if prior_pages
-            else bool(content.extracted_text and content.extracted_text != text)
+        source_changed = extracted_text_changed(
+            prior_page_texts, content.extracted_text, page_texts
         )
         source_version = make_source_version(
             content.content_hash, page_texts, extractor_version=EXTRACTOR_VERSION
@@ -174,6 +173,14 @@ def process_document(document_content_id):
 def _fetch_file_bytes(storage_path):
     from app import fetch_private_file_bytes
     return fetch_private_file_bytes(storage_path, bucket="documents")
+
+
+def extracted_text_changed(prior_page_texts, prior_combined_text, new_page_texts):
+    """Detect content changes without invalidating first-time page-text backfills."""
+    if prior_page_texts:
+        return list(prior_page_texts) != list(new_page_texts)
+    new_combined = "\\n\\n".join(new_page_texts)
+    return bool(prior_combined_text and prior_combined_text != new_combined)
 
 
 def _extract_pdf_text(file_bytes, job):
