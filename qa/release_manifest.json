@@ -609,6 +609,190 @@
         "python scripts/test_morio_identity_contract.py"
       ],
       "notes": "Student-facing main and scoped E2EE tutor prompts, Home/document/chat labels, @Morio mention, and study panels now use Morio. Internal Ada-named routes/functions remain compatibility details. Frontend build, identity contract, E2EE security, responsive mobile/tablet, full disposable PostgreSQL QA, and online/offline generated-material browser journeys passed on runtime commit fe8bbbb195d2090c481052172b8af5ec9176e9bc. RAG embeddings/vector retrieval remain a separate future implementation and are not claimed by this identity gate."
+    },
+    {
+      "id": "study_retrieval_citations",
+      "name": "Page-preserving, permission-scoped study retrieval and citation evaluation",
+      "release_scope": "release",
+      "layers": [
+        {
+          "kind": "database_model",
+          "path": "app.py",
+          "anchors": [
+            "class DocumentPageText"
+          ]
+        },
+        {
+          "kind": "sql_migration",
+          "path": "migrations/20261029_document_page_text.sql",
+          "anchors": [
+            "CREATE TABLE IF NOT EXISTS document_page_text",
+            "uq_document_page_text_content_page"
+          ]
+        },
+        {
+          "kind": "extraction",
+          "path": "document_pipeline.py",
+          "anchors": [
+            "def _extract_pdf_pages",
+            "DocumentPageText(",
+            "extracted_text_changed"
+          ]
+        },
+        {
+          "kind": "retrieval_authorization",
+          "path": "study_retrieval_service.py",
+          "anchors": [
+            "def load_authorized_pages",
+            "def retrieve_authorized_pages",
+            "lp.university_id = viewer.university_id"
+          ]
+        },
+        {
+          "kind": "authenticated_route",
+          "path": "study_retrieval_routes.py",
+          "anchors": [
+            "/api/study/retrieval",
+            "@login_required",
+            "@require_csrf"
+          ]
+        },
+        {
+          "kind": "safe_backfill",
+          "path": "scripts/backfill_document_page_text.py",
+          "anchors": [
+            "def backfill",
+            "extract_native_pdf_pages",
+            "No private objects were fetched"
+          ]
+        },
+        {
+          "kind": "citation_evaluation_test",
+          "path": "tests/test_study_retrieval_service.py",
+          "anchors": [
+            "test_citation_evaluation_dataset_meets_recall_at_five_threshold",
+            "test_document_scope_cannot_bypass_ownership_or_publication"
+          ]
+        },
+        {
+          "kind": "postgres_integration_test",
+          "path": "tests/test_local_qa_real_world.py",
+          "anchors": [
+            "test_study_retrieval_enforces_document_ownership_with_shared_content"
+          ]
+        },
+        {
+          "kind": "ci",
+          "path": ".github/workflows/ai-economics-validation.yml",
+          "anchors": [
+            "tests/test_study_retrieval_service.py"
+          ]
+        },
+        {
+          "kind": "disposable_postgres_ci",
+          "path": ".github/workflows/mobile-responsive-browser.yml",
+          "anchors": [
+            "Apply additive page-text and observability SQL migrations to disposable PostgreSQL",
+            "Run full disposable PostgreSQL QA suite"
+          ]
+        }
+      ],
+      "required_test_commands": [
+        "python -m pytest tests/test_study_retrieval.py tests/test_study_retrieval_service.py -q",
+        "python -m pytest tests/test_local_qa_real_world.py -k study_retrieval_enforces_document_ownership_with_shared_content -q",
+        "python -m py_compile study_retrieval.py study_retrieval_service.py study_retrieval_routes.py document_pipeline.py scripts/backfill_document_page_text.py"
+      ],
+      "notes": "IN_PROGRESS: focused synthetic Recall@5 and access-boundary tests pass; the current disposable PostgreSQL/browser regression is still running. Production migration rehearsal, native-only existing-document backfill, representative real-course citation evaluation and ordinary Morio prompt integration remain outstanding. No paid embeddings or OCR are used by the prototype/backfill."
+    },
+    {
+      "id": "http_observability",
+      "name": "HTTP request correlation, admin dashboard and alert signals",
+      "release_scope": "release",
+      "layers": [
+        {
+          "kind": "database_model",
+          "path": "app.py",
+          "anchors": [
+            "class RequestObservabilityEvent"
+          ]
+        },
+        {
+          "kind": "sql_migration",
+          "path": "migrations/20261029_request_observability.sql",
+          "anchors": [
+            "CREATE TABLE IF NOT EXISTS request_observability_event",
+            "ix_request_observability_status_time"
+          ]
+        },
+        {
+          "kind": "http_middleware_and_alert_rules",
+          "path": "request_observability.py",
+          "anchors": [
+            "def evaluate_alerts",
+            "def register_request_observability",
+            "/admin/observability",
+            "http_request_id"
+          ]
+        },
+        {
+          "kind": "ai_correlation",
+          "path": "ai_service.py",
+          "anchors": [
+            "def _current_http_correlation_id",
+            "http_request_id"
+          ]
+        },
+        {
+          "kind": "admin_dashboard",
+          "path": "frontend/src/admin/ObservabilityPanel.tsx",
+          "anchors": [
+            "HTTP observability",
+            "/admin/observability",
+            "Recent request events"
+          ]
+        },
+        {
+          "kind": "dashboard_wiring",
+          "path": "frontend/src/admin/AdminOperationsDashboard.tsx",
+          "anchors": [
+            "ObservabilityPanel"
+          ]
+        },
+        {
+          "kind": "tests",
+          "path": "tests/test_request_observability.py",
+          "anchors": [
+            "test_alert_rules_activate_at_documented_thresholds",
+            "test_http_middleware_generates_server_owned_id_without_logging_private_url_data"
+          ]
+        },
+        {
+          "kind": "ai_correlation_test",
+          "path": "tests/test_ai_observability.py",
+          "anchors": [
+            "test_http_request_id_is_used_when_ai_request_has_no_explicit_correlation"
+          ]
+        },
+        {
+          "kind": "ci",
+          "path": ".github/workflows/ai-economics-validation.yml",
+          "anchors": [
+            "tests/test_request_observability.py"
+          ]
+        },
+        {
+          "kind": "postgres_ci",
+          "path": ".github/workflows/mobile-responsive-browser.yml",
+          "anchors": [
+            "Apply additive page-text and observability SQL migrations to disposable PostgreSQL"
+          ]
+        }
+      ],
+      "required_test_commands": [
+        "python -m pytest tests/test_request_observability.py tests/test_ai_observability.py -q",
+        "pnpm --dir frontend build"
+      ],
+      "notes": "IN_PROGRESS: privacy-safe server-generated request IDs, AI log correlation, slow/error event retention and the Admin Operations panel are implemented. Alert rules are visible in the dashboard and structured logs; outbound email/pager delivery and production migration rehearsal remain unconfigured."
     }
   ]
 }
