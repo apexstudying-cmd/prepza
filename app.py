@@ -2431,6 +2431,7 @@ def require_admin(f):
     return decorated
 
 
+
 def _is_admin_surface(path):
     return (
         path == "/admin"
