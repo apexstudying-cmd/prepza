@@ -48,8 +48,8 @@ export default function DirectInChatAdaEnhancer() {
   const selectedDoc = useMemo(() => docs.find(doc => doc.id === documentId) || null, [docs, documentId])
   useEffect(() => {
     const openListener = (event: Event) => { const detail = (event as CustomEvent<{ conversationId?: number }>).detail; const requestedConversationId = Number(detail?.conversationId); if (!chat || !requestedConversationId || chat.conversationId === requestedConversationId) setOpen(true) }
-    window.addEventListener('prepza-open-ada', openListener)
-    return () => window.removeEventListener('prepza-open-ada', openListener)
+    window.addEventListener('prepza-open-morio', openListener)
+    return () => window.removeEventListener('prepza-open-morio', openListener)
   }, [chat])
   useEffect(() => {
     if (!open || !chat) return
@@ -60,20 +60,20 @@ export default function DirectInChatAdaEnhancer() {
     return () => { cancelled = true }
   }, [open, chat?.conversationId])
   if (!chat) return null
-  const askAda = async () => { if (!documentId || !selectedText.trim() || !prompt.trim()) return; setAsking(true); setError(''); try { const context = createAdaStudyContext({ conversationId: chat.conversationId, keyEpoch: chat.keyEpoch, documentId, pageStart, pageEnd, selectedText, userPrompt: prompt }); setAnswer(await askAdaAboutSelectedStudyContext(context)) } catch (errorValue) { setError(errorValue instanceof Error ? errorValue.message : 'Ada could not answer right now') } finally { setAsking(false) } }
+  const askAda = async () => { if (!documentId || !selectedText.trim() || !prompt.trim()) return; setAsking(true); setError(''); try { const context = createAdaStudyContext({ conversationId: chat.conversationId, keyEpoch: chat.keyEpoch, documentId, pageStart, pageEnd, selectedText, userPrompt: prompt }); setAnswer(await askAdaAboutSelectedStudyContext(context)) } catch (errorValue) { setError(errorValue instanceof Error ? errorValue.message : 'Morio could not answer right now') } finally { setAsking(false) } }
   const pageCount = selectedDoc?.page_count || 1
   const updatePageStart = (value: number) => { const next = Math.max(1, Math.min(value, pageCount)); setPageStart(next); setPageEnd(Math.max(next, Math.min(pageEnd, next + 49, pageCount))) }
   const updatePageEnd = (value: number) => setPageEnd(Math.max(pageStart, Math.min(value, Math.min(pageStart + 49, pageCount))))
   return <>
-    {open && <section aria-label="Ada study panel" style={{ position: 'fixed', right: 20, bottom: 20, zIndex: 1200, width: 'min(380px, calc(100vw - 32px))', maxHeight: '72vh', overflowY: 'auto', border: '1px solid rgba(255,255,255,.12)', borderRadius: 18, background: '#0d1420', color: '#f7f2e8', padding: 16, boxShadow: '0 24px 60px rgba(0,0,0,.34)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}><div><div style={{ fontWeight: 800, fontSize: 17 }}>Study with Ada</div><div style={{ opacity: .65, fontSize: 12, marginTop: 3 }}>Choose the study context Ada should use.</div></div><button type="button" onClick={() => setOpen(false)} style={{ background: 'transparent', border: 0, color: 'inherit', cursor: 'pointer' }}>Close</button></div>
-      <div style={{ fontSize: 11, opacity: .58, marginBottom: 10 }}>Only the study context you choose is sent to Ada.</div>
+    {open && <section aria-label="Morio study panel" style={{ position: 'fixed', right: 20, bottom: 20, zIndex: 1200, width: 'min(380px, calc(100vw - 32px))', maxHeight: '72vh', overflowY: 'auto', border: '1px solid rgba(255,255,255,.12)', borderRadius: 18, background: '#0d1420', color: '#f7f2e8', padding: 16, boxShadow: '0 24px 60px rgba(0,0,0,.34)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}><div><div style={{ fontWeight: 800, fontSize: 17 }}>Study with Morio</div><div style={{ opacity: .65, fontSize: 12, marginTop: 3 }}>Choose the study context Morio should use.</div></div><button type="button" onClick={() => setOpen(false)} style={{ background: 'transparent', border: 0, color: 'inherit', cursor: 'pointer' }}>Close</button></div>
+      <div style={{ fontSize: 11, opacity: .58, marginBottom: 10 }}>Only the study context you choose is sent to Morio.</div>
       <label style={{ display: 'block', fontSize: 12, opacity: .72, marginBottom: 6 }}>Document</label><select value={documentId ?? ''} onChange={event => setDocumentId(Number(event.target.value) || null)} disabled={loadingDocs} style={{ width: '100%', padding: 10, borderRadius: 10, marginBottom: 10 }}><option value="">Select a ready document</option>{docs.map(doc => <option key={doc.id} value={doc.id}>{doc.title}</option>)}</select>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}><label style={{ fontSize: 12 }}>From page<input type="number" min={1} max={pageCount} value={pageStart} onChange={event => updatePageStart(Number(event.target.value) || 1)} style={{ width: '100%', marginTop: 5, padding: 9, borderRadius: 9 }} /></label><label style={{ fontSize: 12 }}>To page<input type="number" min={pageStart} max={Math.min(pageStart + 49, pageCount)} value={pageEnd} onChange={event => updatePageEnd(Number(event.target.value) || pageStart)} style={{ width: '100%', marginTop: 5, padding: 9, borderRadius: 9 }} /></label></div>
       <label style={{ display: 'block', fontSize: 12, opacity: .72, marginBottom: 6 }}>Study excerpt</label><textarea value={selectedText} onChange={event => setSelectedText(event.target.value)} placeholder="Paste or select the passage you are studying…" rows={6} style={{ width: '100%', resize: 'vertical', padding: 10, borderRadius: 10, marginBottom: 10 }} />
-      <label style={{ display: 'block', fontSize: 12, opacity: .72, marginBottom: 6 }}>Ask Ada</label><textarea value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="Explain this, quiz me, or help me solve it…" rows={3} style={{ width: '100%', resize: 'vertical', padding: 10, borderRadius: 10, marginBottom: 10 }} />
+      <label style={{ display: 'block', fontSize: 12, opacity: .72, marginBottom: 6 }}>Ask Morio</label><textarea value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="Explain this, quiz me, or help me solve it…" rows={3} style={{ width: '100%', resize: 'vertical', padding: 10, borderRadius: 10, marginBottom: 10 }} />
       {error && <div style={{ color: '#ffb4ab', fontSize: 12, marginBottom: 10 }}>{error}</div>}
-      <button type="button" onClick={askAda} disabled={asking || !documentId || !selectedText.trim() || !prompt.trim()} style={{ width: '100%', padding: 11, borderRadius: 10, border: 0, background: '#e8c36a', color: '#111', fontWeight: 800, cursor: asking ? 'wait' : 'pointer' }}>{asking ? 'Ada is thinking…' : 'Ask Ada'}</button>
+      <button type="button" onClick={askAda} disabled={asking || !documentId || !selectedText.trim() || !prompt.trim()} style={{ width: '100%', padding: 11, borderRadius: 10, border: 0, background: '#e8c36a', color: '#111', fontWeight: 800, cursor: asking ? 'wait' : 'pointer' }}>{asking ? 'Morio is thinking…' : 'Ask Morio'}</button>
       {answer && <div style={{ marginTop: 14, borderTop: '1px solid rgba(255,255,255,.1)', paddingTop: 14, lineHeight: 1.55, fontSize: 14, whiteSpace: 'pre-wrap' }}>{answer.answer}</div>}
     </section>}
   </>
