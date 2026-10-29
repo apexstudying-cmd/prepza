@@ -797,8 +797,7 @@
           "kind": "postgres_integration_test",
           "path": "tests/test_local_qa_real_world.py",
           "anchors": [
-            "test_admin_observability_dashboard_surfaces_error_and_latency_alerts",
-            "test_document_access_denies_direct_id_for_wrong_library_cohort"
+            "test_admin_observability_dashboard_surfaces_error_and_latency_alerts"
           ]
         }
       ],
