@@ -139,12 +139,17 @@ def hybrid_retrieve(
     """
     if not isinstance(query, str) or not query.strip():
         return []
+    query_tokens = _tokens(query)
+    if not query_tokens:
+        return []
     if top_k <= 0:
         return []
     if (embed_query is None) != (embed_text is None):
         raise ValueError("embed_query and embed_text must be provided together")
     if lexical_weight < 0 or semantic_weight < 0 or lexical_weight + semantic_weight <= 0:
         raise ValueError("retrieval weights must be non-negative with a positive total")
+    if embed_query is None and lexical_weight <= 0:
+        raise ValueError("lexical_weight must be positive without an embedding adapter")
     authorized = [
         chunk for chunk in chunks
         if chunk.document_id in allowed_document_ids and chunk.text.strip()
@@ -152,7 +157,6 @@ def hybrid_retrieve(
     if not authorized:
         return []
 
-    query_tokens = _tokens(query)
     lexical_scores = [_lexical_score(query_tokens, chunk.text) for chunk in authorized]
     semantic_scores: list[float | None]
     if embed_query is None:
