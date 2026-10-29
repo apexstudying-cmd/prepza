@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - "frontend/**"
+      - "e2ee_ada_routes.py"
+      - "tools/fix_chat_ada_mention_trigger.py"
+      - "scripts/test_morio_identity_contract.py"
       - "app.py"
       - "usage_billing.py"
       - "ai_economics.py"
@@ -38,6 +41,8 @@ jobs:
         run: pnpm exec tsc --noEmit
       - name: Chat UI contract
         run: python3 scripts/test_chat_ui_contract.py
+      - name: Morio identity contract
+        run: python3 scripts/test_morio_identity_contract.py
       - name: StudyHub offline storage contract
         run: python3 tools/verify_studyhub_offline_limits.py
       - name: Student screen end-to-end contract
