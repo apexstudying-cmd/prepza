@@ -1759,7 +1759,9 @@ TUTOR_CONCEPT_MARKER_RE = re.compile(r"\n?\[\[CONCEPT:\s*(.+?)\s*\]\]\s*\Z", re.
 TUTOR_PREREQUISITE_MARKER_RE = re.compile(r"\n?\[\[PREREQUISITE:\s*(.+?)\s*\]\]\s*\Z", re.IGNORECASE)
 
 
-def _build_tutor_system_prompt(unit_context, document_text, page_count):
+def _build_tutor_system_prompt(
+    unit_context, document_text, page_count, *, retrieval_mode=False, include_document_text=True
+):
     """
     Builds the (cacheable) tutor system prompt: tone/behavior
     instructions, the concept-marker protocol, and the full document
@@ -1767,18 +1769,28 @@ def _build_tutor_system_prompt(unit_context, document_text, page_count):
     since both go into the SAME cached system-prompt block regardless.
     """
     return (
+    context_intro = (
+        f"student on {unit_context}, grounded in relevant retrieved excerpts from the uploaded document ({page_count or '?'} pages. "
+        if retrieval_mode else
+        f"student on {unit_context}, grounded in the document they uploaded ({page_count or '?'} pages), reproduced in full below. "
+    )
+    grounding_instructions = (
+        "Ground every answer in the document text below wherever relevant. Cite source-based claims using [p. N] with page numbers shown in the supplied excerpts; never invent a page number. If the excerpts do not support an answer, say the retrieved pages do not establish it rather than guessing. "
+        if retrieval_mode else
+        "Ground every answer in the document text below wherever it's relevant - if the student asks about something the document doesn't cover, say so rather than inventing content. "
+    )
+    document_block = f"\\n\\nDOCUMENT TEXT:\\n{document_text}" if include_document_text else ""
+    return (
         "You are Morio, Prepza's AI tutor. Introduce yourself as Morio when asked; do not identify yourself as Ada or ChatGPT. You are working one-on-one with a "
-        f"student on {unit_context}, grounded in the document they uploaded "
-        f"({page_count or '?'} pages), reproduced in full below. Teach the "
-        "way a patient, intelligent, encouraging-but-direct personal tutor "
+        + context_intro
+        + "Teach the way a patient, intelligent, encouraging-but-direct personal tutor "
         "would: check understanding before assuming it, explain clearly, "
         "use examples where they genuinely help, and prioritize the "
         "student actually learning the material over simply answering as "
-        "fast as possible. Ground every answer in the document text below "
-        "wherever it's relevant - if the student asks about something the "
-        "document doesn't cover, say so rather than inventing content. "
-        "Keep replies conversational and appropriately concise for a chat, "
-        "not an essay.\n\n"
+        "fast as possible. "
+        + grounding_instructions
+        + "Keep replies conversational and appropriately concise for a chat, "
+        "not an essay.\\n\\n"
         "GUIDED PROBLEM-SOLVING: when the student asks you to solve, "
         "complete, or work through a specific exercise or homework-style "
         "problem, default to guided practice rather than handing over a "
@@ -1813,7 +1825,7 @@ def _build_tutor_system_prompt(unit_context, document_text, page_count):
         "has no clear single prerequisite, write [[PREREQUISITE: none]] "
         "instead. This marker is also stripped out before the student "
         "sees your reply.\n\n"
-        f"DOCUMENT TEXT:\n{document_text}"
+        + document_block
     )
 
 
