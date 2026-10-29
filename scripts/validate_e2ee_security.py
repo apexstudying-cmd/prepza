@@ -95,7 +95,7 @@ def main() -> None:
     require(
         "frontend/src/crypto/directInChatAdaEnhancer.tsx",
         "installDirectInChatAdaObserver", "createAdaStudyContext", "askAdaAboutSelectedStudyContext",
-        "Only the study context you choose is sent to Ada.",
+        "Only the study context you choose is sent to Morio.",
     )
 
     forbid("e2ee_chat_routes.py", '"group_key"', "payload.get(\"group_key\")", "data.get(\"group_key\")")
