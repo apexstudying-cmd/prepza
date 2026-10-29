@@ -558,7 +558,7 @@ export default function WhatsAppChatExperience({ onClose, onOpenProfile, onOpenO
   }
   const loadEarlier = async () => { if (selectedId == null || loadingEarlier || messages.length === 0) return; const firstId = messages[0].id; setLoadingEarlier(true); try { const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages?before_id=${firstId}`); const earlier = result.messages || []; if (earlier.length === 0) { setError('You have reached the beginning of this conversation.'); } setMessages(current => { const merged = [...earlier, ...current.filter(message => !earlier.some(old => old.id === message.id))]; void cacheChatMessages(selectedId, merged); return merged }) } catch (value) { setError(friendlyError(value, 'Could not load earlier messages.')) } finally { setLoadingEarlier(false) } }
   const runMessageSearch = async () => { if (selectedId == null) return; const q = messageSearch.trim(); if (!q) { setMessageSearchResults([]); return }; try { const result = await api<{ messages: Message[] }>(`/chats/${selectedId}/messages/search?q=${encodeURIComponent(q)}`); setMessageSearchResults(result.messages || []) } catch (value) { setError(friendlyError(value, 'Could not search this chat.')) } }
-  const openMorio = () => window.dispatchEvent(new CustomEvent('prepza-open-ada', { detail: { conversationId: selectedId } }))
+  const openAda = () => window.dispatchEvent(new CustomEvent('prepza-open-ada', { detail: { conversationId: selectedId } }))
   const callPeer = detail && !detail.is_group ? detail.participants.find(item => item.user_id !== meId) || null : null
   const callConversationId = detail?.id ?? null
   if (!visible) return null
