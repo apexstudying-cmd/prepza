@@ -731,6 +731,7 @@
           "kind": "http_middleware_and_alert_rules",
           "path": "request_observability.py",
           "anchors": [
+            "def scrub_sentry_event",
             "def evaluate_alerts",
             "def _dispatch_external_alerts",
             "def register_request_observability",
@@ -771,7 +772,8 @@
             "test_alert_rules_activate_at_documented_thresholds",
             "test_http_middleware_generates_server_owned_id_without_logging_private_url_data",
             "test_http_alert_is_logged_automatically_when_threshold_is_crossed",
-            "test_external_alert_delivery_is_disabled_without_sentry_configuration"
+            "test_external_alert_delivery_is_disabled_without_sentry_configuration",
+            "test_sentry_scrubber_removes_request_payload_and_uses_route_template"
           ]
         },
         {
