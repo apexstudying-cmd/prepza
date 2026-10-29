@@ -157,6 +157,9 @@ def process_document(document_content_id):
                 "status": "failed",
                 "error_message": "Source text changed; regenerate this study material.",
             }, synchronize_session=False)
+            # Clear the legacy single-material pointer as well so older routes
+            # cannot bypass the status/fingerprint checks with a stale FK.
+            content.material_id = None
 
         content.extracted_text = text
         content.page_count = page_count
