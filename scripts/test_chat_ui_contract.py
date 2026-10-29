@@ -26,7 +26,7 @@ def test_chat_surface_contains_whatsapp_core_interactions():
         "read receipts": "read_by_count",
         "presence": "onlineUsers",
         "E2EE indicator": "End-to-end encrypted",
-        "Ada entry point": "@Ada",
+        "Morio entry point": "@Morio",
         "load earlier": "Load earlier messages",
         "mobile layout": "@media(max-width:760px)",
     }
@@ -41,7 +41,7 @@ def test_chat_startup_installs_required_enhancers():
         "swipe reply": "installChatSwipeReply",
         "UI polish": "installChatUiPolish",
         "draft persistence": "installChatDraftPersistence",
-        "in-chat Ada": "installInChatAdaObserver",
+        "in-chat study tutor": "installInChatAdaObserver",
         "document study": "installChatStudyDocumentObserver",
     }
     missing = [name for name, marker in required.items() if marker not in text]
