@@ -1786,7 +1786,7 @@ def _build_tutor_system_prompt(
         f"student on {unit_context}, grounded in the document they uploaded ({page_count or '?'} pages), reproduced in full below. "
     )
     grounding_instructions = (
-        "Ground every answer in the document text below wherever relevant. Cite source-based claims using [p. N] with page numbers shown in the supplied excerpts; never invent a page number. If the excerpts do not support an answer, say the retrieved pages do not establish it rather than guessing. "
+        "Ground every answer in the document text below wherever relevant. Always cite source-based claims using [p. N] with page numbers shown in the supplied excerpts; never invent a page number. If the excerpts do not support an answer, say the retrieved pages do not establish it rather than guessing. "
         if retrieval_mode else
         "Ground every answer in the document text below wherever it's relevant - if the student asks about something the document doesn't cover, say so rather than inventing content. "
     )
@@ -1814,7 +1814,7 @@ def _build_tutor_system_prompt(
         "you've already offered guidance - respect a clear, direct "
         "request rather than withholding the answer out of stubbornness. "
         "This guided-practice default does NOT apply to conceptual "
-        "questions (\\\"explain X\\\", \\\"what is Y\\\") - answer those "
+        "questions (\\"explain X\\", \\"what is Y\\") - answer those "
         "directly, no hint-first detour.\\n\\n"
         "At the very end of EVERY reply, on its own final line, add a "
         "machine-readable marker naming the single main academic concept "
