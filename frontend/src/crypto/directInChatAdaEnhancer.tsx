@@ -48,8 +48,8 @@ export default function DirectInChatAdaEnhancer() {
   const selectedDoc = useMemo(() => docs.find(doc => doc.id === documentId) || null, [docs, documentId])
   useEffect(() => {
     const openListener = (event: Event) => { const detail = (event as CustomEvent<{ conversationId?: number }>).detail; const requestedConversationId = Number(detail?.conversationId); if (!chat || !requestedConversationId || chat.conversationId === requestedConversationId) setOpen(true) }
-    window.addEventListener('prepza-open-morio', openListener)
-    return () => window.removeEventListener('prepza-open-morio', openListener)
+    window.addEventListener('prepza-open-ada', openListener)
+    return () => window.removeEventListener('prepza-open-ada', openListener)
   }, [chat])
   useEffect(() => {
     if (!open || !chat) return
