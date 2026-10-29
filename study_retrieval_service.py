@@ -106,6 +106,7 @@ def retrieve_authorized_pages(
     query: str,
     top_k: int = 5,
     document_id: int | None = None,
+    authorized_pages: Sequence[AuthorizedPage] | None = None,
     embed_query: Callable[[str], Sequence[float]] | None = None,
     embed_text: Callable[[str], Sequence[float]] | None = None,
 ) -> list[RetrievedPage]:
@@ -115,7 +116,10 @@ def retrieve_authorized_pages(
     query has returned. The caller must pass the authenticated session user ID,
     never an untrusted user ID from a request body.
     """
-    pages = load_authorized_pages(connection, user_id=user_id, document_id=document_id)
+    pages = (
+        list(authorized_pages) if authorized_pages is not None
+        else load_authorized_pages(connection, user_id=user_id, document_id=document_id)
+    )
     chunks: list[StudyChunk] = []
     by_identity: dict[tuple[int, int, int], AuthorizedPage] = {}
     for page in pages:
