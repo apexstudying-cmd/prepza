@@ -2092,8 +2092,8 @@ def generate_tutor_reply(
                     )
                     retrieval_mode = True
                     if retrieved_pages:
-                        retrieval_context = "RETRIEVED SOURCE EXCERPTS (source pages are authoritative; cite as [p. N]):\\n\\n" + "\\n\\n".join(
-                            f"[Source page {page.page_number}]\\n{page.text}"
+                        retrieval_context = "RETRIEVED SOURCE EXCERPTS (source pages are authoritative; cite as [p. N]):\n\n" + "\n\n".join(
+                            f"[Source page {page.page_number}]\n{page.text}"
                             for page in retrieved_pages
                         )
                     else:
