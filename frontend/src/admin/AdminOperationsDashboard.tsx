@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import ObservabilityPanel from './ObservabilityPanel'
 
 type OperationsData = {
   generated_at: string
@@ -81,6 +82,8 @@ export default function AdminOperationsDashboard() {
         <div style={{fontSize:10,fontWeight:800,textTransform:'uppercase'}}>Status</div><div style={{fontSize:13,fontWeight:800,marginTop:4}}>{c.label}</div><div style={{fontSize:10,marginTop:2}}>{c.status}</div>
       </div>})}
     </div>
+
+    <ObservabilityPanel />
 
     <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:14}}>
       <Card title="Student study time">
