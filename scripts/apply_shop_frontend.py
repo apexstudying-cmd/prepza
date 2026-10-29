@@ -31,7 +31,7 @@ def main() -> None:
               { icon: Ic.upload('w-6 h-6'), label: 'Upload', action: () => setScreen('upload') },
               { icon: Ic.book('w-6 h-6'), label: 'My Study', action: () => setScreen('study-materials') },
               { icon: Ic.explore('w-6 h-6'), label: 'Library', action: () => setScreen('library') },
-              { icon: Ic.flash('w-6 h-6'), label: 'Morio', action: () => setScreen('ai-tutor') },
+              { icon: Ic.flash('w-6 h-6'), label: 'Ada', action: () => setScreen('ai-tutor') },
               { icon: Ic.podcast('w-6 h-6'), label: 'Podcasts', action: () => setScreen('podcast-library') },
             ].map((t, i) => ("""
     new_actions = """            {[
