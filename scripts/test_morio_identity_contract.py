@@ -31,6 +31,16 @@ def test_group_mention_and_visible_copy_use_morio():
     assert "@ada\\b" not in text
 
 
+def test_home_study_screens_and_composer_use_morio():
+    app = source("frontend/src/App.tsx")
+    chat = source("frontend/src/crypto/WhatsAppChatExperience.tsx")
+    assert "Study with Morio" in app
+    assert "Use Morio while this document is your study context." in app
+    assert ">Morio</div>" in app
+    assert "}>@Morio</button>" in chat
+    assert "}>@Ada</button>" not in chat
+
+
 def test_direct_tutor_uses_morio_and_keeps_internal_event_compatible():
     text = source("frontend/src/crypto/directInChatAdaEnhancer.tsx")
     assert "Study with Morio" in text
@@ -50,6 +60,7 @@ if __name__ == "__main__":
     checks = [
         test_scoped_tutor_prompt_uses_morio_and_preserves_context_boundaries,
         test_group_mention_and_visible_copy_use_morio,
+        test_home_study_screens_and_composer_use_morio,
         test_direct_tutor_uses_morio_and_keeps_internal_event_compatible,
         test_home_and_prebuild_patch_keep_morio_label,
     ]
