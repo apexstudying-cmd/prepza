@@ -78,9 +78,11 @@ def test_client_request_id_is_not_trusted():
 
 
 
-def test_http_alert_is_logged_automatically_when_threshold_is_crossed(caplog):
+def test_http_alert_is_logged_automatically_when_threshold_is_crossed(caplog, monkeypatch):
     import json
     import logging
+    from unittest.mock import Mock
+    import sentry_sdk
     from flask import Flask
     from sqlalchemy import create_engine, text
     from request_observability import register_request_observability
@@ -100,6 +102,9 @@ def test_http_alert_is_logged_automatically_when_threshold_is_crossed(caplog):
             )
         """))
     fake_db = type("FakeDB", (), {"engine": engine})()
+    capture_message = Mock()
+    monkeypatch.setenv("SENTRY_DSN", "https://public@example.invalid/1")
+    monkeypatch.setattr(sentry_sdk, "capture_message", capture_message)
     register_request_observability(app, fake_db, lambda function: function, type("FakeModel", (), {}))
 
     @app.get("/synthetic-5xx")
@@ -119,6 +124,9 @@ def test_http_alert_is_logged_automatically_when_threshold_is_crossed(caplog):
     assert len(alert_records) == 1
     assert alert_records[0]["alert_keys"] == ["http_5xx_spike"]
     assert alert_records[0]["recent_5xx"] == 5
+    capture_message.assert_called_once()
+    assert "http_5xx_spike" in capture_message.call_args.args[0]
+    assert capture_message.call_args.kwargs["level"] == "error"
     assert "private" not in caplog.text
     assert "synthetic" not in caplog.text
     engine.dispose()
