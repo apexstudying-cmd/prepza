@@ -180,6 +180,9 @@ def test_first_generation_calls_provider_and_second_identical_request_reuses(mon
     assert second["reused"] is True
     assert first["payload"] == second["payload"]
     assert len(route_calls) == 1
+    assert route_calls[0]["prompt_version"] == "summary-v2"
+    assert route_calls[0]["output_schema_version"] == "schema-v2"
+    assert "correlation_id" in route_calls[0]
     assert len(usage_calls) == 1
     assert len(limit_calls) == 0
     assert len(material_calls) == 2
