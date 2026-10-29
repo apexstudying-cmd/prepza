@@ -785,6 +785,13 @@
           "anchors": [
             "Apply additive page-text and observability SQL migrations to disposable PostgreSQL"
           ]
+        },
+        {
+          "kind": "postgres_integration_test",
+          "path": "tests/test_local_qa_real_world.py",
+          "anchors": [
+            "test_admin_observability_dashboard_surfaces_error_and_latency_alerts"
+          ]
         }
       ],
       "required_test_commands": [
