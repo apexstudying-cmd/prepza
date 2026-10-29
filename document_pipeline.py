@@ -188,6 +188,22 @@ def extracted_text_changed(prior_page_texts, prior_combined_text, new_page_texts
     return bool(prior_combined_text and prior_combined_text != new_combined)
 
 
+def extract_native_pdf_pages(file_bytes):
+    """Extract native PDF text without invoking OCR or any external provider.
+
+    Returns None when any page looks scanned/empty, so a no-cost backfill never
+    indexes a partial document or silently replaces OCR text with blanks.
+    """
+    doc = fitz.open(stream=file_bytes, filetype="pdf")
+    try:
+        pages = [doc[page_number].get_text().strip() for page_number in range(len(doc))]
+        if not pages or any(len(page_text) < MIN_CHARS_PER_PAGE_BEFORE_OCR for page_text in pages):
+            return None
+        return pages
+    finally:
+        doc.close()
+
+
 def _extract_pdf_text(file_bytes, job):
     """Compatibility wrapper retaining the original combined-text contract."""
     pages_text, page_count = _extract_pdf_pages(file_bytes, job)
