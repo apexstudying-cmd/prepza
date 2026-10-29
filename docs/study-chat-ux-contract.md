@@ -8,7 +8,7 @@ This is the product contract for the final student chat experience. It is intent
 - Conversation: compact header, back navigation, member/profile affordance, message timeline, reply/quote, reactions, attachment sheet, voice-recording affordance, mentions, and composer behavior familiar to WhatsApp users.
 - Groups: group avatar/name, member count, description, shared media/documents, pinned study materials, admin controls, invite link, and group-specific notification settings.
 - Study document: a document can be opened from a message and studied without leaving the conversation. Page/section context can be shared back into chat.
-- Ada: `@Ada` is a first-class mention. In a document context, Ada receives only the explicitly selected document/page/section context needed for the request.
+- Morio: `@Morio` is a first-class mention. In a document context, Morio receives only the explicitly selected document/page/section context needed for the request.
 
 ## Message behavior
 
