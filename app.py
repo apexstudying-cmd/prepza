@@ -5228,6 +5228,7 @@ def send_tutor_message(document_id):
             user_message_text=body,
             triggering_user_id=user_id,
             plan_tier=get_ai_plan_tier(user_id),
+            document_id=document_id,
         )
     except ai_service.AIBudgetExceededError as e:
         return jsonify({"error": str(e)}), 503
