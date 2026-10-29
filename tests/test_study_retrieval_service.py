@@ -13,6 +13,12 @@ def retrieval_db():
     engine = create_engine("sqlite:///:memory:")
     with engine.begin() as conn:
         conn.execute(text("""
+            CREATE TABLE "user" (
+                id INTEGER PRIMARY KEY, university_id INTEGER, program_id INTEGER,
+                year INTEGER, semester INTEGER
+            )
+        """))
+        conn.execute(text("""
             CREATE TABLE document_content (
                 id INTEGER PRIMARY KEY, status TEXT NOT NULL, content_hash TEXT NOT NULL
             )
@@ -26,7 +32,8 @@ def retrieval_db():
         """))
         conn.execute(text("""
             CREATE TABLE library_publication (
-                id INTEGER PRIMARY KEY, document_id INTEGER NOT NULL, status TEXT NOT NULL
+                id INTEGER PRIMARY KEY, document_id INTEGER NOT NULL, status TEXT NOT NULL,
+                university_id INTEGER, program_id INTEGER, year INTEGER, semester INTEGER
             )
         """))
         conn.execute(text("""
@@ -36,9 +43,10 @@ def retrieval_db():
                 source_version TEXT NOT NULL, content_hash TEXT NOT NULL
             )
         """))
+        conn.execute(text("INSERT INTO \"user\" VALUES (100, 1, 10, 2, 1), (200, 2, 20, 2, 1)"))
         conn.execute(text("INSERT INTO document_content VALUES (1, 'ready', 'hash-one'), (2, 'ready', 'hash-two'), (3, 'processing', 'hash-three')"))
         conn.execute(text("INSERT INTO document VALUES (10, 100, 1, 'ready', 0), (20, 200, 2, 'ready', 0), (30, 100, 3, 'processing', 0), (40, 100, 1, 'ready', 1)"))
-        conn.execute(text("INSERT INTO library_publication VALUES (1, 20, 'pending')"))
+        conn.execute(text("INSERT INTO library_publication VALUES (1, 20, 'pending', 1, 10, 2, 1)"))
         conn.execute(text("INSERT INTO document_page_text VALUES (1, 1, 1, 'Calculus derivatives measure rates of change.', 'v1', 'hash-one'), (2, 2, 1, 'Private exam answer key and confidential grades.', 'v2', 'hash-two'), (3, 3, 1, 'Unready text must not be returned.', 'v3', 'hash-three')"))
     try:
         yield engine
@@ -69,6 +77,14 @@ def test_approved_library_publication_can_be_retrieved_by_non_owner(retrieval_db
         pages = retrieve_authorized_pages(conn, user_id=100, query="exam answer key")
 
     assert any(page.document_id == 20 for page in pages)
+
+    # The same approved publication must not leak to a student in a different
+    # university/program cohort, even when the content hash is identical.
+    with retrieval_db.connect() as conn:
+        wrong_cohort = retrieve_authorized_pages(
+            conn, user_id=200, query="exam answer key", document_id=20,
+        )
+    assert wrong_cohort == []
 
 
 def test_removed_owner_document_is_not_retrievable(retrieval_db):
