@@ -103,7 +103,10 @@ def test_all_provider_failures_return_trace_id_for_support_without_logging_secre
 def test_http_request_id_is_used_when_ai_request_has_no_explicit_correlation(monkeypatch, caplog):
     from flask import Flask, g
 
-    provider = FakeProvider([("safe answer", ai_service.AIUsage(input_tokens=1, output_tokens=1))])
+    provider = FakeProvider([
+        ("safe answer", ai_service.AIUsage(input_tokens=1, output_tokens=1)),
+        ("safe answer", ai_service.AIUsage(input_tokens=1, output_tokens=1)),
+    ])
     monkeypatch.setattr(ai_service, "_get_provider", lambda: (provider, "multi"))
     caplog.set_level(logging.INFO, logger=ai_service.__name__)
     app = Flask("ai-correlation-test")
@@ -113,7 +116,14 @@ def test_http_request_id_is_used_when_ai_request_has_no_explicit_correlation(mon
         ai_service.route_and_generate(ai_service.AIRequest(
             task="TUTORING", system_prompt="system", user_message="question",
         ))
+        ai_service.route_and_generate(ai_service.AIRequest(
+            task="TUTORING", system_prompt="system", user_message="question",
+            correlation_id="ai-job:7",
+        ))
 
     records = [json.loads(record.message) for record in caplog.records if record.message.startswith("{")]
-    completed = next(record for record in records if record["event"] == "ai_request_completed")
-    assert completed["correlation_id"] == "http-correlation-from-middleware"
+    completed = [record for record in records if record["event"] == "ai_request_completed"]
+    assert completed[0]["correlation_id"] == "http-correlation-from-middleware"
+    assert completed[0]["http_request_id"] == "http-correlation-from-middleware"
+    assert completed[1]["correlation_id"] == "ai-job:7"
+    assert completed[1]["http_request_id"] == "http-correlation-from-middleware"
