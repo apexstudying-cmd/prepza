@@ -53,6 +53,11 @@ class AIRequest:
     cacheable_system: bool = False  # True => system prompt sent with cache_control
     image_b64: Optional[str] = None       # base64-encoded image, for vision tasks (e.g. OCR)
     image_media_type: Optional[str] = None  # e.g. "image/png"
+    # Stable, non-sensitive version labels let telemetry compare prompt/schema
+    # revisions without logging prompt text or student content.
+    prompt_version: str = "v1"
+    output_schema_version: str = "v1"
+    correlation_id: Optional[str] = None
 
 
 @dataclass
@@ -428,6 +433,9 @@ def route_and_generate(ai_request: AIRequest) -> AIResponse:
                 "task": ai_request.task,
                 "provider": actual_provider,
                 "model": model,
+                "prompt_version": ai_request.prompt_version,
+                "output_schema_version": ai_request.output_schema_version,
+                "correlation_id": ai_request.correlation_id,
                 "attempt": attempt + 1,
                 "escalated": response.escalated,
                 "latency_ms": latency_ms,
@@ -445,6 +453,9 @@ def route_and_generate(ai_request: AIRequest) -> AIResponse:
                 "trace_id": trace_id,
                 "task": ai_request.task,
                 "model": model,
+                "prompt_version": ai_request.prompt_version,
+                "output_schema_version": ai_request.output_schema_version,
+                "correlation_id": ai_request.correlation_id,
                 "attempt": attempt + 1,
                 "exception_type": type(e).__name__,
             }, sort_keys=True))
@@ -454,6 +465,9 @@ def route_and_generate(ai_request: AIRequest) -> AIResponse:
         "event": "ai_request_failed",
         "trace_id": trace_id,
         "task": ai_request.task,
+        "prompt_version": ai_request.prompt_version,
+        "output_schema_version": ai_request.output_schema_version,
+        "correlation_id": ai_request.correlation_id,
         "attempts": len(models_to_try),
         "exception_type": type(last_error).__name__ if last_error else "AIProviderError",
     }, sort_keys=True))
