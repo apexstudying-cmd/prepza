@@ -98,3 +98,22 @@ def test_all_provider_failures_return_trace_id_for_support_without_logging_secre
     assert failed["trace_id"] == trace_id
     assert failed["exception_type"] == "RuntimeError"
     assert "provider-secret" not in caplog.text
+
+
+def test_http_request_id_is_used_when_ai_request_has_no_explicit_correlation(monkeypatch, caplog):
+    from flask import Flask, g
+
+    provider = FakeProvider([("safe answer", ai_service.AIUsage(input_tokens=1, output_tokens=1))])
+    monkeypatch.setattr(ai_service, "_get_provider", lambda: (provider, "multi"))
+    caplog.set_level(logging.INFO, logger=ai_service.__name__)
+    app = Flask("ai-correlation-test")
+
+    with app.test_request_context("/"):
+        g.prepza_request_id = "http-correlation-from-middleware"
+        ai_service.route_and_generate(ai_service.AIRequest(
+            task="TUTORING", system_prompt="system", user_message="question",
+        ))
+
+    records = [json.loads(record.message) for record in caplog.records if record.message.startswith("{")]
+    completed = next(record for record in records if record["event"] == "ai_request_completed")
+    assert completed["correlation_id"] == "http-correlation-from-middleware"
