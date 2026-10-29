@@ -16,6 +16,7 @@ from study_retrieval import StudyChunk, chunk_pages, hybrid_retrieve
 
 MAX_AUTHORIZED_PAGE_ROWS = 250
 MAX_RETRIEVAL_CHUNKS = 500
+MAX_PAGE_TEXT_CHARS = 20_000
 
 
 @dataclass(frozen=True)
@@ -121,7 +122,7 @@ def retrieve_authorized_pages(
         page_chunks = chunk_pages(
             document_id=page.document_id,
             document_version=page.source_version,
-            pages=[""] * (page.page_number - 1) + [page.text],
+            pages=[""] * (page.page_number - 1) + [page.text[:MAX_PAGE_TEXT_CHARS]],
             max_chars=1200,
             overlap_chars=160,
         )
