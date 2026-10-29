@@ -52,6 +52,11 @@ def test_retrieval_loads_only_documents_authorized_for_requester(retrieval_db):
 
     assert pages
     assert {page.document_id for page in pages} == {10}
+    assert pages[0].citation == {
+        "document_id": 10,
+        "document_version": "v1",
+        "page_number": 1,
+    }
     assert all("confidential" not in page.text for page in pages)
     assert all("Unready" not in page.text for page in pages)
 
