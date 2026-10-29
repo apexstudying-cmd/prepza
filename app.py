@@ -371,6 +371,23 @@ class DocumentPageText(db.Model):
     )
 
 
+class RequestObservabilityEvent(db.Model):
+    """Only slow/error request metadata; never request bodies or user identifiers."""
+    id = db.Column(db.Integer, primary_key=True)
+    request_id = db.Column(db.String(64), nullable=False, index=True)
+    method = db.Column(db.String(12), nullable=False)
+    route = db.Column(db.String(160), nullable=False)
+    status_code = db.Column(db.Integer, nullable=False)
+    duration_ms = db.Column(db.Float, nullable=True)
+    occurred_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    __table_args__ = (
+        db.Index(
+            "ix_request_observability_status_time",
+            "status_code", "occurred_at",
+        ),
+    )
+
+
 class Document(db.Model):
     """
     A student's personal reference to a piece of DocumentContent. Several
@@ -10287,3 +10304,6 @@ register_e2ee_production_hardening(app, db, Conversation, ConversationParticipan
 # Register Shop only after the core user, payment and chat models are available.
 from shop_marketplace import register_shop_routes
 register_shop_routes(app, db, User, Payment, Conversation, ConversationParticipant, limiter, create_paystack_transaction, sync_paystack_payment_status)
+
+from request_observability import register_request_observability
+register_request_observability(app, db, require_admin, RequestObservabilityEvent)
