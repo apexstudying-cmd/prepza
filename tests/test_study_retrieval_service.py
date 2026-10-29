@@ -126,3 +126,20 @@ def test_unauthorized_document_does_not_trigger_embedding_callbacks(retrieval_db
         )
 
     assert pages == []
+
+
+def test_document_scope_cannot_bypass_ownership_or_publication(retrieval_db):
+    with retrieval_db.connect() as conn:
+        private_pages = retrieve_authorized_pages(
+            conn, user_id=100, query="confidential grades", document_id=20,
+        )
+    assert private_pages == []
+
+    with retrieval_db.begin() as conn:
+        conn.execute(text("UPDATE library_publication SET status='approved' WHERE document_id=20"))
+    with retrieval_db.connect() as conn:
+        published_pages = retrieve_authorized_pages(
+            conn, user_id=100, query="confidential grades", document_id=20,
+        )
+    assert published_pages
+    assert {page.document_id for page in published_pages} == {20}
