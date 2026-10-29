@@ -533,11 +533,13 @@ Prepza already has spend caps, daily tutor limits, route-level rate limits, boun
 - A future RAG retrieval cache must be keyed by authorized user/scope, document version, query/embedding version, and relevant permission state; it must be invalidated when source documents or access rights change.
 
 ### Observability
-The AI service returns model/provider, token usage, cache token usage, computed cost, latency, and fallback/escalation metadata; centralized usage logging records usage economics. That is a useful foundation, not complete end-to-end observability. We still need consistent request/trace IDs, prompt/version metadata, retrieval candidate and citation diagnostics (without logging raw private note content), tool-call audit trails, latency/error dashboards, and alerting for spend, provider failures, and retrieval-quality regressions.
+The AI routing boundary now emits a random per-request trace ID in its internal response and structured JSON log events for successful calls, failed attempts, fallback use, token/cache usage, estimated cost, model/provider, and latency. Failure logs include the exception type but intentionally omit exception messages. The trace ID is included in the terminal provider error so support can correlate a failure without logging prompts or answers. The contract tests use fake providers and assert that prompt, user-message, completion, and provider exception text do not appear in logs.
+
+This is a first, local observability layer—not complete end-to-end tracing. It does not yet correlate Flask HTTP requests, database jobs, browser events, or provider request IDs, and it does not provide dashboards or alerting. Remaining work includes prompt/schema version metadata, retrieval candidate and citation diagnostics (without raw private note content), tool-call audit trails, latency/error dashboards, and spend/provider/retrieval-quality alerts. Verify the new telemetry tests in CI before treating this baseline as accepted.
 
 ### Implementation order
-1. Finish the Morio browser/mobile regression and correct any failures.
+1. [x] Complete Morio identity and responsive/offline browser regression on runtime commit `fe8bbbb195d2090c481052172b8af5ec9176e9bc`.
 2. Keep the current direct-document tutoring flow working; distinguish it from semantic RAG in product copy and QA.
-3. Build a small hybrid-retrieval prototype for non-E2EE notes with page citations and strict access tests; use mocked embeddings in CI and do not make billable embedding calls without approval.
-4. Add MCP tools only when a concrete student workflow benefits from them and after permission/audit contracts are tested.
-5. Expand observability before relying on retrieval or tools for launch-critical answers.
+3. [~] Add and verify privacy-safe request tracing and structured AI routing telemetry; next add HTTP/job correlation and prompt/schema version metadata.
+4. Build a small hybrid-retrieval prototype for non-E2EE notes with page citations and strict access tests; use mocked embeddings in CI and do not make billable embedding calls without approval.
+5. Add MCP tools only when a concrete student workflow benefits from them and after permission/audit contracts are tested.
