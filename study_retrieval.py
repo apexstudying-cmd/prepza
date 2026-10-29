@@ -161,8 +161,9 @@ def hybrid_retrieve(
     semantic_scores: list[float | None]
     if embed_query is None:
         semantic_scores = [None] * len(authorized)
-        denominator = lexical_weight
-        scores = [value / denominator for value in lexical_scores]
+        # A lexical-only result is the fraction of query terms found; do not
+        # rescale it by the hybrid weight because no semantic score exists.
+        scores = list(lexical_scores)
     else:
         query_vector = embed_query(query)
         vectors = [embed_text(chunk.text) for chunk in authorized]
