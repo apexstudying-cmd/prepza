@@ -206,3 +206,32 @@ def test_authorized_page_loading_has_a_hard_row_cap(retrieval_db):
 
     assert len(pages) == 1
     assert pages[0].document_id == 11
+
+
+
+def test_page_index_match_rejects_partial_or_stale_rows():
+    from types import SimpleNamespace
+    from study_retrieval_service import page_index_matches
+
+    rows = [
+        SimpleNamespace(
+            page_number=1, page_text="first page", content_hash="hash",
+            source_version="v2", extractor_version="extractor-2",
+        ),
+        SimpleNamespace(
+            page_number=2, page_text="second page", content_hash="hash",
+            source_version="v2", extractor_version="extractor-2",
+        ),
+    ]
+    expected = {
+        "content_hash": "hash",
+        "source_version": "v2",
+        "extractor_version": "extractor-2",
+    }
+
+    assert page_index_matches(rows, ["first page", "second page"], **expected)
+    assert not page_index_matches(rows[:1], ["first page", "second page"], **expected)
+    assert not page_index_matches(rows, ["first page", "corrected page"], **expected)
+
+    rows[1].source_version = "old-version"
+    assert not page_index_matches(rows, ["first page", "second page"], **expected)
