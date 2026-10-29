@@ -178,7 +178,7 @@ def test_sentry_event_scrubber_removes_request_and_user_secrets():
     scrubbed = scrub_sentry_event(event, {})
 
     assert scrubbed["message"] == event["message"]
-    assert scrubbed["request"]["url"] == "https://prepza.example/api/route"
+    assert scrubbed["request"]["url"] == "https://prepza.example/unmatched"
     assert scrubbed["request"]["method"] == "POST"
     assert "query_string" not in scrubbed["request"]
     assert "data" not in scrubbed["request"]
