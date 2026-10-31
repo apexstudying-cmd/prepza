@@ -3,7 +3,7 @@
 **Purpose:** make the repository easier to navigate and maintain without changing user-visible behavior, API contracts, authorization, persistence, billing, or product rules.
 
 **Baseline source checkpoint:** `f747b0d95a6b81cb2868843093546a97e3d09fb5` (2026-10-31).
-**Working branch:** `main` at Group Detail refactor merge `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`; PR #61 and PR #62 are merged. PR #56, #59, and the consolidated My Study integration PR #61 are merged; the Achievements module is also present on `main`.
+**Working branch:** `main`; PR #61 and PR #62 are merged (PR #62 merge `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`). PR #56, #59, and the consolidated My Study integration PR #61 are merged; the Achievements module is also present on `main`.
 **Status:** incremental refactor in progress. This document distinguishes current implementation from target structure.
 
 ## 1. Verified baseline

@@ -1,7 +1,7 @@
 # Prepza — Persistent Engineering Execution Tracker
 
 Last updated: 2026-10-31
-Branch: `main` at Group Detail refactor merge `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b` (PR #62 merged)
+Branch: `main`; PR #62 merged as `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`.
 
 Status:
 - [x] completed/verified
