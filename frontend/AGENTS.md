@@ -39,3 +39,26 @@ This project uses **Tailwind CSS v4** through the `@tailwindcss/vite` plugin con
 - Use double quotes for strings containing apostrophes (`"We're here to help"`), or escape them in single-quoted strings. An unescaped apostrophe in a single-quoted string breaks the build.
 - Ensure JSX tags are closed and braces are balanced.
 - Export components as default exports.
+
+
+## Prepza feature organization
+
+The frontend is being modularized incrementally. Prefer these ownership boundaries for new work:
+
+- `src/App.tsx` - legacy application shell, route selection, and remaining screens. Keep new feature implementation out of this file where a focused module is practical.
+- `src/lib/appApi.ts` - shared application JSON API helper and `ApiError`. Preserve cookie credentials, JSON handling, and existing error semantics.
+- `src/lib/api.ts` - separate chat-oriented API client with its own CSRF/current-user state. Do not merge it with `appApi.ts` without a dedicated contract migration.
+- `src/theme/theme.ts` - shared Prepza brand palette and light/dark theme store.
+- `src/ui/icons.tsx` - shared icon primitives.
+- `src/types/academic.ts` - university and program option contracts.
+- `src/screens/<domain>/` - screen-level compositions, grouped by feature domain.
+- `src/admin/`, `src/crypto/`, `src/generation/`, `src/offline/`, `src/organisation/`, and `src/share/` - existing feature modules; retain their current boundaries unless a specific dependency map supports a safe move.
+
+### Refactor rules
+
+1. Keep `App.tsx` as the integration point while extracting one feature at a time.
+2. Move existing behavior verbatim first; do not combine extraction with UX, API, or business-rule changes.
+3. Pass navigation callbacks and domain data explicitly. Avoid importing the App module from a screen module.
+4. Add a behavior/contract test before moving logic, then run the focused test, TypeScript check, and production build.
+5. Do not remove `// @ts-nocheck` from the legacy App file as a blanket change. Remove it only after the affected code has proper types and its relevant tests pass.
+6. Build-time source transforms must preserve unrelated component declarations and route targets. Add regression coverage for each transformation that edits `App.tsx`.
