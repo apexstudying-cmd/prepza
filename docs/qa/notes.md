@@ -6,6 +6,47 @@ The goal is not only to record what changed, but also what I learned, why we mad
 
 These notes should grow alongside the production-readiness audit so someone can later trace the learning curve from a working laptop setup to a deployable production system.
 
+## 2026-10-31 — Behaviour-preserving repository architecture refactor
+
+The architecture plan and current module map live in [Repository Architecture and Safe Refactor Plan](../architecture/REPOSITORY_REFACTOR_PLAN.md).
+
+### What was changed
+
+- Created a dedicated API client module at `frontend/src/lib/appApi.ts`, preserving the original cookie credentials, JSON request headers, and `ApiError` behavior.
+- Moved the existing shared brand palette and light/dark theme store to `frontend/src/theme/theme.ts`.
+- Moved the shared icon map to `frontend/src/ui/icons.tsx`.
+- Moved the shared university/program option types to `frontend/src/types/academic.ts`.
+- Moved the existing academic profile-completion screen to `frontend/src/screens/onboarding/CompleteProfileScreen.tsx`.
+- Kept `App.tsx` as the integration point and navigation composition root. It fell from 16,032 to 15,747 lines; this is only the first extraction, not a complete frontend rewrite.
+- Added a repository architecture plan, frontend module ownership guidance, and a README module map.
+
+### What the build investigation taught us
+
+Prepza's frontend `prebuild` command runs a chain of Python source transformers before TypeScript and Vite. Several older transformers assumed the shared API helper was still declared in `App.tsx`. Moving it exposed those assumptions in CI. We updated the offline-data, sync-queue, queue-hardening, StudyHub offline-save, document-progress, and screen-loading transforms to target the new API module. We also corrected the Shop import transform to use the current App import structure.
+
+This matters because a source transform can compile and still remove or misplace a component. The earlier `ExploreScreen` runtime bug was caused by a section replacement that removed the wrapper while leaving its route reference. A regression contract now protects that wrapper after the generation UI transform.
+
+### Verification evidence
+
+[Release Browser and Cross-System Regression run 41219805945](https://github.com/apexstudying-cmd/prepza/actions/runs/41219805945), tested code commit `d4f4e882600a3e03c80ca809475e74aa5d6a9f76), passed:
+
+- Frontend TypeScript check and production Vite build.
+- Disposable PostgreSQL and Redis setup, Alembic migrations, and controlled SQL migration ledger.
+- Full disposable PostgreSQL suite: **98 passed, 0 failed**.
+- Mobile/tablet responsive browser checks.
+- B2B browser-to-ledger metering regression.
+- Online/offline Study Hub lifecycle and generated-artifact replay journeys.
+- Responsive screenshot upload.
+
+The offline browser journey verified that saved Study Hub documents survive offline reload, existing Summary/Flashcards/Practice Questions/Mind Maps reopen without generation POST requests, and cached podcast audio remains available offline.
+
+### What remains
+
+- Extract additional frontend screens only after mapping and updating the prebuild scripts that currently rewrite `App.tsx`.
+- Split the very large `AdminSection`, chat, group, document-study and settings surfaces into domain-owned modules with explicit props and contract tests.
+- Design the backend `app.py` split around shared extensions, ORM model ownership, and route blueprints; do not move models/routes mechanically.
+- Keep provider checks separate: this CI run does not prove live Paystack, SES, OpenAI, R2 or GPU behavior.
+
 ## 2026-10-31 — Local Supabase data migration and deployment architecture
 
 The full, step-by-step record lives in [Local Supabase Data Migration Walkthrough](../engineering/LOCAL_SUPABASE_DATA_MIGRATION_WALKTHROUGH.md). This section is a short learning index; the walkthrough is the source of truth for commands, detailed outputs, and the import checklist.
