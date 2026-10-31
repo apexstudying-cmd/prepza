@@ -3,7 +3,7 @@
 **Purpose:** make the repository easier to navigate and maintain without changing user-visible behavior, API contracts, authorization, persistence, billing, or product rules.
 
 **Baseline source checkpoint:** `f747b0d95a6b81cb2868843093546a97e3d09fb5` (2026-10-31).
-**Working branch:** `refactor/podcast-library-screen` (follow-up PR #59; architecture foundation PR #56 is merged).
+**Working branch:** `main` (architecture foundation PR #56 and Podcast Library extraction PR #59 are merged).
 **Status:** incremental refactor in progress. This document distinguishes current implementation from target structure.
 
 ## 1. Verified baseline
@@ -104,7 +104,7 @@ The original `App.tsx` still contains a large number of screens and shared defin
 
 ## 4. First frontend extraction
 
-The architecture foundation (merged PR #56) and follow-up Podcast Library extraction (PR #59, pending final verification/merge) have moved the following existing implementations without intentionally changing their behavior:
+The architecture foundation (merged PR #56) and Podcast Library extraction (merged PR #59) have moved the following existing implementations without intentionally changing their behavior:
 
 | New module | Responsibility |
 |---|---|
@@ -120,7 +120,7 @@ The architecture foundation (merged PR #56) and follow-up Podcast Library extrac
 
 `App.tsx` imports these modules and retains the application-level navigation integration. The legacy `frontend/src/lib/api.ts` remains separate: it has a different chat-oriented API and CSRF state contract. These two clients must not be merged until their behavioral differences are understood and tested.
 
-The architecture foundation reduced `App.tsx` to 14,945 lines. The Podcast Library extraction reduces it to 14,887 lines. These are incremental boundary improvements, not completion of the frontend refactor.
+The architecture foundation reduced `App.tsx` to 14,945 lines. The Podcast Library extraction reduced it to 14,887 lines. PR #59 merged to `main` as `6a780eaf58976e2ff851615ec266c8aed75e2071`. These are incremental boundary improvements, not completion of the frontend refactor.
 
 ## 5. Known architectural risks to address
 
