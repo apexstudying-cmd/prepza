@@ -3,7 +3,7 @@
 **Purpose:** make the repository easier to navigate and maintain without changing user-visible behavior, API contracts, authorization, persistence, billing, or product rules.
 
 **Baseline source checkpoint:** `f747b0d95a6b81cb2868843093546a97e3d09fb5` (2026-10-31).
-**Working branch:** `main` plus the single integration PR [#61](https://github.com/apexstudying-cmd/prepza/pull/61) for the remaining My Study extraction and build-transformer reconciliation. PR #56 and #59 are merged; the Achievements module is also present on `main`.
+**Working branch:** `main` at squash merge `11e626f943f05e48161e8a8b4487715ac9257f53`. PR #56, #59, and the consolidated My Study integration PR #61 are merged; the Achievements module is also present on `main`.
 **Status:** incremental refactor in progress. This document distinguishes current implementation from target structure.
 
 ## 1. Verified baseline

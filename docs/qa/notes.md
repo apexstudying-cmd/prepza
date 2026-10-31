@@ -8,7 +8,7 @@ These notes should grow alongside the production-readiness audit so someone can 
 
 ## 2026-10-31 — My Study screen extraction and build-transformer reconciliation
 
-The remaining My Study extraction is consolidated in [PR #61](https://github.com/apexstudying-cmd/prepza/pull/61), based on the then-current `main` commit `fced492950e6f038f4b070e3e0dd452dd474ce0d`. The tested PR head is `48cae15227e7af3fe30c6b3fc62e2a7995a59cc7`.
+The remaining My Study extraction was consolidated in [PR #61](https://github.com/apexstudying-cmd/prepza/pull/61), based on `main` commit `fced492950e6f038f4b070e3e0dd452dd474ce0d`. The tested PR head is `48cae15227e7af3fe30c6b3fc62e2a7995a59cc7`; the final documentation-only PR head `423cabde07954fc7f5fa8224087cd8b6b3f0bfa6` was squash-merged to `main` as `11e626f943f05e48161e8a8b4487715ac9257f53`.
 
 ### What changed
 
