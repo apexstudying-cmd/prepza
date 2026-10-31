@@ -88,6 +88,46 @@ def main() -> int:
                                 route.abort("failed")
 
                         page.route("**/api/shop/listings*", shop_browse_route)
+
+                        achievements_fixture = {
+                            "unlocked_count": 1,
+                            "total_count": 2,
+                            "achievements": [
+                                {
+                                    "code": "qa_first_steps",
+                                    "icon": "📚",
+                                    "name": "QA First Steps",
+                                    "desc": "Complete a first study activity",
+                                    "done": True,
+                                    "unlocked_at": "2026-10-30T10:00:00+00:00",
+                                    "progress": 1,
+                                    "total": 1,
+                                },
+                                {
+                                    "code": "qa_consistent_learner",
+                                    "icon": "🔥",
+                                    "name": "QA Consistent Learner",
+                                    "desc": "Build a consistent study habit",
+                                    "done": False,
+                                    "unlocked_at": None,
+                                    "progress": 2,
+                                    "total": 7,
+                                },
+                            ],
+                        }
+
+                        def achievements_route(route):
+                            endpoint = route.request.url.split("?", 1)[0]
+                            if route.request.method == "GET" and endpoint.endswith("/achievements"):
+                                route.fulfill(
+                                    status=200,
+                                    content_type="application/json",
+                                    body=json.dumps(achievements_fixture),
+                                )
+                            else:
+                                route.continue_()
+
+                        page.route("**/achievements", achievements_route)
                         login(page, fixture)
                         page.get_by_role(
                             "navigation", name="Primary navigation"
@@ -251,6 +291,24 @@ def main() -> int:
                         page.get_by_role("button", name="‹ Back").click(timeout=5000)
                         page.get_by_role("button", name="‹ Home").click(timeout=5000)
                         page.get_by_role("navigation", name="Primary navigation").wait_for(state="visible", timeout=5000)
+
+                        # Exercise the extracted Achievements screen through the real
+                        # Profile navigation path, with a deterministic API fixture.
+                        page.get_by_role("button", name="Profile").click(timeout=5000)
+                        page.get_by_role("button", name="See all").wait_for(timeout=10000)
+                        page.get_by_role("button", name="See all").click(timeout=5000)
+                        page.get_by_text("Unlocked (1)", exact=True).wait_for(timeout=10000)
+                        page.get_by_text("In progress (1)", exact=True).wait_for(timeout=5000)
+                        page.get_by_text("QA First Steps", exact=True).wait_for(timeout=5000)
+                        page.get_by_text("QA Consistent Learner", exact=True).wait_for(timeout=5000)
+                        page.get_by_role("button", name="Share").first.click(timeout=5000)
+                        page.get_by_text("Achievement Unlocked", exact=True).wait_for(timeout=5000)
+                        page.get_by_role("button", name="Close").click(timeout=5000)
+                        page.screenshot(
+                            path=str(ARTIFACTS / f"achievements-{name}.png"),
+                            full_page=True,
+                            animations="disabled",
+                        )
 
                         if page_errors:
                             failures.append(
