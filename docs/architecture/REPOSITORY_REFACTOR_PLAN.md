@@ -13,7 +13,7 @@ The initial source scan found:
 | Area | Baseline size | Observation |
 |---|---:|---|
 | `app.py` | 10,332 lines; 318 top-level function/class declarations | Flask setup, SQLAlchemy models, shared helpers, and many HTTP routes coexist in one module. |
-| `frontend/src/App.tsx` | 16,032 lines; 154 declarations at the initial scan. After the first extraction: 15,747 lines; 149 declarations. | The first extraction moved shared API/theme/icon/type definitions and the academic profile-completion screen into focused modules. Many screens still remain in the composition file. |
+| `frontend/src/App.tsx` | 16,032 lines; 154 declarations at the initial scan. After the first extraction: 15,747 lines; 149 declarations. | The first extraction moved shared API/theme/icon/type definitions plus the academic profile-completion and ambassador screens into focused modules. Many screens still remain in the composition file. |
 | Frontend build | Long `prebuild` chain | Python scripts rewrite source files before TypeScript/Vite compilation. |
 | Local QA runner | 11 test files; 95 test functions; 98 collected cases | Latest disposable PostgreSQL CI run passed 98/98; the detailed numbered test descriptions in `actualtest.md` are explicitly retained as a historical 74-case snapshot. |
 
