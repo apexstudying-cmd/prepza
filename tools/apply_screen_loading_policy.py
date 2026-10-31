@@ -15,7 +15,7 @@ if 'async function baseApi<T = any>' not in api_text and 'export async function 
 # Loading architecture sits above the existing API/offline/queue stack.
 # Never replace that stack: those transforms intentionally share one API layer.
 if 'async function baseApi<T = any>' not in api_text:
-    api_start = api_text.find('export export async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {')
+    api_start = api_text.find('export async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {')
     if api_start < 0:
         raise SystemExit('Loading policy: exported API helper not found in appApi.ts')
     api_text = api_text[:api_start] + api_text[api_start:].replace(
@@ -46,7 +46,7 @@ function refreshScreenApiCache<T>(path: string, options: RequestInit): void {
   screenApiRefreshes.set(path, refresh)
 }
 
-async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+export async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
   const method = String(options.method || 'GET').toUpperCase()
   const cacheable = isScreenCacheableApiRequest(path, method)
 
