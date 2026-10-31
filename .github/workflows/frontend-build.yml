@@ -30,7 +30,9 @@ jobs:
 
       - name: Test frontend source-transform boundaries
         working-directory: .
-        run: python -m pytest -q tests/test_generation_ui_build_contract.py
+        run: |
+          python -m pip install pytest
+          python -m pytest -q tests/test_generation_ui_build_contract.py
 
       - name: Test offline Library patch regression
         working-directory: .
