@@ -6,6 +6,8 @@ import { N, useTheme, currentThemeMode, DARK_THEME } from './theme/theme'
 import { Ic } from './ui/icons'
 import CompleteProfileScreen from './screens/onboarding/CompleteProfileScreen'
 import AmbassadorScreen from './screens/ambassador/AmbassadorScreen'
+import PodcastLibraryScreen from './screens/podcast/PodcastLibraryScreen'
+import { podcastColor, podcastDuration, type PodcastItem } from './types/podcast'
 import SettingsScreen from './screens/settings/SettingsScreen'
 import Pill from './ui/Pill'
 import { subscribeToPush, unsubscribeFromPush } from './lib/pushNotifications'
@@ -1881,12 +1883,6 @@ type PublicProfile = {
   documents_count: number; xp_total: number; weekly_study_seconds: number
   is_private?: boolean
 }
-
-type PodcastItem = { document_id: number; title: string; audio_status: string; duration_seconds: number | null; created_at: string | null }
-
-const PODCAST_COLORS = ['#C9A84C', '#4C7BC9', '#4CC97B', '#9B59B6', '#C94C4C', '#E67E22']
-const podcastColor = (id: number) => PODCAST_COLORS[id % PODCAST_COLORS.length]
-const podcastDuration = (seconds: number | null) => seconds == null ? '—' : `${Math.max(1, Math.round(seconds / 60))} min`
 
 // Stale-while-revalidate cache for the Home screen: on repeat visits within
 // the same session, render instantly from cache while a fresh fetch runs
@@ -6906,60 +6902,6 @@ function LibraryScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Scre
 }
 
 
-
-// ─── PODCAST LIBRARY ──────────────────────────────────────────────────────────
-const PODCAST_LIBRARY_CACHE: { podcastList?: PodcastItem[] } = {}
-function PodcastLibraryScreen({ setScreen, setActiveDocumentId }: { setScreen: (s: Screen) => void; setActiveDocumentId: (id: number | null) => void }) {
-  const { tokens: T } = useTheme()
-  const [podcastList, setPodcastList] = useState<PodcastItem[]>(PODCAST_LIBRARY_CACHE.podcastList ?? [])
-  const [loading, setLoading] = useState(PODCAST_LIBRARY_CACHE.podcastList === undefined)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    api<{ podcasts: PodcastItem[] }>('/podcasts')
-      .then(res => { setPodcastList(res.podcasts); PODCAST_LIBRARY_CACHE.podcastList = res.podcasts })
-      .catch(() => setError('Could not load your podcasts.'))
-      .finally(() => setLoading(false))
-  }, [])
-
-  if (loading) return <DelayedScreenSkeleton><SkeletonPodcastLibrary /></DelayedScreenSkeleton>
-
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
-      <div style={{ background: N.navy, padding: '0 18px 20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <button onClick={() => setScreen('home')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
-          <span style={{ flex: 1, fontWeight: 800, fontSize: 18, color: '#fff' }}>Study Podcasts 🎙️</span>
-        </div>
-        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>AI-generated from your notes</div>
-      </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: 16 }} className="scrollbar-hide">
-        {error ? (
-          <ErrorState />
-        ) : podcastList.length === 0 ? (
-          <EmptyState icon="🎙️" title="No podcasts yet" sub="Open a document and generate a study podcast from your notes to see it here." />
-        ) : (
-          <>
-            <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 12 }}>Your Episodes</div>
-            {podcastList.map((p) => {
-              const color = podcastColor(p.document_id)
-              return (
-                <div key={p.document_id} onClick={() => { setActiveDocumentId(p.document_id); setScreen('podcast-player') }} style={{ display: 'flex', gap: 14, alignItems: 'center', background: T.card, borderRadius: 14, padding: '13px 14px', marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
-                  <div style={{ width: 52, height: 52, background: `linear-gradient(135deg,${color},${color}99)`, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, color: '#fff', fontWeight: 800, flexShrink: 0 }}>🎙️</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: T.text }} className="line-clamp-1">{p.title}</div>
-                    <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>{p.audio_status === 'ready' ? podcastDuration(p.duration_seconds) : 'Processing…'}</div>
-                  </div>
-                  <div style={{ color: N.gold }}>{Ic.play()}</div>
-                </div>
-              )
-            })}
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
 
 // ─── MIND MAP ─────────────────────────────────────────────────────────────────
 type MindMapNode = { id: string; label: string; x: number; y: number; r: number; color: string; textColor: string; fontSize: number }
@@ -14840,7 +14782,7 @@ export default function App() {
       case 'flashcards':        return <FlashcardsScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'quiz':              return <QuizScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'podcast-player':    return <PodcastPlayerScreen setScreen={setScreen} activeDocumentId={activeDocumentId} setActiveOpportunityId={setActiveOpportunityId} />
-      case 'podcast-library':   return <PodcastLibraryScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
+      case 'podcast-library':   return <PodcastLibraryScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} DelayedScreenSkeleton={DelayedScreenSkeleton} SkeletonPodcastLibrary={SkeletonPodcastLibrary} EmptyState={EmptyState} ErrorState={ErrorState} />
       case 'summary':           return <SummaryScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'chats':             return <WhatsAppChatExperience onClose={() => setScreen('home')} onOpenProfile={(userId, name, conversationId) => { setActiveProfileBackScreen('chats'); if (conversationId != null) setActiveConversationId(conversationId); setActiveProfileUserId(userId); setActiveProfileName(name || null); setScreen('student-profile') }} onOpenOptions={(conversationId) => { setActiveConversationId(conversationId); setScreen('chat-options') }} onOpenDocument={(documentId) => { setActiveDocumentId(documentId); setScreen('document-study') }} />
       case 'chat-detail':       return <ChatDetailScreen setScreen={setScreen} conversationId={activeConversationId} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} />

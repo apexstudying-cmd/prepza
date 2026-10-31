@@ -2,7 +2,7 @@
 
 ## Latest CI evidence — 2026-10-31
 
-GitHub Actions [Release Browser and Cross-System Regression run 41222704363](https://github.com/apexstudying-cmd/prepza/actions/runs/41222704363) passed on tested code commit `ba93150bf9df4348aada6d680bf4bfc4ddc595bb`. The workflow built the production Docker image; started disposable PostgreSQL and Redis; applied Alembic migrations and the controlled SQL migration ledger; passed mobile/tablet responsive browser checks, B2B browser-to-ledger metering, the full disposable PostgreSQL QA suite (**98 passed, 0 failed, 3,536 warnings**), and online/offline Study Hub plus generated-artifact browser journeys; and uploaded responsive screenshots. The browser journey verified offline Study Hub reload/resume, existing Summary/Flashcards/Practice Questions/Mind Maps across multiple saved documents, podcast audio playback from cached assets, and no generation POSTs during offline replay. This is CI evidence only: it does not prove live Paystack, SES, OpenAI, R2 or GPU provider behavior, and does not itself clear the overall release gates.
+GitHub Actions [Release Browser and Cross-System Regression run 41226775690](https://github.com/apexstudying-cmd/prepza/actions/runs/41226775690) passed on tested application-code commit `c24251a96ac20f9cb1cf4b6f4b7e36afdb3b051d`. The workflow built the production Docker image; started disposable PostgreSQL and Redis; applied Alembic migrations and the controlled SQL migration ledger; passed mobile/tablet responsive browser checks, B2B browser-to-ledger metering, the full disposable PostgreSQL QA suite (**98 passed, 0 failed, 3,536 warnings**), and online/offline Study Hub plus generated-artifact browser journeys; and uploaded responsive screenshots. It verified Study Hub offline reload/resume, existing Summary/Flashcards/Practice Questions/Mind Maps across multiple saved documents, cached podcast audio playback, and no generation POSTs during offline replay. The focused frontend workflow [run 41226775687](https://github.com/apexstudying-cmd/prepza/actions/runs/41226775687) also passed **15 source-transform/module-contract tests**, **5 offline Library regression tests**, TypeScript, service-worker validation, Vite production build, and screen-loading/offline/calling architecture audits. The other student/admin, E2EE, AI economics/generation, B2B, navigation and control-API workflows for the tested code commit passed. Documentation-only commits after `c24251a9` do not change the application code under test. This is CI evidence only: it does not prove live Paystack, SES, OpenAI, R2 or GPU provider behavior, and does not itself clear the overall product release gates.
 
 
 Historical entries below preserve evidence from the dates they were recorded. Where an older section says 74 cases/10 files, that is a historical snapshot and is superseded by the latest 98-case/11-file runner inventory above.
@@ -467,7 +467,7 @@ Both are necessary. Passing one does not make the other unnecessary.
 
 ---
 
-**Latest verified full-suite result:** 98 passed, 0 failed, 3,536 warnings (run 41222704363, tested code commit `ba93150bf9df4348aada6d680bf4bfc4ddc595bb`).
+**Latest verified full-suite result:** 98 passed, 0 failed, 3,536 warnings (run 41226775690, tested code commit `c24251a96ac20f9cb1cf4b6f4b7e36afdb3b051d`).
 
 
 ## 7. 2026-10-05 — Authoritative test inventory and release-gate status
@@ -478,7 +478,7 @@ This section records the current inventory after the self-contained focused real
 
 | Gate / command | Coverage | Latest known evidence | Status |
 |---|---|---|---|
-| `python tools/run_local_qa.py` | Disposable PostgreSQL + Alembic + the current 11-file suite | **98 passed, 0 failed, 3,536 warnings** in run 41222704363 | GREEN |
+| `python tools/run_local_qa.py` | Disposable PostgreSQL + Alembic + the current 11-file suite | **98 passed, 0 failed, 3,536 warnings** in run 41226775690 | GREEN |
 | `pytest scripts/test_calling_runtime.py -q` | Authenticated Socket.IO 1:1 call signaling | **4 passed in 3.31s** after the fixture/auth reconciliation | GREEN |
 | `pytest scripts/test_realtime_runtime.py -q` | Focused authenticated Socket.IO chat presence, membership, delivery, multi-tab presence and message dispatch | Executed in the focused-runtime verification sequence; the exact latest numeric result is not preserved in the current repository notes | **Do not infer a result** |
 | Redis-backed Compose inspection | Production-style Redis configuration + dedicated chat worker | Compose/runtime path is documented separately; local full QA intentionally uses `REDIS_URL=memory://` | PARTIAL / separate gate |

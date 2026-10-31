@@ -48,6 +48,8 @@ python -m pytest -q \
 - `src/screens/onboarding/CompleteProfileScreen.tsx` - academic profile-completion flow.
 - `src/screens/ambassador/AmbassadorScreen.tsx` - ambassador application, dashboard, referral, and payout-request UI.
 - `src/screens/settings/SettingsScreen.tsx` - account settings, privacy, notification preferences, appearance, security, logout, and account deletion.
+- `src/screens/podcast/PodcastLibraryScreen.tsx` - Podcast Library list, API loading, session cache, and navigation to the player.
+- `src/types/podcast.ts` - shared podcast item type and Home/Library presentation helpers.
 - `src/ui/Pill.tsx` - shared status pill component.
 - `src/lib/pushNotifications.ts` - browser push subscription/unsubscription helpers using the shared application API client.
 - `src/screens/<domain>/` - home for additional screen-level compositions, grouped by feature domain.
@@ -66,6 +68,7 @@ python -m pytest -q \
 2. Move existing behavior verbatim first; do not combine extraction with UX, API, or business-rule changes.
 3. Pass navigation callbacks and domain data explicitly. Never import the App module from a screen module.
 4. Add a behavior/contract test before moving logic, then run the focused test, TypeScript check, and production build.
-5. Do not remove `// @ts-nocheck` from the legacy App file as a blanket change. Remove it only after affected code has proper types and relevant tests pass.
-6. Build-time source transforms must preserve unrelated component declarations and route targets. Add regression coverage for each transform that edits `App.tsx`.
-7. Keep the application API client and chat API client separate until their authentication, CSRF, cache, and error contracts are deliberately reconciled.
+5. For screen extraction, inject shared shell UI components through typed props rather than importing `App.tsx`; do not duplicate generic feedback/skeleton components or create circular imports.
+6. Do not remove `// @ts-nocheck` from the legacy App file as a blanket change. Remove it only after affected code has proper types and relevant tests pass.
+7. Build-time source transforms must preserve unrelated component declarations and route targets. Add regression coverage for each transform that edits `App.tsx`.
+8. Keep the application API client and chat API client separate until their authentication, CSRF, cache, and error contracts are deliberately reconciled.
