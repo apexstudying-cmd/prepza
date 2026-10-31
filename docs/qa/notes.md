@@ -6,6 +6,61 @@ The goal is not only to record what changed, but also what I learned, why we mad
 
 These notes should grow alongside the production-readiness audit so someone can later trace the learning curve from a working laptop setup to a deployable production system.
 
+## 2026-10-31 — Behaviour-preserving repository architecture refactor
+
+The architecture plan and current module map live in [Repository Architecture and Safe Refactor Plan](../architecture/REPOSITORY_REFACTOR_PLAN.md).
+
+### What was changed
+
+- Created a dedicated API client module at `frontend/src/lib/appApi.ts`, preserving the original cookie credentials, JSON request headers, and `ApiError` behavior.
+- Moved the existing shared brand palette and light/dark theme store to `frontend/src/theme/theme.ts`.
+- Moved the shared icon map to `frontend/src/ui/icons.tsx`.
+- Moved the shared university/program option types to `frontend/src/types/academic.ts`.
+- Moved the existing academic profile-completion screen to `frontend/src/screens/onboarding/CompleteProfileScreen.tsx`.
+- Moved the existing ambassador application/dashboard/referrals/payout-request screen to `frontend/src/screens/ambassador/AmbassadorScreen.tsx`, keeping its API paths and profile-navigation callback intact.
+- Moved the settings screen to `frontend/src/screens/settings/SettingsScreen.tsx`, preserving account, email/password, privacy, notification, theme, logout and account-deletion flows.
+- Extracted the shared `Pill` component to `frontend/src/ui/Pill.tsx` and browser push subscribe/unsubscribe logic to `frontend/src/lib/pushNotifications.ts`.
+- Kept `App.tsx` as the integration point and navigation composition root. It has now fallen from 16,032 to 14,945 lines with 142 top-level function/arrow declarations. This is still an incremental extraction, not a complete frontend rewrite.
+- Added a repository architecture plan, frontend module ownership guidance, and a README module map.
+
+### What the build investigation taught us
+
+Prepza's frontend `prebuild` command runs a chain of Python source transformers before TypeScript and Vite. Several older transformers assumed the shared API helper was still declared in `App.tsx`. Moving it exposed those assumptions in CI. We updated the offline-data, sync-queue, queue-hardening, StudyHub offline-save, document-progress, and screen-loading transforms to target the new API module. We also corrected the Shop import transform to use the current App import structure.
+
+This matters because a source transform can compile and still remove or misplace a component. The earlier `ExploreScreen` runtime bug was caused by a section replacement that removed the wrapper while leaving its route reference. A regression contract now protects that wrapper after the generation UI transform.
+
+### Settings extraction — test-first evidence
+
+The Settings extraction was done as a separate slice:
+
+1. Added module-boundary and behavior-contract tests first. The first CI run failed because the feature module and imports did not exist yet (**3 expected failures, 9 existing tests passed**).
+2. Moved the existing Settings screen without redesigning its state or API behavior; moved the shared `Pill` component and push subscribe/unsubscribe helpers into focused modules.
+3. The first TypeScript run exposed a missing shared-icon import. Added an explicit regression assertion and the import.
+4. The corrected frontend build run passed **12 source-transform/module-contract tests**, **5 offline Library regression tests**, TypeScript, service-worker validation, Vite production build, and screen-loading/offline/calling architecture audits.
+
+The Settings module keeps its existing `/me`, `/profile`, `/change-email`, `/change-password`, `/delete-account`, `/logout`, notification-preference, opportunity-discovery, and push-subscription request contracts. The navigation callback is narrowed to the three routes this screen actually invokes; runtime destinations are unchanged.
+
+### Verification evidence
+
+[Release Browser and Cross-System Regression run 41222704363](https://github.com/apexstudying-cmd/prepza/actions/runs/41222704363), tested code commit `ba93150bf9df4348aada6d680bf4bfc4ddc595bb`, passed:
+
+- Frontend TypeScript check and production Vite build.
+- Disposable PostgreSQL and Redis setup, Alembic migrations, and controlled SQL migration ledger.
+- Full disposable PostgreSQL suite: **98 passed, 0 failed**.
+- Mobile/tablet responsive browser checks.
+- B2B browser-to-ledger metering regression.
+- Online/offline Study Hub lifecycle and generated-artifact replay journeys.
+- Responsive screenshot upload.
+
+The offline browser journey verified that saved Study Hub documents survive offline reload, existing Summary/Flashcards/Practice Questions/Mind Maps reopen without generation POST requests, and cached podcast audio remains available offline.
+
+### What remains
+
+- Extract additional frontend screens only after mapping and updating the prebuild scripts that currently rewrite `App.tsx`.
+- Split the very large `AdminSection`, chat, group, document-study and navigation surfaces into domain-owned modules with explicit props and contract tests; Settings is now extracted.
+- Design the backend `app.py` split around shared extensions, ORM model ownership, and route blueprints; do not move models/routes mechanically.
+- Keep provider checks separate: this CI run does not prove live Paystack, SES, OpenAI, R2 or GPU behavior.
+
 ## 2026-10-31 — Local Supabase data migration and deployment architecture
 
 The full, step-by-step record lives in [Local Supabase Data Migration Walkthrough](../engineering/LOCAL_SUPABASE_DATA_MIGRATION_WALKTHROUGH.md). This section is a short learning index; the walkthrough is the source of truth for commands, detailed outputs, and the import checklist.

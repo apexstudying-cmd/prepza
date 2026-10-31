@@ -3,21 +3,23 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / 'frontend' / 'src' / 'App.tsx'
+API = ROOT / 'frontend' / 'src' / 'lib' / 'appApi.ts'
 
 text = APP.read_text(encoding='utf-8')
+api_text = API.read_text(encoding='utf-8')
 
-if 'async function baseApi<T = any>' not in text and 'async function api<T = any>' not in text:
+if 'async function baseApi<T = any>' not in api_text and 'export async function api<T = any>' not in api_text:
     print('Loading policy: current App uses modular frontend/src/lib/api.ts; skipping legacy loading transform.')
     raise SystemExit(0)
 
 # Loading architecture sits above the existing API/offline/queue stack.
 # Never replace that stack: those transforms intentionally share one API layer.
-if 'async function baseApi<T = any>' not in text:
-    api_start = text.find('async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {')
+if 'async function baseApi<T = any>' not in api_text:
+    api_start = api_text.find('export async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {')
     if api_start < 0:
-        raise SystemExit('Loading policy: api helper not found')
-    text = text[:api_start] + text[api_start:].replace(
-        'async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {',
+        raise SystemExit('Loading policy: exported API helper not found in appApi.ts')
+    api_text = api_text[:api_start] + api_text[api_start:].replace(
+        'export async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {',
         'async function baseApi<T = any>(path: string, options: RequestInit = {}): Promise<T> {',
         1,
     )
@@ -44,7 +46,7 @@ function refreshScreenApiCache<T>(path: string, options: RequestInit): void {
   screenApiRefreshes.set(path, refresh)
 }
 
-async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+export async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
   const method = String(options.method || 'GET').toUpperCase()
   const cacheable = isScreenCacheableApiRequest(path, method)
 
@@ -67,11 +69,7 @@ async function api<T = any>(path: string, options: RequestInit = {}): Promise<T>
 }
 '''
 
-    marker = '\n// ─── Document upload helpers'
-    marker_index = text.find(marker)
-    if marker_index < 0:
-        raise SystemExit('Loading policy: document helper marker not found')
-    text = text[:marker_index] + wrapper + text[marker_index:]
+    api_text = api_text.rstrip() + wrapper + '\n'
 
 # Cached-first data should not briefly reveal a skeleton while the cached API
 # promise resolves. Slow/no-cache requests still get a skeleton after a short
@@ -130,14 +128,15 @@ loading_block = '''function GenerationLoading({ label }: { label: string }) {
 '''
 text = text[:loading_start] + loading_block + text[loading_end + 2:]
 
-if text.count('async function api<T = any>') != 1:
+if api_text.count('export async function api<T = any>') != 1:
     raise SystemExit('Loading policy: public API wrapper generation invariant failed')
-if text.count('async function baseApi<T = any>') != 1:
+if api_text.count('async function baseApi<T = any>') != 1:
     raise SystemExit('Loading policy: underlying API generation invariant failed')
-if text.count('const screenApiCache = new Map') != 1:
+if api_text.count('const screenApiCache = new Map') != 1:
     raise SystemExit('Loading policy: duplicate screen cache detected')
 if text.count('function DelayedScreenSkeleton') != 1:
     raise SystemExit('Loading policy: duplicate delayed skeleton helper detected')
 
+API.write_text(api_text, encoding='utf-8')
 APP.write_text(text, encoding='utf-8')
 print(f'Screen loading policy applied: single API cache wrapper, delayed skeleton fallback, wrapped skeleton returns={wrapped_count}.')

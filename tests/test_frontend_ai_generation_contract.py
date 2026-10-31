@@ -135,14 +135,14 @@ def test_primary_bottom_navigation_exposes_accessible_names_and_current_location
 
 def test_generation_screens_follow_manual_theme_tokens():
     generation = Path("frontend/src/generation/GenerationScreens.tsx").read_text(encoding="utf-8")
-    app = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
+    theme = Path("frontend/src/theme/theme.ts").read_text(encoding="utf-8")
     build_transform = Path("tools/apply_generation_ui_build.py").read_text(encoding="utf-8")
 
     for token in ("text", "muted", "page", "card", "border"):
         assert f"var(--prepza-generation-{token}," in generation
-        assert f"'--prepza-generation-{token}'" in app
+        assert f"'--prepza-generation-{token}'" in theme
     assert "background: 'var(--prepza-generation-page, #F8F9FC)'" in build_transform
-    assert "'--prepza-generation-color-scheme', mode" in app
+    assert "'--prepza-generation-color-scheme', mode" in theme
     assert "colorScheme: 'var(--prepza-generation-color-scheme, light)'" in build_transform
 
 def test_generation_controls_have_accessible_selection_and_large_back_target():
@@ -155,7 +155,7 @@ def test_generation_controls_have_accessible_selection_and_large_back_target():
     assert "background: disabled ? C.border" in source
 
 def test_theme_muted_text_meets_wcag_aa_on_light_and_dark_surfaces():
-    source = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
+    source = Path("frontend/src/theme/theme.ts").read_text(encoding="utf-8")
     light_match = re.search(r"const LIGHT_THEME: ThemeTokens = \{[^\n]*textMuted: '([^']+)'", source)
     dark_match = re.search(r"const DARK_THEME: ThemeTokens = \{[^\n]*textMuted: '([^']+)'", source)
     assert light_match and dark_match

@@ -1,6 +1,7 @@
 from pathlib import Path
 
 APP = Path('frontend/src/App.tsx')
+API = Path('frontend/src/lib/appApi.ts')
 
 
 def patch_study_hub(s):
@@ -66,21 +67,23 @@ def patch_native_reader(s):
 
 
 def patch_offline_reading_gate(s):
-    marker = "    if (/^\\/documents\\/\\d+\\/reading$/.test(cleanPath)) return { page_num: 0 } as T"
-    replacement = """    if (/^\\/documents\\/\\d+\\/reading$/.test(cleanPath)) {
+    old_line = next((
+        line for line in s.splitlines()
+        if "reading$/.test(cleanPath)) return { page_num: 0 } as T" in line
+    ), None)
+    if old_line:
+        indent = old_line[:len(old_line) - len(old_line.lstrip())]
+        replacement = r"""    if (/^\/documents\/\d+\/reading$/.test(cleanPath)) {
       const documentId = Number(cleanPath.split('/')[2])
       let page_num = 0
       try { page_num = Math.max(0, Number(localStorage.getItem(`prepza-reading-progress:${offlineUserId}:${documentId}`) || 0) || 0) } catch (_) {}
       return { page_num } as T
     }"""
-    if marker in s:
-        return s.replace(marker, replacement, 1)
-    # The StudyHub offline-library patch can already install this route.
-    # Treat that as satisfied so the production build remains idempotent.
-    if "getSavedStudyHubOffline(documentId, offlineUserId)" in s and "cleanPath" in s:
+        replacement = "\n".join(indent + line[len("    "):] if line.startswith("    ") else line for line in replacement.splitlines())
+        return s.replace(old_line, replacement, 1)
+    if "prepza-reading-progress:" in s and "localStorage.getItem" in s:
         return s
     raise SystemExit('offline reading gate anchor not found')
-
 
 def patch_api_gate(s):
     marker = "    if (/^\\/documents\\/\\d+\\/reading$/.test(cleanPath)) return { page_num: 0 } as T"
@@ -89,18 +92,22 @@ def patch_api_gate(s):
 
 def main():
     s = APP.read_text()
+    api_source = API.read_text()
     s = patch_study_hub(s)
     s = patch_native_reader(s)
-    s = patch_offline_reading_gate(s)
+    api_source = patch_offline_reading_gate(api_source)
     required = [
         'const [readingPage, setReadingPage] = useState(0)',
         'const [readerUserId, setReaderUserId] = useState<number | null>(null)',
         'prepza-reading-progress:',
     ]
-    missing = [marker for marker in required if marker not in s]
+    missing = [marker for marker in required if marker not in s and marker != 'prepza-reading-progress:']
     if missing:
         raise SystemExit(f'document study progress verification failed: {missing}')
+    if 'prepza-reading-progress:' not in api_source:
+        raise SystemExit('document study progress API verification failed: offline reading progress route missing')
     APP.write_text(s)
+    API.write_text(api_source)
     print('document study progress patch applied and verified.')
 
 

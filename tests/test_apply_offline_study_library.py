@@ -77,3 +77,8 @@ def test_library_save_hook_fails_clearly_without_success_return() -> None:
         assert "successful API return anchor not found" in str(error)
     else:
         raise AssertionError("Expected a clear failure when the API return cannot be located")
+
+
+def test_offline_user_id_is_normalized_before_numeric_storage_lookups() -> None:
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert "const offlineUserId = Number(getOfflineUserId() || 0)" in source

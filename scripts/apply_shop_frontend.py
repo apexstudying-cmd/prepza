@@ -17,8 +17,8 @@ def main() -> None:
     text = APP.read_text(encoding="utf-8")
     text = replace_once(
         text,
-        "import logoImg from './imports/logo.svg'\n",
-        "import logoImg from './imports/logo.svg'\nimport ShopScreen from './shop/ShopScreen'\n",
+        "import CompleteProfileScreen from './screens/onboarding/CompleteProfileScreen'\n",
+        "import CompleteProfileScreen from './screens/onboarding/CompleteProfileScreen'\nimport ShopScreen from './shop/ShopScreen'\n",
         "ShopScreen import",
     )
     text = replace_once(
