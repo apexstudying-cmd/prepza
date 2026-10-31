@@ -37,6 +37,7 @@ def test_extracted_onboarding_preserves_academic_profile_update_contract():
         "year:",
         "semester:",
         "'X-CSRF-Token': csrfToken",
+        "prepza:academic-context-changed",
         "setScreen('home')",
     ):
         assert required in source
