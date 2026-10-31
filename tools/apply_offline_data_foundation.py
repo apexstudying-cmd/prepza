@@ -1,8 +1,8 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-APP = ROOT / 'frontend' / 'src' / 'App.tsx'
-text = APP.read_text(encoding='utf-8')
+API = ROOT / 'frontend' / 'src' / 'lib' / 'appApi.ts'
+text = API.read_text(encoding='utf-8')
 
 MARKER = "const PREPZA_OFFLINE_DB = 'prepza-offline-v1'"
 if MARKER in text:
@@ -12,7 +12,7 @@ if MARKER in text:
         'async function readPrepzaOffline',
         'async function writePrepzaOffline',
         'async function clearPrepzaOfflineData',
-        'async function api<T = any>',
+        'export async function api<T = any>',
         'const canUseOfflineData =',
         'return body as T',
     )
@@ -25,7 +25,7 @@ if MARKER in text:
     print('Offline data foundation already applied and verified.')
     raise SystemExit(0)
 
-OLD = '''async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+OLD = '''export export async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
   const { headers: extraHeaders, ...restOptions } = options
   const res = await fetch(path, {
     credentials: 'include',
@@ -170,5 +170,5 @@ if OLD not in text:
     raise SystemExit('Offline data foundation failed: expected api helper was not found.')
 
 text = text.replace(OLD, NEW, 1)
-APP.write_text(text, encoding='utf-8')
+API.write_text(text, encoding='utf-8')
 print('Offline data foundation applied and verified.')
