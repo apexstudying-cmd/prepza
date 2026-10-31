@@ -11,7 +11,7 @@ function formatAchievementDate(iso: string | null): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-function AchievementsScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+export default function AchievementsScreen({ setScreen }: { setScreen: (s: 'profile' | 'share-sheet') => void }) {
   const { tokens: T } = useTheme()
   const [sharing, setSharing] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
