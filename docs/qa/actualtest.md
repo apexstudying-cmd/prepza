@@ -1,5 +1,16 @@
 # Prepza — Actual QA Test Record
 
+## Latest CI evidence — 2026-10-31 (Group Detail structural extraction)
+
+Draft [PR #62](https://github.com/apexstudying-cmd/prepza/pull/62), code head `a342e822ca3a240257ecb5f8f84ad27d873985ac`, moves Group Detail from `frontend/src/App.tsx` into `frontend/src/screens/groups/GroupDetailScreen.tsx` and the existing group response types into `frontend/src/types/groups.ts`. A direct source comparison confirmed the complete 417-line screen body is byte-for-byte identical to the pre-extraction version after normalizing only the component signature and module prop declaration.
+
+- [Frontend Build run 41233691287](https://github.com/apexstudying-cmd/prepza/actions/runs/41233691287) passed: source-transform/module contract tests (including the new Group Detail contract), TypeScript typecheck, service-worker checks, and production build.
+- [Release Browser and Cross-System Regression run 41233691818](https://github.com/apexstudying-cmd/prepza/actions/runs/41233691818) passed: production image, disposable PostgreSQL/Redis, migrations and SQL ledger, responsive mobile/tablet checks, B2B browser-to-ledger regression, full disposable PostgreSQL QA, online/offline and generated-artifact browser journeys, screenshot upload, and disposable service cleanup.
+- Admin Route Contract, Student Contract, Student Frontend Contract, AI Economics, AI Generation Architecture, B2B Contract, E2EE Security, E2EE Chat, Study Navigation, and Prepza Control API workflows also passed on the same code head.
+- StudyHub Library Flow was skipped by its workflow conditions. No claim is made that this separate workflow ran.
+
+**Merge status:** PR #62 remains a draft and has not been merged. This evidence applies to the tested PR code head, not to `main` until merge and post-merge verification.
+
 ## Latest CI evidence — 2026-10-31 (My Study extraction)
 
 GitHub Actions [Release Browser and Cross-System Regression run 41231276667](https://github.com/apexstudying-cmd/prepza/actions/runs/41231276667) passed on tested application-code commit `48cae15227e7af3fe30c6b3fc62e2a7995a59cc7`. The workflow built the production Docker image; started disposable PostgreSQL and Redis; verified 43 migration files and the controlled SQL migration ledger; passed the full disposable PostgreSQL suite (**98 passed, 0 failed, 3,536 warnings**); passed mobile/tablet responsive browser checks and B2B browser-to-ledger metering; and ran the real-browser My Study/Study Hub lifecycle plus generated-artifact replay. The local-first My Study reader opened a real PDF Blob with zero source-document detail/reading GETs. The artifact journey verified all 12 canonical generated-material GETs across three documents, private ownership/cacheability, zero generation POSTs during offline replay, and offline reopening of cached podcast script/audio Blobs. Responsive screenshots were uploaded (artifact ID `13054205269`).
