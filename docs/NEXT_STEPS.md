@@ -651,3 +651,19 @@ Deployment note (27 October 2026): Render's `prepza` service has auto-deploy ena
 - [~] Monthly per-item Shop fee: KES 100 buys 30 days; renewals are manual (no automatic charge). Migration grants existing paid listings a 30-day transition period; expiry and payment-callback idempotency are implemented. The integrated full-browser regression passed on `3e77f70` and its Shop journey covers expiry, renewal, and duplicate callback behavior. The Shop migration/backup rehearsal passed on `20261029_shop_period_payment` in run 40712703724. A new shared-streak migration now advances Alembic head to `20261030_shared_study_streak`; the updated migration rehearsal must pass before release freeze.
 - [x] Verify latest-head populated-database migration and Shop expiry/renewal/replayed-callback journeys: migration/backup restore passed in run 40712703724, and Shop contract plus full browser/cross-system regression passed on code 3e77f70. Real Paystack/R2 provider-side verification remains open.
 - [x] Research commercial seller pricing: retain KES 100/30 days for casual sellers initially; commercial shop subscription tiers are hypotheses only and must be validated before implementation. See `docs/architecture/shop.md`.
+
+
+## 2026-10-31 — local Supabase migration rehearsal (in progress)
+
+- [x] Preserve the pre-change local PostgreSQL backup and export the Supabase source as a custom-format archive; archive listing passed. Supabase remains read-only.
+- [x] Restore the local backup into disposable database `prepza_migration_test_20261031`; restore succeeded and the clone contains 112 public tables.
+- [x] Confirm the clone starts at Alembic revision `20261007_doc_material`; its Shop tables are missing and its two shared-streak tables already exist, matching the working local DB.
+- [x] Diagnose stale running app container: it only contains migrations through `20261007_doc_material`; the rebuilt image contains all four later migrations and reports `20261030_shared_study_streak` as head.
+- [x] Run `alembic upgrade head` from a one-off container created from the rebuilt image, with `DATABASE_URL` redirected to the disposable clone. The command returned successfully.
+- [ ] Verify database-side Alembic revision is `20261030_shared_study_streak`, all expected Shop/streak tables and columns exist, constraints/indexes/FKs are correct, and pre-existing data remains intact. Do not count the command exit alone as migration PASS.
+- [ ] If clone verification passes, compare Supabase source/destination definitions for selected application tables and build a strict data-only import allowlist with FK-safe order and sequence reset plan.
+- [ ] Rehearse the selective import on a second disposable target before touching working local `prepza`.
+- [ ] Verify imported row counts, orphan relationships, sequence next values, existing verified-account login and representative browser screens. Signup/SES delivery remains a separate concern.
+- [ ] Keep Supabase read-only; never restore its full archive or managed schemas over the newer local schema.
+
+Learning note: developers do not memorise every command. They learn tool concepts, inspect `--help`/runbooks/history, understand target selection and side effects, rehearse destructive operations on disposable environments, and verify outcomes. The detailed command explanations and exact migration rehearsal command are in `docs/engineering/LOCAL_SUPABASE_DATA_MIGRATION_WALKTHROUGH.md`.
