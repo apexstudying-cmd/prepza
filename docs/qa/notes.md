@@ -42,7 +42,7 @@ The Settings module keeps its existing `/me`, `/profile`, `/change-email`, `/cha
 
 ### Verification evidence
 
-[Release Browser and Cross-System Regression run 41221576719](https://github.com/apexstudying-cmd/prepza/actions/runs/41221576719), tested code commit `72f086c85e814a2c5e365f17505ea8d133ccbf74`, passed:
+[Release Browser and Cross-System Regression run 41222704363](https://github.com/apexstudying-cmd/prepza/actions/runs/41222704363), tested code commit `ba93150bf9df4348aada6d680bf4bfc4ddc595bb`, passed:
 
 - Frontend TypeScript check and production Vite build.
 - Disposable PostgreSQL and Redis setup, Alembic migrations, and controlled SQL migration ledger.
