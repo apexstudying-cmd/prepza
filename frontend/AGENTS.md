@@ -74,3 +74,5 @@ python -m pytest -q \
 6. Do not remove `// @ts-nocheck` from the legacy App file as a blanket change. Remove it only after affected code has proper types and relevant tests pass.
 7. Build-time source transforms must preserve unrelated component declarations and route targets. Add regression coverage for each transform that edits `App.tsx`; transforms must detect whether a screen is inline or module-owned before patching it.
 8. Keep the application API client and chat API client separate until their authentication, CSRF, cache, and error contracts are deliberately reconciled.
+
+- `src/screens/social/FollowScreens.tsx` and `src/types/social.ts` - follower/following lists, follow-request actions, and their shared response contracts. Keep the route IDs and CSRF-protected API requests unchanged.
