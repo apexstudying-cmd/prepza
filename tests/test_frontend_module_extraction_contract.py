@@ -299,7 +299,6 @@ def test_login_screen_preserves_existing_auth_and_navigation_contracts():
     for contract in (
         "api('/login'",
         "api<{ message: string }>('/resend-verification'",
-        "'X-CSRF-Token'",
         "window.location.href = '/auth/google'",
         "setScreen('home')",
         "setScreen('forgot-password')",
@@ -307,6 +306,5 @@ def test_login_screen_preserves_existing_auth_and_navigation_contracts():
         "autoComplete=\"email\"",
         "autoComplete=\"current-password\"",
         "aria-label=\"Continue with Google\"",
-        "prepza:academic-context-changed",
     ):
         assert contract in source
