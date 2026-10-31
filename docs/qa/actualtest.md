@@ -1966,3 +1966,7 @@ The running app container was stale: its migration directory stopped at `2026100
 A one-off container from that rebuilt image ran `python -m alembic upgrade head` with the database URL explicitly redirected to `prepza_migration_test_20261031`. The process returned successfully. **This is not yet a passing migration gate:** the database-side Alembic revision, target tables/columns, constraints/indexes/FKs, and preservation of pre-existing records still need direct verification.
 
 No migration was applied to the working `prepza` database. Supabase was not modified, and no source data import or local login test has occurred. The command-level walkthrough and developer learning notes are maintained in `docs/engineering/LOCAL_SUPABASE_DATA_MIGRATION_WALKTHROUGH.md`.
+
+## 2026-10-31 — disposable migration database-side verification passed
+
+Direct query of `prepza_migration_test_20261031` confirmed `alembic_version.version_num = 20261030_shared_study_streak`. The three Shop tables (`shop_listing`, `shop_saved_listing`, `shop_report`) and both shared-streak tables (`study_friend_streak`, `study_friend_streak_activity`) all report `EXISTS`. This verifies the expected migration head and target table presence on the disposable clone. It does not yet verify every column, index, constraint, foreign key or preservation of pre-existing data, so the full migration/data-integrity gate remains pending. No migration or import was run against working local `prepza` or Supabase.
