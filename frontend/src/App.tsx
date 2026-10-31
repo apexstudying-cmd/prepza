@@ -1,6 +1,11 @@
 // @ts-nocheck
 import { useState, useEffect, useRef, type ChangeEvent } from 'react'
-import logoImg from './imports/logo.svg'
+
+import { api, ApiError } from './lib/appApi'
+import { N, useTheme, currentThemeMode, DARK_THEME } from './theme/theme'
+import { Ic } from './ui/icons'
+import CompleteProfileScreen from './screens/onboarding/CompleteProfileScreen'
+import type { UniversityOption, ProgramOption } from './types/academic'import logoImg from './imports/logo.svg'
 import { TERMS_TEXT, PRIVACY_TEXT } from './legalContent'
 import { joinRealtimeChat, leaveRealtimeChat, sendReadRealtime, sendTypingRealtime, resetChatRealtime } from './crypto/chatRealtime'
 import CallExperience from './crypto/CallExperience'
@@ -25,29 +30,6 @@ import { cacheAvatar, getCachedAvatar, clearCachedAvatar } from './offline/avata
 // vite.config.ts), so relative paths work identically in dev and once this
 // app is eventually served by Flask itself in production - no base URL
 // switching needed.
-class ApiError extends Error {
-  status: number
-  constructor(message: string, status: number) {
-    super(message)
-    this.status = status
-  }
-}
-
-async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
-  const { headers: extraHeaders, ...restOptions } = options
-  const res = await fetch(path, {
-    credentials: 'include',
-    ...restOptions,
-    headers: { 'Content-Type': 'application/json', ...(extraHeaders || {}) },
-  })
-  let body: any = null
-  try { body = await res.json() } catch { /* no JSON body */ }
-  if (!res.ok) {
-    throw new ApiError((body && body.error) || `Request failed (${res.status})`, res.status)
-  }
-  return body as T
-}
-
 type GenerationProgress = { progress_percent: number; progress_stage: string; status: string; found?: boolean; error_message?: string | null }
 
 function normalizeGeneratedMaterialFeature(value: unknown): string {
@@ -464,54 +446,6 @@ function GenerationLoading({ label }: { label: string }) {
 }
 
 // ─── Icon helpers ─────────────────────────────────────────────────────────────
-const Ic = {
-  home:     (s='w-6 h-6') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>,
-  explore:  (s='w-6 h-6') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>,
-  plus:     (s='w-6 h-6') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>,
-  chat:     (s='w-6 h-6') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>,
-  person:   (s='w-6 h-6') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>,
-  back:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>,
-  close:    (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>,
-  search:   (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>,
-  camera:   (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h3l1.5-2h7L17 7h3v12H4z"/><circle cx="12" cy="13" r="3.2"/></svg>,
-  gallery:  (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8.5" cy="9" r="1.3"/><path d="m5 17 4.2-4.2 3 3 2.2-2.2L19 18"/></svg>,
-  send:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>,
-  mic:      (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>,
-  upload:   (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>,
-  heart:    (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>,
-  comment:  (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M21.99 4c0-1.1-.89-2-1.99-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4-.01-18z"/></svg>,
-  bookmark: (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>,
-  share:    (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/></svg>,
-  dots:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>,
-  bell:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>,
-  check:    (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>,
-  flash:    (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>,
-  podcast:  (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M12 1c-4.97 0-9 4.03-9 9v7c0 1.66 1.34 3 3 3h1v-8H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-2v8h1c1.66 0 3-1.34 3-3v-7c0-4.97-4.03-9-9-9z"/></svg>,
-  lock:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>,
-  book:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 14H8v-2h8v2zm0-4H8v-2h8v2zm0-4H8V6h8v2z"/></svg>,
-  trophy:   (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94.63 1.5 1.98 2.63 3.61 2.96V19H7v2h10v-2h-4v-3.1c1.63-.33 2.98-1.46 3.61-2.96C19.08 12.63 21 10.55 21 8V7c0-1.1-.9-2-2-2zM5 8V7h2v3.82C5.84 10.4 5 9.3 5 8zm14 0c0 1.3-.84 2.4-2 2.82V7h2v1z"/></svg>,
-  play:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>,
-  pause:    (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>,
-  settings: (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>,
-  eye:      (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>,
-  attach:   (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>,
-  edit:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>,
-  logout:   (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>,
-  image:    (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>,
-  link:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>,
-  skip:     (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>,
-  rewind:   (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M18 9.86v4.28L14.97 12 18 9.86zm-9 0v4.28L5.97 12 9 9.86zM20 6l-7 5 7 5V6zm-9 0l-7 5 7 5V6z"/></svg>,
-  chevR:    (s='w-4 h-4') => <svg className={s} viewBox="0 0 24 24" fill="currentColor"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/></svg>,
-  download: (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>,
-  message: (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/></svg>,
-  paperclip: (s='w-5 h-5') => <svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m20.5 11.5-8.9 8.9a5 5 0 0 1-7.1-7.1l9.2-9.2a3.5 3.5 0 0 1 5 5l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg>,
-  toggle:   (on: boolean) => (
-    <div style={{ width: 44, height: 24, background: on ? '#C9A84C' : '#D1D5DB', borderRadius: 99, position: 'relative', transition: 'background 0.2s', cursor: 'pointer' }}>
-      <div style={{ width: 18, height: 18, background: '#fff', borderRadius: '50%', position: 'absolute', top: 3, left: on ? 23 : 3, transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.2)' }} />
-    </div>
-  ),
-}
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Screen =
   | 'splash' | 'login' | 'forgot-password' | 'signup' | 'check-email' | 'complete-profile' | 'reset-password' | 'verify-confirm'
@@ -839,7 +773,6 @@ const podcasts = [
 ]
 
 // ─── Shared atoms ─────────────────────────────────────────────────────────────
-const N = { navy: '#0B1437', navy2: '#132046', navy3: '#1A2A5E', gold: '#C9A84C', goldL: '#E8C97E', bg: '#F8F9FC' }
 const PREPZA_VISION = 'Study smarter together.'
 const PREPZA_BRANDLINE = 'Prepza: Study smarter together.'
 const PREPZA_MISSION = 'Bring personalized study tools, trusted academic resources, and students together in one place.'
@@ -851,48 +784,6 @@ const PREPZA_MISSION = 'Bring personalized study tools, trusted academic resourc
 // Rollout is screen-by-screen: only components that call useTheme() react
 // to a mode change - everything else still reads N/raw hex directly until
 // it's migrated in a later pass.
-type ThemeTokens = { pageBg: string; card: string; text: string; textMuted: string; border: string }
-const LIGHT_THEME: ThemeTokens = { pageBg: '#F8F9FC', card: '#FFFFFF', text: '#0B1437', textMuted: '#596579', border: 'rgba(0,0,0,0.05)' }
-const DARK_THEME: ThemeTokens = { pageBg: '#0A0E1A', card: '#132046', text: '#F5F6FA', textMuted: '#9AA3B8', border: 'rgba(255,255,255,0.08)' }
-type ThemeMode = 'light' | 'dark'
-const THEME_STORAGE_KEY = 'prepza-theme'
-let currentThemeMode: ThemeMode = (typeof window !== 'undefined' && (window.localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode)) || 'light'
-const themeListeners = new Set<() => void>()
-function applyThemeDocument(mode: ThemeMode) {
-  if (typeof document === 'undefined') return
-  const theme = mode === 'dark' ? DARK_THEME : LIGHT_THEME
-  const root = document.documentElement
-  root.dataset.prepzaTheme = mode
-
-  // Generation screens live in their own module, but share the same theme
-  // source. Update variables on the document root so a theme toggle updates
-  // those screens immediately without introducing a second React theme store.
-  root.style.setProperty('--prepza-generation-color-scheme', mode)
-  root.style.setProperty('--prepza-generation-text', theme.text)
-  root.style.setProperty('--prepza-generation-page', theme.pageBg)
-  root.style.setProperty('--prepza-generation-card', theme.card)
-  root.style.setProperty('--prepza-generation-muted', mode === 'dark' ? '#AAB4C8' : '#596579')
-  root.style.setProperty('--prepza-generation-border', mode === 'dark' ? '#2A3654' : '#E1E5ED')
-}
-function setThemeMode(next: ThemeMode) {
-  currentThemeMode = next
-  applyThemeDocument(next)
-  try { window.localStorage.setItem(THEME_STORAGE_KEY, next) } catch { /* private browsing etc */ }
-  themeListeners.forEach(fn => fn())
-}
-applyThemeDocument(currentThemeMode)
-function toggleThemeMode() {
-  setThemeMode(currentThemeMode === 'light' ? 'dark' : 'light')
-}
-function useTheme() {
-  const [, forceRerender] = useState(0)
-  useEffect(() => {
-    const listener = () => forceRerender(n => n + 1)
-    themeListeners.add(listener)
-    return () => { themeListeners.delete(listener) }
-  }, [])
-  return { mode: currentThemeMode, tokens: currentThemeMode === 'dark' ? DARK_THEME : LIGHT_THEME, toggleTheme: toggleThemeMode }
-}
 // Prevents skeleton-loader flicker on fast networks: only flips true if
 // `active` is still true after `delay` ms. Returns false immediately once
 // `active` goes false, so real content always shows as soon as it's ready.
@@ -6618,8 +6509,6 @@ function VerifyConfirmScreen({ setScreen }: { setScreen: (s: Screen) => void }) 
 }
 
 // ─── SIGNUP ───────────────────────────────────────────────────────────────────
-type UniversityOption = { id: number; name: string; short_code: string; country: string | null }
-type ProgramOption = { id: number; name: string; degree_level: string | null; discipline_category: string | null }
 
 // ─── Group types (Chunk 7) ─────────────────────────────────────────────────
 type GroupPrivacy = 'public' | 'private' | 'course_only'
@@ -7036,180 +6925,6 @@ function CheckEmailScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     </div>
   )
 }
-// ─── COMPLETE PROFILE (lands here after a first-time Google Sign-In) ──────────
-function CompleteProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const { tokens: T } = useTheme()
-  const steps = ['University', 'Course', 'Year', 'Semester']
-  const [step, setStep] = useState(0)
-  const [data, setData] = useState({
-    university_id: null as number | null, university_name: '',
-    program_id: null as number | null, program_name: '',
-    year: null as number | null, semester: null as number | null,
-  })
-  const [csrfToken, setCsrfToken] = useState('')
-  const [loadingMe, setLoadingMe] = useState(true)
-
-  const [universities, setUniversities] = useState<UniversityOption[]>([])
-  const [loadingUniversities, setLoadingUniversities] = useState(true)
-  const [uniSearch, setUniSearch] = useState('')
-
-  const [programs, setPrograms] = useState<ProgramOption[]>([])
-  const [loadingPrograms, setLoadingPrograms] = useState(false)
-  const [courseSearch, setCourseSearch] = useState('')
-
-  const [error, setError] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-
-  // Confirms there's an actual logged-in session (this screen is only ever
-  // reached via the /auth/google/callback redirect) and grabs the CSRF
-  // token PATCH /profile requires. Pre-fills anything already set, in case
-  // this is a re-visit rather than the very first sign-in.
-  useEffect(() => {
-    api<{ university_id: number | null; program_id: number | null; year: number | null; semester: number | null; csrf_token: string }>('/me')
-      .then(me => {
-        setCsrfToken(me.csrf_token)
-        setData(d => ({ ...d, university_id: me.university_id, program_id: me.program_id, year: me.year, semester: me.semester }))
-      })
-      .catch(() => setScreen('login'))
-      .finally(() => setLoadingMe(false))
-  }, [])
-
-  useEffect(() => {
-    api<UniversityOption[]>('/universities')
-      .then(setUniversities)
-      .catch(() => setError('Could not load the university list. Check your connection and try again.'))
-      .finally(() => setLoadingUniversities(false))
-  }, [])
-
-  useEffect(() => {
-    if (data.university_id == null) { setPrograms([]); return }
-    setLoadingPrograms(true)
-    api<ProgramOption[]>(`/universities/${data.university_id}/programs`)
-      .then(setPrograms)
-      .catch(() => setError('Could not load courses for that university.'))
-      .finally(() => setLoadingPrograms(false))
-  }, [data.university_id])
-
-  const goBack = () => { setError(''); setStep(s => Math.max(0, s - 1)) }
-  const advance = () => { setError(''); setStep(s => s + 1) }
-
-  const filteredUniversities = universities.filter(u => u.name.toLowerCase().includes(uniSearch.toLowerCase()))
-  const filteredPrograms = programs.filter(p => p.name.toLowerCase().includes(courseSearch.toLowerCase()))
-
-  const handleFinish = async (overrides: Partial<typeof data> = {}) => {
-    const payload = { ...data, ...overrides }
-    setSubmitting(true)
-    setError('')
-    try {
-      await api('/profile', {
-        method: 'PATCH',
-        headers: { 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify({
-          university_id: payload.university_id,
-          program_id: payload.program_id,
-          year: payload.year,
-          semester: payload.semester,
-        }),
-      })
-      window.dispatchEvent(new CustomEvent('prepza:academic-context-changed', { detail: {
-        university_id: payload.university_id, program_id: payload.program_id, year: payload.year, semester: payload.semester
-      }}))
-      setScreen('home')
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Something went wrong. Please try again.')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const inputStyle = { width: '100%', boxSizing: 'border-box' as const, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 14, padding: '13px 16px', color: '#fff', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', marginBottom: 12 }
-  const optionStyle = (selected: boolean) => ({ background: selected ? 'rgba(201,168,76,0.2)' : 'rgba(255,255,255,0.08)', border: `1px solid ${selected ? N.gold + '55' : 'rgba(255,255,255,0.1)'}`, borderRadius: 14, padding: '14px 18px', color: '#fff', fontWeight: 600, fontSize: 14, cursor: 'pointer', textAlign: 'left' as const, fontFamily: 'Plus Jakarta Sans' })
-
-  if (loadingMe) {
-    return (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(170deg,${N.navy} 0%,${N.navy2} 60%,${N.bg} 100%)` }}>
-        <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>Loading your account...</div>
-      </div>
-    )
-  }
-
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: `linear-gradient(170deg,${N.navy} 0%,${N.navy2} 60%,${N.bg} 100%)` }}>
-      <div style={{ padding: '20px 24px 0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-          {step > 0 && <button onClick={goBack} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, padding: '8px 10px', color: '#fff', cursor: 'pointer' }}>{Ic.back('w-4 h-4')}</button>}
-          <div style={{ flex: 1, background: 'rgba(255,255,255,0.12)', borderRadius: 99, height: 4 }}>
-            <div style={{ width: `${((step + 1) / steps.length) * 100}%`, height: '100%', background: N.gold, borderRadius: 99, transition: 'width 0.3s' }} />
-          </div>
-          <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: 600 }}>{step + 1}/{steps.length}</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
-          <img src="/icon-192.png" alt="Prepza" style={{ width: 56, height: 56, borderRadius: 16 }} />
-        </div>
-      </div>
-      <div style={{ flex: 1, padding: '0 24px 32px', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <div style={{ fontWeight: 800, fontSize: 26, color: '#fff', marginBottom: 6 }}>Finish setting up</div>
-        <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13, marginBottom: 20 }}>Just a few details left to personalise your Prepza experience</div>
-
-        {error && (
-          <div style={{ background: 'rgba(140,29,43,0.25)', border: '1px solid rgba(140,29,43,0.5)', borderRadius: 12, padding: '10px 14px', color: '#ffb4bd', fontSize: 13, marginBottom: 16 }}>{error}</div>
-        )}
-
-        {step === 0 && (
-          <>
-            <input value={uniSearch} onChange={e => setUniSearch(e.target.value)} placeholder="Type to search your university..." style={inputStyle} />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1, overflowY: 'auto', minHeight: 0 }} className="scrollbar-hide">
-              {loadingUniversities ? (
-                <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Loading universities...</div>
-              ) : filteredUniversities.length === 0 ? (
-                <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>University not found. Prepza doesn't have your university yet - try a different search, or check back soon.</div>
-              ) : filteredUniversities.map(u => (
-                <button key={u.id} onClick={() => { setData(d => ({ ...d, university_id: u.id, university_name: u.name, program_id: null, program_name: '' })); setCourseSearch(''); advance() }}
-                  style={optionStyle(data.university_id === u.id)}>{u.name}</button>
-              ))}
-            </div>
-          </>
-        )}
-
-        {step === 1 && (
-          <>
-            <input value={courseSearch} onChange={e => setCourseSearch(e.target.value)} placeholder="Type to search your course..." style={inputStyle} />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1, overflowY: 'auto', minHeight: 0 }} className="scrollbar-hide">
-              {loadingPrograms ? (
-                <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Loading courses...</div>
-              ) : programs.length === 0 ? (
-                <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>No courses listed yet for {data.university_name}. Check back soon - we're adding more universities regularly.</div>
-              ) : filteredPrograms.length === 0 ? (
-                <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>Course not found for {data.university_name}. Try a different search.</div>
-              ) : filteredPrograms.map(p => (
-                <button key={p.id} onClick={() => { setData(d => ({ ...d, program_id: p.id, program_name: p.name })); advance() }}
-                  style={optionStyle(data.program_id === p.id)}>{p.name}</button>
-              ))}
-            </div>
-          </>
-        )}
-
-        {step === 2 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[1, 2, 3, 4, 5].map(y => (
-              <button key={y} onClick={() => { setData(d => ({ ...d, year: y })); advance() }} style={optionStyle(data.year === y)}>Year {y}</button>
-            ))}
-          </div>
-        )}
-
-        {step === 3 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[1, 2, 3].map(s => (
-              <button key={s} disabled={submitting} onClick={() => { setData(d => ({ ...d, semester: s })); handleFinish({ semester: s }) }} style={optionStyle(data.semester === s)}>Semester {s}</button>
-            ))}
-            {submitting && <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 8 }}>Saving...</div>}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
 // ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
 type NotificationItem = {
   id: number; type: string; title: string; body: string | null
