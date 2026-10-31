@@ -36,7 +36,7 @@ def test_extracted_onboarding_preserves_academic_profile_update_contract():
         "program_id:",
         "year:",
         "semester:",
-        "'X-CSRF-Token': csrfToken",
+        "'X-CSRF-Token':csrfToken",
         "prepza:academic-context-changed",
         "setScreen('home')",
     ):
@@ -68,7 +68,7 @@ def test_settings_screen_preserves_existing_account_and_security_contracts():
     ):
         assert endpoint in source
     for contract in (
-        "'X-CSRF-Token': csrfToken",
+        "'X-CSRF-Token':csrfToken",
         "setScreen('edit-profile')",
         "setScreen('subscription')",
         "setScreen('payment-history')",
@@ -86,7 +86,7 @@ def test_push_notification_helpers_keep_the_existing_subscription_contract():
     for contract in (
         "/push/vapid-public-key",
         "/push/subscribe",
-        "'X-CSRF-Token': csrfToken",
+        "'X-CSRF-Token':csrfToken",
         "userVisibleOnly: true",
         "subscription.unsubscribe()",
     ):
@@ -112,7 +112,7 @@ def test_my_study_module_preserves_online_offline_and_library_contracts():
         "('/me')",
         "('/library/saved')",
         "('/documents')",
-        "'X-CSRF-Token': csrfToken",
+        "'X-CSRF-Token':csrfToken",
         "prepza-open-material",
         "setScreen('document-study')",
         "setScreen('upload')",
