@@ -420,7 +420,7 @@ A concise interview explanation:
 | 2026-10-31 | Inspected migration filenames and revision variables | Confirmed `20261007_doc_material` is revision ID in `20261007_document_content_material_link.py` | Complete structural reconciliation |
 | 2026-10-31 | Cloned the 112-table local backup to `prepza_migration_test_20261031` | Clone restored successfully; its Alembic revision and five target-table states matched the original local DB | Rehearse current migration head |
 | 2026-10-31 | Diagnosed migration head mismatch | Running app container contained only migrations through `20261007_doc_material`; fresh image contained all four later files and head `20261030_shared_study_streak` | Use fresh one-off image, not stale running container |
-| 2026-10-31 | Ran `alembic upgrade head` in a one-off container against `prepza_migration_test_20261031` | Process exited successfully; **database-side revision and schema verification still pending** | Verify revision, tables, columns, constraints and preserved data |
+| 2026-10-31 | Ran `alembic upgrade head` in a one-off container against `prepza_migration_test_20261031` | Process exited successfully; direct DB query confirmed revision `20261030_shared_study_streak` and all five Shop/streak tables exist | Verify columns, constraints, indexes, FKs and preserved data |
 
 ---
 
@@ -511,3 +511,17 @@ Useful command patterns from this exercise:
 | `git status/log/diff` | Inspect source-control state | Does not show live database state |
 
 A reliable workflow is: identify the target, inspect the command's effect, take/verify a backup, rehearse on a disposable copy, execute once, then verify the resulting state. Looking up syntax is normal; understanding the impact is the professional skill.
+
+
+### 12.6 Database-side verification result (2026-10-31)
+
+Directly queried `prepza_migration_test_20261031` using the PostgreSQL service after the one-off migration command:
+
+- `alembic_version.version_num` = `20261030_shared_study_streak`.
+- `shop_listing` = EXISTS.
+- `shop_saved_listing` = EXISTS.
+- `shop_report` = EXISTS.
+- `study_friend_streak` = EXISTS.
+- `study_friend_streak_activity` = EXISTS.
+
+This confirms that the disposable clone advanced to the expected Alembic head and the five expected tables are present. It is a **partial migration rehearsal PASS**, not yet full schema/data-integrity PASS. Column definitions, check/unique constraints, indexes, foreign keys, and preservation of pre-existing records still require inspection before any production-like local database migration or data import.
