@@ -65,7 +65,8 @@ The current `App.tsx` scan shows these large declarations still embedded in the 
 | `App` composition root | 538 | High; move navigation state/history into `app/navigation/` behind storage/history contract tests, leaving providers and route composition in `App` |
 | `GroupDetailScreen` | 418 | Medium; extract group detail UI and explicit callbacks |
 | `ChatDetailScreen` | 406 | High; extract only after mapping E2EE, realtime and message-state dependencies |
-| `SettingsScreen` | Extracted | Account, privacy, notification, appearance and security settings now live in `screens/settings/SettingsScreen.tsx` |\n| `PodcastLibraryScreen` | Extracted | Podcast list now lives in `screens/podcast/PodcastLibraryScreen.tsx`; shared item metadata lives in `types/podcast.ts` |
+| `SettingsScreen` | Extracted | Account, privacy, notification, appearance and security settings now live in `screens/settings/SettingsScreen.tsx` |
+| `PodcastLibraryScreen` | Extracted | Podcast list now lives in `screens/podcast/PodcastLibraryScreen.tsx`; shared item metadata lives in `types/podcast.ts` |
 | `AmbassadorScreen` | Extracted | `screens/ambassador/AmbassadorScreen.tsx` owns the application, dashboard, referrals and payout-request UI |
 | `ChatsScreen` | 358 | High; extract after mapping realtime and encryption integration |
 | `ChatOptionsScreen` | 331 | Medium |
@@ -111,7 +112,11 @@ The architecture foundation (merged PR #56) and follow-up Podcast Library extrac
 | `frontend/src/theme/theme.ts` | Existing brand palette and shared light/dark theme store. |
 | `frontend/src/ui/icons.tsx` | Existing shared `Ic` icon map. |
 | `frontend/src/types/academic.ts` | Shared university and program option types. |
-| `frontend/src/screens/onboarding/CompleteProfileScreen.tsx` | Existing academic-profile completion screen. |\n| `frontend/src/screens/ambassador/AmbassadorScreen.tsx` | Existing ambassador application, dashboard, referrals and payout-request screen. |\n| `frontend/src/screens/settings/SettingsScreen.tsx` | Existing account, security, privacy, notification, appearance and deletion settings. |\n| `frontend/src/screens/podcast/PodcastLibraryScreen.tsx` | Existing Podcast Library list; its shared UI primitives are passed as typed props from the app shell. |\n| `frontend/src/types/podcast.ts` | Shared podcast item type, episode colour and duration formatting used by Home and Podcast Library. |
+| `frontend/src/screens/onboarding/CompleteProfileScreen.tsx` | Existing academic-profile completion screen. |
+| `frontend/src/screens/ambassador/AmbassadorScreen.tsx` | Existing ambassador application, dashboard, referrals and payout-request screen. |
+| `frontend/src/screens/settings/SettingsScreen.tsx` | Existing account, security, privacy, notification, appearance and deletion settings. |
+| `frontend/src/screens/podcast/PodcastLibraryScreen.tsx` | Existing Podcast Library list; its shared UI primitives are passed as typed props from the app shell. |
+| `frontend/src/types/podcast.ts` | Shared podcast item type, episode colour and duration formatting used by Home and Podcast Library. |
 
 `App.tsx` imports these modules and retains the application-level navigation integration. The legacy `frontend/src/lib/api.ts` remains separate: it has a different chat-oriented API and CSRF state contract. These two clients must not be merged until their behavioral differences are understood and tested.
 
