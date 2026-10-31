@@ -1,8 +1,8 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-APP = ROOT / 'frontend' / 'src' / 'App.tsx'
-text = APP.read_text(encoding='utf-8')
+API = ROOT / 'frontend' / 'src' / 'lib' / 'appApi.ts'
+text = API.read_text(encoding='utf-8')
 
 MARKER = "const PREPZA_OFFLINE_QUEUE_STORE = 'syncQueue'"
 if MARKER in text:
@@ -244,14 +244,14 @@ text = text[:idx] + queue_code + text[idx:]
 
 # Explicit opt-in: existing mutations are never silently converted into queued writes.
 # Callers can opt in with X-Prepza-Offline-Queue: true once an endpoint is designed for offline replay.
-old_api_start = """async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+old_api_start = """export async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
   const { headers: extraHeaders, ...restOptions } = options
   const method = String(restOptions.method || 'GET').toUpperCase()
   const cacheKey = path
   const canUseOfflineData = method === 'GET' && path.startsWith('/') && !path.startsWith('/socket.io/')
 
   try {"""
-new_api_start = """async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+new_api_start = """export async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
   const { headers: extraHeaders, ...restOptions } = options
   const method = String(restOptions.method || 'GET').toUpperCase()
   const queueOffline = method !== 'GET' && String((extraHeaders as Record<string, string> | undefined)?.['X-Prepza-Offline-Queue'] || '').toLowerCase() === 'true'
@@ -309,5 +309,5 @@ missing = [marker for marker in required if marker not in text]
 if missing:
     raise SystemExit('Offline sync queue verification failed: ' + ', '.join(missing))
 
-APP.write_text(text, encoding='utf-8')
+API.write_text(text, encoding='utf-8')
 print('Offline sync queue foundation applied and verified.')
