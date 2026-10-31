@@ -418,7 +418,96 @@ A concise interview explanation:
 | 2026-10-31 | Rebuilt app image from commit `49310553` | Build succeeded; build context approximately 3.77 MB | Inspect pending migration operations |
 | 2026-10-31 | Compared Alembic code head with local DB revision | Image head `20261030_shared_study_streak`; DB `20261007_doc_material` | Review migration compatibility before applying |
 | 2026-10-31 | Inspected migration filenames and revision variables | Confirmed `20261007_doc_material` is revision ID in `20261007_document_content_material_link.py` | Complete structural reconciliation |
+| 2026-10-31 | Cloned the 112-table local backup to `prepza_migration_test_20261031` | Clone restored successfully; its Alembic revision and five target-table states matched the original local DB | Rehearse current migration head |
+| 2026-10-31 | Diagnosed migration head mismatch | Running app container contained only migrations through `20261007_doc_material`; fresh image contained all four later files and head `20261030_shared_study_streak` | Use fresh one-off image, not stale running container |
+| 2026-10-31 | Ran `alembic upgrade head` in a one-off container against `prepza_migration_test_20261031` | Process exited successfully; **database-side revision and schema verification still pending** | Verify revision, tables, columns, constraints and preserved data |
 
 ---
 
 **Operating rule:** every future update to this guide must distinguish (1) what was attempted, (2) what actually succeeded, (3) the evidence, (4) what remains unverified, and (5) what was learned. Never turn a planned step into a completed claim.
+
+
+## 12. Migration rehearsal — disposable clone and Docker image diagnosis (2026-10-31)
+
+### 12.1 Why a disposable clone was created
+
+Before testing pending migrations, the local pre-change backup was restored into a separate database named `prepza_migration_test_20261031`. This gave us a realistic copy of the destination schema without risking the working `prepza` database.
+
+The clone restored without errors and contained 112 public tables. Its Alembic revision was `20261007_doc_material`. Its Shop tables (`shop_listing`, `shop_saved_listing`, `shop_report`) were missing, while `study_friend_streak` and `study_friend_streak_activity` already existed. The original local database showed the same five-table state.
+
+### 12.2 The stale-container diagnosis
+
+The first migration attempt used the running `app` container. Alembic reported `20261007_doc_material` as its head, and the four newer migration files were absent from that container.
+
+A temporary container created from the rebuilt image showed:
+
+- `python -m alembic heads` → `20261030_shared_study_streak (head)`
+- The files `20261027_shop_marketplace.py`, `20261028_shop_listing_expiry.py`, `20261029_shop_period_payment.py`, and `20261030_shared_study_streak.py` were present.
+
+This is the practical difference between a rebuilt image and an already-running container: rebuilding an image does not automatically replace the old running container. `docker compose run --rm --no-deps app ...` created a one-off container from the current image without replacing the running app service.
+
+### 12.3 Exact safe migration command used
+
+The command reads the app's configured `DATABASE_URL`, changes only the database name to the disposable clone, and invokes Alembic in a subprocess:
+
+```bash
+docker compose -f docker-compose.vps.yml run --rm --no-deps app python -c '
+import os
+import subprocess
+import sys
+from sqlalchemy.engine import make_url
+
+url = make_url(os.environ["DATABASE_URL"]).set(
+    database="prepza_migration_test_20261031"
+)
+
+env = os.environ.copy()
+env["DATABASE_URL"] = url.render_as_string(hide_password=False)
+
+print("Migration target:", url.database, flush=True)
+
+subprocess.run(
+    [sys.executable, "-m", "alembic", "upgrade", "head"],
+    env=env,
+    check=True
+)
+
+print("Migration command completed successfully.", flush=True)
+'
+```
+
+Observed output included the intended target database and `Migration command completed successfully.`. This is evidence that the subprocess returned exit code 0. It is **not yet sufficient evidence** that the expected database revision and objects are present; database-side verification is the next required step.
+
+The earlier attempt that imported Alembic's `main` function into the parent Python process returned without applying migrations. The corrected subprocess invocation avoids ambiguity around Alembic's CLI entry point and gives the process an explicit environment.
+
+### 12.4 Verification commands still required
+
+After the migration process, query the clone directly:
+
+```bash
+docker compose -f docker-compose.vps.yml exec -T postgres \
+  psql -U prepza -d prepza_migration_test_20261031 -P pager=off -c "
+SELECT version_num FROM alembic_version;
+"
+```
+
+Then verify the three Shop tables and the two streak tables through `information_schema.tables`, and inspect columns, indexes, constraints, and foreign keys. Also verify that pre-existing document/material records remain intact. Do not proceed to the Supabase data import until these checks pass.
+
+### 12.5 What a working engineer memorises
+
+Engineers generally do **not** memorise every long command. They learn the concepts, recognise common tool patterns, know where to find authoritative documentation, and understand the risks of each operation. In day-to-day work they use shell history, repository README/runbooks, Makefiles, scripts, IDE tasks, CI workflows, and command help (`--help`). They must still understand what a command targets before running it.
+
+Useful command patterns from this exercise:
+
+| Pattern | Purpose | Risk to understand |
+|---|---|---|
+| `docker compose exec SERVICE COMMAND` | Run inside an existing container | Uses the existing container's filesystem/image |
+| `docker compose run --rm --no-deps SERVICE COMMAND` | Start a temporary one-off container | Uses the service image/config; command can still mutate connected services |
+| `pg_dump -Fc` | Create a custom-format backup | Must capture the intended source database |
+| `pg_restore --list` | Inspect archive contents | Does not prove destination compatibility |
+| `psql -c "SELECT ..."` | Run SQL against a selected database | The `-d` target matters |
+| `python -m alembic heads/current/history` | Inspect migration graph/state | Reads migration files and connects according to configuration |
+| `python -m alembic upgrade head` | Apply pending schema changes | Mutates the database in `DATABASE_URL` |
+| `git status/log/diff` | Inspect source-control state | Does not show live database state |
+
+A reliable workflow is: identify the target, inspect the command's effect, take/verify a backup, rehearse on a disposable copy, execute once, then verify the resulting state. Looking up syntax is normal; understanding the impact is the professional skill.
