@@ -27,7 +27,7 @@ See [Repository Architecture and Safe Refactor Plan](architecture/REPOSITORY_REF
 - [ ] Split backend `app.py` only after designing and testing shared SQLAlchemy extensions, model import compatibility, route registration and app-factory boundaries.
 - [ ] Replace source-mutating prebuild scripts with committed source changes incrementally; do not remove the build chain until every transform has a tested source equivalent.
 
-**Current evidence:** [Release Browser and Cross-System Regression run 41220919224](https://github.com/apexstudying-cmd/prepza/actions/runs/41220919224) passed on tested code commit `8204f5511761686319d63b938d72ab7542d97ed9`: 98 passed, 0 failed in full disposable PostgreSQL QA, responsive and B2B browser gates passed, online/offline artifact replay passed, and screenshots were uploaded. The overall product release status remains governed by the separate release gates; this refactor run does not certify external providers.
+**Current evidence:** [Release Browser and Cross-System Regression run 41221576719](https://github.com/apexstudying-cmd/prepza/actions/runs/41221576719) passed on tested code commit `72f086c85e814a2c5e365f17505ea8d133ccbf74`: 98 passed, 0 failed in full disposable PostgreSQL QA, responsive and B2B browser gates passed, online/offline artifact replay passed, and screenshots were uploaded. The overall product release status remains governed by the separate release gates; this refactor run does not certify external providers.
 
 ## Local Supabase data migration and database learning (2026-10-31)
 
