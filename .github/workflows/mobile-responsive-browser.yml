@@ -49,6 +49,29 @@ on:
       - 'requirements.txt'
       - 'requirements-test.txt'
       - '.github/workflows/mobile-responsive-browser.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/src/**'
+      - 'frontend/public/**'
+      - 'frontend/package.json'
+      - 'tools/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'app.py'
+      - 'document_pipeline.py'
+      - 'study_retrieval.py'
+      - 'study_retrieval_service.py'
+      - 'study_retrieval_routes.py'
+      - 'request_observability.py'
+      - 'migrations/*.sql'
+      - 'alembic/**'
+      - 'schema/local_baseline.sql'
+      - 'Dockerfile'
+      - 'docker-compose.vps.yml'
+      - 'requirements.txt'
+      - 'requirements-test.txt'
+      - '.github/workflows/**'
   workflow_dispatch:
 
 permissions:
