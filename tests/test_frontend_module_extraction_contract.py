@@ -150,6 +150,8 @@ def test_achievements_screen_preserves_load_share_and_navigation_contracts():
         ROOT / "frontend" / "src" / "screens" / "gamification" /
         "AchievementsScreen.tsx"
     ).read_text(encoding="utf-8")
+    assert "export default function AchievementsScreen" in source
+    assert "setScreen: (s: 'profile' | 'share-sheet') => void" in source
     for contract in (
         "api<AchievementsResponse>('/achievements')",
         "let cancelled = false",
