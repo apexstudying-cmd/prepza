@@ -15,7 +15,8 @@ Rule: require evidence before marking production work complete.
 See [Repository Architecture and Safe Refactor Plan](architecture/REPOSITORY_REFACTOR_PLAN.md) for the verified module map, target structure, safety rules, and staged sequence.
 
 - [x] Create an isolated refactor branch and pull request; keep changes away from `main` until the relevant CI/browser evidence is green.
-- [x] Extract the shared frontend API client, theme store, icon primitives, academic option types, academic profile-completion, ambassador and settings screens, shared Pill UI, and push notification client into focused modules.\n- [~] Extract Podcast Library screen and shared podcast metadata helpers on [PR #59](https://github.com/apexstudying-cmd/prepza/pull/59); preserve API/cache/navigation and shell feedback/loading components through explicit props.
+- [x] Extract the shared frontend API client, theme store, icon primitives, academic option types, academic profile-completion, ambassador and settings screens, shared Pill UI, and push notification client into focused modules.
+- [~] Extract Podcast Library screen and shared podcast metadata helpers on [PR #59](https://github.com/apexstudying-cmd/prepza/pull/59); preserve API/cache/navigation and shell feedback/loading components through explicit props.
 - [x] Update build-time source transformers that assumed the API helper lived in `App.tsx`; keep the existing `lib/api.ts` chat client separate because it has a different CSRF/state contract.
 - [x] Add regression coverage for the Explore route wrapper and for the new module ownership contracts.
 - [x] Update frontend ownership guidance, README module map, architecture plan, QA test record, and learning notes.
