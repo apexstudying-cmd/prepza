@@ -29,7 +29,7 @@ This matters because a source transform can compile and still remove or misplace
 
 ### Verification evidence
 
-[Release Browser and Cross-System Regression run 41220919224](https://github.com/apexstudying-cmd/prepza/actions/runs/41220919224), tested code commit `8204f5511761686319d63b938d72ab7542d97ed9`, passed:
+[Release Browser and Cross-System Regression run 41221576719](https://github.com/apexstudying-cmd/prepza/actions/runs/41221576719), tested code commit `72f086c85e814a2c5e365f17505ea8d133ccbf74`, passed:
 
 - Frontend TypeScript check and production Vite build.
 - Disposable PostgreSQL and Redis setup, Alembic migrations, and controlled SQL migration ledger.
