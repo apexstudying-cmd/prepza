@@ -18,7 +18,7 @@ def test_group_detail_is_owned_by_its_feature_module_and_route_is_unchanged():
 
 def test_group_detail_keeps_existing_read_and_write_api_contracts():
     for endpoint in (
-        "NaN)",
+        "api<{ csrf_token: string }>('/me')",
         "api<GroupSummary>(`/groups/${groupId}`)",
         "api<{ page: number; posts: GroupPostData[] }>(`/groups/${groupId}/posts?type=${postType}`)",
         "api<{ members: GroupMemberData[] }>(`/groups/${groupId}/members`)",
