@@ -8,3 +8,5 @@ export type Achievement = {
   progress: number
   total: number
 }
+
+export type AchievementsResponse = { unlocked_count: number; total_count: number; achievements: Achievement[] }
