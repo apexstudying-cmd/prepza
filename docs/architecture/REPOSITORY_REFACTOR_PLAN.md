@@ -65,7 +65,7 @@ The current `App.tsx` scan shows these large declarations still embedded in the 
 | `App` composition root | 538 | High; move navigation state/history into `app/navigation/` behind storage/history contract tests, leaving providers and route composition in `App` |
 | `GroupDetailScreen` | 418 | Medium; extract group detail UI and explicit callbacks |
 | `ChatDetailScreen` | 406 | High; extract only after mapping E2EE, realtime and message-state dependencies |
-| `SettingsScreen` | 374 | Medium; extract with typed settings/account callbacks |
+| `SettingsScreen` | Extracted | Account, privacy, notification, appearance and security settings now live in `screens/settings/SettingsScreen.tsx` |
 | `AmbassadorScreen` | 367 | Medium; extract as a self-contained business feature |
 | `ChatsScreen` | 358 | High; extract after mapping realtime and encryption integration |
 | `ChatOptionsScreen` | 331 | Medium |
