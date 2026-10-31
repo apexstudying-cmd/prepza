@@ -47,6 +47,9 @@ python -m pytest -q \
 - `src/types/academic.ts` - university and program option contracts.
 - `src/screens/onboarding/CompleteProfileScreen.tsx` - academic profile-completion flow.
 - `src/screens/ambassador/AmbassadorScreen.tsx` - ambassador application, dashboard, referral, and payout-request UI.
+- `src/screens/settings/SettingsScreen.tsx` - account settings, privacy, notification preferences, appearance, security, logout, and account deletion.
+- `src/ui/Pill.tsx` - shared status pill component.
+- `src/lib/pushNotifications.ts` - browser push subscription/unsubscription helpers using the shared application API client.
 - `src/screens/<domain>/` - home for additional screen-level compositions, grouped by feature domain.
 - `src/admin/`, `src/crypto/`, `src/generation/`, `src/offline/`, `src/organisation/`, and `src/share/` - existing feature modules. Retain their boundaries unless a dependency map supports a safe move.
 
