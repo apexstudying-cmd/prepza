@@ -1944,3 +1944,12 @@ The completed recovery steps in [run 40502457332](https://github.com/apexstudyin
 ## 2026-10-27 — QA trace manifest expanded and reverified
 
 Extended `qa/release_manifest.json` to trace B2B sponsored metering, payment recovery/idempotency and external-provider boundaries; marked Shared Streak as intentionally outside launch scope; refreshed E2EE and personal-streak notes to match the release tracker. The first trace run [40503850645](https://github.com/apexstudying-cmd/prepza/actions/runs/40503850645) caught two invalid source anchors for delivery ledger names in `b2b_campaign_metering.py`. Replaced them with real module anchors (`EVENT_TYPES`, `record_billable_event`, `campaign_target_matches_student`); corrected trace run [40503963385](https://github.com/apexstudying-cmd/prepza/actions/runs/40503963385) passed. This is structural trace evidence, not a replacement for provider-side testing. Release remains BLOCKED.
+
+
+## 2026-10-31 — local Supabase-to-PostgreSQL migration rehearsal
+
+The pre-change local backup was restored successfully into disposable database `prepza_migration_test_20261031` (112 public tables). The clone's Alembic revision and five relevant table states matched the working local database: revision `20261007_doc_material`; Shop tables absent; both shared-streak tables present.
+
+A stale running app container contained migration files only through `20261007_doc_material`. A one-off container from the rebuilt app image contained the four newer migrations and reported `20261030_shared_study_streak` as its Alembic head. The one-off container ran `alembic upgrade head` with `DATABASE_URL` redirected to the disposable clone and returned successfully.
+
+**Verification remains pending:** query the clone's `alembic_version`, Shop/streak tables, columns, indexes, constraints, foreign keys and preserved sentinel/data counts. Do not mark migration PASS based only on the process exit. No migration was run against working local `prepza` or live Supabase; no Supabase data has yet been imported. See `docs/engineering/LOCAL_SUPABASE_DATA_MIGRATION_WALKTHROUGH.md` for exact commands and learning notes.
