@@ -15,7 +15,7 @@ Rule: require evidence before marking production work complete.
 See [Repository Architecture and Safe Refactor Plan](architecture/REPOSITORY_REFACTOR_PLAN.md) for the verified module map, target structure, safety rules, and staged sequence.
 
 - [x] Create an isolated refactor branch and pull request; keep changes away from `main` until the relevant CI/browser evidence is green.
-- [x] Extract the shared frontend API client, theme store, icon primitives, academic option types, academic profile-completion screen, and ambassador screen into focused modules.
+- [x] Extract the shared frontend API client, theme store, icon primitives, academic option types, academic profile-completion, ambassador and settings screens, shared Pill UI, and push notification client into focused modules.
 - [x] Update build-time source transformers that assumed the API helper lived in `App.tsx`; keep the existing `lib/api.ts` chat client separate because it has a different CSRF/state contract.
 - [x] Add regression coverage for the Explore route wrapper and for the new module ownership contracts.
 - [x] Update frontend ownership guidance, README module map, architecture plan, QA test record, and learning notes.
