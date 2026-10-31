@@ -67,15 +67,20 @@ def patch_native_reader(s):
 
 
 def patch_offline_reading_gate(s):
-    marker = "    if (/^\\\\/documents\\\\/\\\\d+\\\\/reading$/.test(cleanPath)) return { page_num: 0 } as T"
-    replacement = """    if (/^\\\\/documents\\\\/\\\\d+\\\\/reading$/.test(cleanPath)) {
+    old_line = next((
+        line for line in s.splitlines()
+        if "reading$/.test(cleanPath)) return { page_num: 0 } as T" in line
+    ), None)
+    if old_line:
+        indent = old_line[:len(old_line) - len(old_line.lstrip())]
+        replacement = r"""    if (/^\/documents\/\d+\/reading$/.test(cleanPath)) {
       const documentId = Number(cleanPath.split('/')[2])
       let page_num = 0
       try { page_num = Math.max(0, Number(localStorage.getItem(`prepza-reading-progress:${offlineUserId}:${documentId}`) || 0) || 0) } catch (_) {}
       return { page_num } as T
     }"""
-    if marker in s:
-        return s.replace(marker, replacement, 1)
+        replacement = "\n".join(indent + line[len("    "):] if line.startswith("    ") else line for line in replacement.splitlines())
+        return s.replace(old_line, replacement, 1)
     if "prepza-reading-progress:" in s and "localStorage.getItem" in s:
         return s
     raise SystemExit('offline reading gate anchor not found')
