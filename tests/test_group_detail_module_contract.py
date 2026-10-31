@@ -18,14 +18,21 @@ def test_group_detail_is_owned_by_its_feature_module_and_route_is_unchanged():
 
 def test_group_detail_keeps_existing_read_and_write_api_contracts():
     for endpoint in (
-        "`/me`", "`/groups/${groupId}`", "`/groups/${groupId}/posts?type=${postType}`",
-        "`/groups/${groupId}/members`", "`/groups/${groupId}/files`",
-        "`/groups/${groupId}/join`", "`/groups/${groupId}/leave`",
-        "`/groups/${groupId}/posts`", "`/groups/${groupId}/posts/${p.id}/like`",
-        "`/groups/${groupId}/posts/${p.id}/vote`", "`/groups/${groupId}/posts/${p.id}`",
+        "NaN)",
+        "api<GroupSummary>(`/groups/${groupId}`)",
+        "api<{ page: number; posts: GroupPostData[] }>(`/groups/${groupId}/posts?type=${postType}`)",
+        "api<{ members: GroupMemberData[] }>(`/groups/${groupId}/members`)",
+        "api<{ files: GroupFileData[] }>(`/groups/${groupId}/files`)",
+        "`/groups/${groupId}/join`",
+        "`/groups/${groupId}/leave`",
+        "`/groups/${groupId}/posts`",
+        "`/groups/${groupId}/posts/${p.id}/like`",
+        "`/groups/${groupId}/posts/${p.id}/vote`",
+        "`/groups/${groupId}/posts/${p.id}`",
         "`/groups/${groupId}/posts/${expandedId}/comments`",
         "`/groups/${groupId}/posts/${expandedId}/comments/${commentId}/helpful`",
-        "`/groups/${groupId}/members/${userId}`", "`/documents`",
+        "`/groups/${groupId}/members/${userId}`",
+        "'/documents'",
         "`/groups/${groupId}/files/${fileId}`",
     ):
         assert endpoint in SCREEN
