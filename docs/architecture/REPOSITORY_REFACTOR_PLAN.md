@@ -45,7 +45,7 @@ The current `App.tsx` scan shows these large declarations still embedded in the 
 | Declaration | Approximate lines | Refactor priority |
 |---|---:|---|
 | `AdminSection` | 1,961 | High; split by admin domain after mapping state and permissions |
-| `readStoredNavigationState` and adjacent navigation persistence block | 538 | High; move pure navigation persistence to `app/navigation/` with storage-contract tests |
+| `App` composition root | 538 | High; move navigation state/history into `app/navigation/` behind storage/history contract tests, leaving providers and route composition in `App` |
 | `GroupDetailScreen` | 418 | Medium; extract group detail UI and explicit callbacks |
 | `ChatDetailScreen` | 406 | High; extract only after mapping E2EE, realtime and message-state dependencies |
 | `SettingsScreen` | 374 | Medium; extract with typed settings/account callbacks |
