@@ -3,6 +3,7 @@ import { api, ApiError } from '../../lib/appApi'
 import { subscribeToPush, unsubscribeFromPush } from '../../lib/pushNotifications'
 import { TERMS_TEXT, PRIVACY_TEXT } from '../../legalContent'
 import { N, useTheme } from '../../theme/theme'
+import { Ic } from '../../ui/icons'
 import Pill from '../../ui/Pill'
 import type { UniversityOption, ProgramOption } from '../../types/academic'
 
