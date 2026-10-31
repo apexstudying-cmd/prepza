@@ -2076,3 +2076,10 @@ A stale running app container contained migration files only through `20261007_d
 ## 2026-10-31 — disposable Alembic migration database-side verification
 
 After the one-off container ran `alembic upgrade head` against `prepza_migration_test_20261031`, direct PostgreSQL queries confirmed Alembic revision `20261030_shared_study_streak` and existence of `shop_listing`, `shop_saved_listing`, `shop_report`, `study_friend_streak`, and `study_friend_streak_activity`. This is a **partial rehearsal PASS**. Column definitions, indexes, constraints, foreign keys and preservation of pre-existing records remain to be checked. The working local DB and Supabase have not been migrated.
+
+
+## 2026-10-31 — Group Detail screen extraction (draft PR #62)
+
+The existing Group Detail screen was moved from `frontend/src/App.tsx` to `frontend/src/screens/groups/GroupDetailScreen.tsx`; group response types were moved to `frontend/src/types/groups.ts`. This is a structural move only. The full original 417-line screen body was compared byte-for-byte with the extracted body after normalizing only the component signature and explicit props. The screen still uses the same state, effects, API endpoint strings, CSRF headers, interaction handlers, and UI markup. Existing app-shell EmptyState/ErrorState components are injected as props rather than copied or redesigned. The group-detail route and active group ID wiring remain in the app shell.
+
+Verification on PR code head `a342e822ca3a240257ecb5f8f84ad27d873985ac`: Frontend Build [41233691287](https://github.com/apexstudying-cmd/prepza/actions/runs/41233691287) passed including source-transform/module tests, TypeScript and production build. Release Browser/Cross-System Regression [41233691818](https://github.com/apexstudying-cmd/prepza/actions/runs/41233691818) passed production image, disposable DB/migrations/ledger, responsive checks, B2B browser-to-ledger, full PostgreSQL QA, and online/offline/generated-artifact browser journeys. Related student/admin/AI/B2B/E2EE/navigation/control API contract workflows passed. PR #62 is still draft and not merged; do not describe it as part of `main` until merge.

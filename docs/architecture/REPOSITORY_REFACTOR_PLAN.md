@@ -3,7 +3,7 @@
 **Purpose:** make the repository easier to navigate and maintain without changing user-visible behavior, API contracts, authorization, persistence, billing, or product rules.
 
 **Baseline source checkpoint:** `f747b0d95a6b81cb2868843093546a97e3d09fb5` (2026-10-31).
-**Working branch:** `main` at squash merge `11e626f943f05e48161e8a8b4487715ac9257f53`. PR #56, #59, and the consolidated My Study integration PR #61 are merged; the Achievements module is also present on `main`.
+**Working branch:** `main` at documentation follow-up `3354b7aaacf1206bd893849e5e2294586378c395`; PR #61 merged as `11e626f943f05e48161e8a8b4487715ac9257f53`. PR #56, #59, and the consolidated My Study integration PR #61 are merged; the Achievements module is also present on `main`.
 **Status:** incremental refactor in progress. This document distinguishes current implementation from target structure.
 
 ## 1. Verified baseline
@@ -13,7 +13,7 @@ The initial source scan found:
 | Area | Baseline size | Observation |
 |---|---:|---|
 | `app.py` | 10,332 lines; 318 top-level function/class declarations | Flask setup, SQLAlchemy models, shared helpers, and many HTTP routes coexist in one module. |
-| `frontend/src/App.tsx` | 16,032 lines at the initial scan; 14,945 after PR #56; 14,887 after PR #59; 14,758 after the Achievements extraction on `main`; 14,573 after the My Study extraction in PR #61 (tested head `48cae152`). | Shared API/theme/icon/type definitions and several screens now live in focused modules. The app shell remains large and still needs staged extraction. |
+| `frontend/src/App.tsx` | 16,032 lines at the initial scan; 14,945 after PR #56; 14,887 after PR #59; 14,758 after the Achievements extraction on `main`; 14,573 after the My Study extraction in PR #61 (tested head `48cae152`); 14,129 on draft PR #62 after Group Detail was extracted. | Shared API/theme/icon/type definitions and several screens now live in focused modules. The app shell remains large and still needs staged extraction. |
 | Frontend build | Long `prebuild` chain | Python scripts rewrite source files before TypeScript/Vite compilation. |
 | Local QA runner | 11 test files; 95 test functions; 98 collected cases | Latest disposable PostgreSQL CI run passed 98/98; the detailed numbered test descriptions in `actualtest.md` are explicitly retained as a historical 74-case snapshot. |
 
@@ -63,7 +63,7 @@ The current `App.tsx` scan shows these large declarations still embedded in the 
 |---|---:|---|
 | `AdminSection` | 1,961 | High; split by admin domain after mapping state and permissions |
 | `App` composition root | 538 | High; move navigation state/history into `app/navigation/` behind storage/history contract tests, leaving providers and route composition in `App` |
-| `GroupDetailScreen` | 418 | Medium; extract group detail UI and explicit callbacks |
+| `GroupDetailScreen` | Extracted in draft PR #62 | Existing 417-line screen body moved verbatim; app-shell feedback components passed as props |
 | `ChatDetailScreen` | 406 | High; extract only after mapping E2EE, realtime and message-state dependencies |
 | `SettingsScreen` | Extracted | Account, privacy, notification, appearance and security settings now live in `screens/settings/SettingsScreen.tsx` |
 | `PodcastLibraryScreen` | Extracted | Podcast list now lives in `screens/podcast/PodcastLibraryScreen.tsx`; shared item metadata lives in `types/podcast.ts` |
@@ -123,7 +123,7 @@ The architecture foundation (merged PR #56), Podcast Library extraction (merged 
 
 `App.tsx` imports these modules and retains the application-level navigation integration. The legacy `frontend/src/lib/api.ts` remains separate: it has a different chat-oriented API and CSRF state contract. These two clients must not be merged until their behavioral differences are understood and tested.
 
-The architecture foundation reduced `App.tsx` to 14,945 lines; Podcast Library reduced it to 14,887; the Achievements extraction on `main` brought it to 14,758; and My Study extraction reduced the source file to 14,573 lines (185 lines moved) on tested PR #61 head `48cae15227e7af3fe30c6b3fc62e2a7995a59cc7`. The exact tested branch is [PR #61](https://github.com/apexstudying-cmd/prepza/pull/61). These are incremental boundary improvements, not completion of the frontend or backend refactor.
+The architecture foundation reduced `App.tsx` to 14,945 lines; Podcast Library reduced it to 14,887; Achievements brought it to 14,758; My Study reduced it to 14,573; and the Group Detail extraction on draft PR #62 reduces it to 14,129 lines (417 screen lines plus 27 type/comment lines moved). PR #62 code head `a342e822ca3a240257ecb5f8f84ad27d873985ac` passed Frontend Build run `41233691287` and Release Browser/Cross-System Regression run `41233691818`. The screen body was byte-for-byte compared against the pre-extraction `main` version after normalizing only the component signature and prop declaration. The exact tested branch is [PR #61](https://github.com/apexstudying-cmd/prepza/pull/61). These are incremental boundary improvements, not completion of the frontend or backend refactor.
 
 ## 5. Known architectural risks to address
 
@@ -215,6 +215,7 @@ A passing compile is necessary but not sufficient. A passing test suite is evide
 - [x] Extract the first shared frontend API/theme/icon/type modules and onboarding screen.
 - [x] Complete full CI and browser verification for the current extraction (tested code commit `ba93150bf9df4348aada6d680bf4bfc4ddc595bb`; run 41222704363).
 - [x] Reconcile the QA test record, learning notes and NEXT_STEPS tracker against the 11-file/98-case runner and successful CI output.
+- [x] Extract Group Detail into a feature-owned module in draft PR #62; verify byte-for-byte screen body preservation, typecheck, production build, disposable database QA, responsive, B2B, and online/offline browser regression.
 - [ ] Continue frontend screen extraction in small, dependency-mapped slices.
 - [ ] Design and implement backend app-factory/extensions boundaries with compatibility tests.
 - [ ] Extract backend route/service domains incrementally.
