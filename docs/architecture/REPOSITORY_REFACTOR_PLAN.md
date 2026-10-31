@@ -13,13 +13,53 @@ The initial source scan found:
 | Area | Baseline size | Observation |
 |---|---:|---|
 | `app.py` | 10,332 lines; 318 top-level function/class declarations | Flask setup, SQLAlchemy models, shared helpers, and many HTTP routes coexist in one module. |
-| `frontend/src/App.tsx` | 16,032 lines; 154 top-level functions/arrow functions | Application shell, API helpers, theme/icons, types, and many screens coexist in one file. |
+| `frontend/src/App.tsx` | 16,032 lines; 154 declarations at the initial scan. After the first extraction: 15,747 lines; 149 declarations. | The first extraction moved shared API/theme/icon/type definitions and the academic profile-completion screen into focused modules. Many screens still remain in the composition file. |
 | Frontend build | Long `prebuild` chain | Python scripts rewrite source files before TypeScript/Vite compilation. |
 | Local QA runner | 11 listed test files | `docs/qa/actualtest.md` describes an older suite inventory and contains inconsistent counts; it must be reconciled against the exact latest run. |
 
 A Graphify index of the baseline commit reported 3,946 code nodes, 8,259 edges, and 325 communities. Its index is a static dependency map, not a test run; its test links are incomplete and must not be treated as proof of coverage.
 
-## 2. What already exists
+## 2. Current code ownership map
+
+### Backend `app.py` route clusters
+
+A declaration and route scan of the current `main` source (10,332 lines, 318 top-level functions/classes) shows these natural extraction boundaries:
+
+| Approximate source range | Current responsibility | Candidate destination |
+|---|---|---|
+| 1–2,965 | Flask setup, extensions, models, shared helpers, background task wiring, health/bootstrap routes | `app_factory.py`, `extensions.py`, `models/`, `services/` |
+| 2,965–3,736 | Signup, email verification, login, Google auth, logout, profile and account security | `routes/auth.py`, `routes/profile.py`, `services/auth/` |
+| 3,736–3,907 and 8,924–9,117 | Payment history, payment/webhook and subscription transitions | `routes/payments.py`, `services/billing/` |
+| 3,907–5,373 | Document upload/list/detail, reader progress/pages, summary, quiz, flashcards, mind map, podcast and tutor routes | `routes/documents.py`, `routes/generation.py`, existing AI/document services |
+| 5,373–6,221 | Library publish/browse/save/report and admin moderation | `routes/library.py`, `services/library/` |
+| 6,605–6,972 | Gamification summary, XP, streak, study-time and achievements | `routes/gamification.py`, existing streak/activity services |
+| 6,972–8,174 | Groups, posts, comments, files, follows and social interactions | `routes/groups.py`, `routes/social.py` |
+| 8,174–10,332 | Ambassador workflows, organisation and subscription endpoints, chat routes, administrative audit endpoints | Split by route family after mapping exact decorators and imported dependencies |
+
+These are navigation boundaries, not a ready-made mechanical move list. The payment routes are intentionally shown as non-contiguous because the current file has payment logic in more than one region. Before moving a route, record its URL/method, decorators, dependencies, response shape, and test coverage.
+
+### Frontend largest remaining screen areas
+
+The current `App.tsx` scan shows these large declarations still embedded in the app shell:
+
+| Declaration | Approximate lines | Refactor priority |
+|---|---:|---|
+| `AdminSection` | 1,961 | High; split by admin domain after mapping state and permissions |
+| `readStoredNavigationState` and adjacent navigation persistence block | 538 | High; move pure navigation persistence to `app/navigation/` with storage-contract tests |
+| `GroupDetailScreen` | 418 | Medium; extract group detail UI and explicit callbacks |
+| `ChatDetailScreen` | 406 | High; extract only after mapping E2EE, realtime and message-state dependencies |
+| `SettingsScreen` | 374 | Medium; extract with typed settings/account callbacks |
+| `AmbassadorScreen` | 367 | Medium; extract as a self-contained business feature |
+| `ChatsScreen` | 358 | High; extract after mapping realtime and encryption integration |
+| `ChatOptionsScreen` | 331 | Medium |
+| `PodcastPlayerScreen` | 327 | Medium |
+| `DocumentStudyScreen` | 323 | High; protect reader progress/offline contracts |
+| `LibraryScreen` | 305 | Medium |
+| `SignupScreen` | 251 | Medium; keep auth, CSRF and navigation behavior unchanged |
+
+Line counts are approximate source spans between top-level declarations, not exact executable statement counts. They are useful for prioritization, not a complexity score.
+
+## 3. What already exists
 
 ### Backend
 
