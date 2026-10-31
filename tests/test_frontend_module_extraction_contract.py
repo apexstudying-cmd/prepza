@@ -55,6 +55,7 @@ def test_settings_screen_preserves_existing_account_and_security_contracts():
     source = (
         ROOT / "frontend" / "src" / "screens" / "settings" / "SettingsScreen.tsx"
     ).read_text(encoding="utf-8")
+    assert "import { Ic } from '../../ui/icons'" in source
     for endpoint in (
         "/me",
         "/api/opportunity-discovery",
