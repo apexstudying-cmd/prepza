@@ -2,14 +2,14 @@
 
 ## Latest CI evidence — 2026-10-31 (Group Detail structural extraction)
 
-Draft [PR #62](https://github.com/apexstudying-cmd/prepza/pull/62), code head `a342e822ca3a240257ecb5f8f84ad27d873985ac`, moves Group Detail from `frontend/src/App.tsx` into `frontend/src/screens/groups/GroupDetailScreen.tsx` and the existing group response types into `frontend/src/types/groups.ts`. A direct source comparison confirmed the complete 417-line screen body is byte-for-byte identical to the pre-extraction version after normalizing only the component signature and module prop declaration.
+[PR #62](https://github.com/apexstudying-cmd/prepza/pull/62), merged as `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b` (code head `a342e822ca3a240257ecb5f8f84ad27d873985ac`, moves Group Detail from `frontend/src/App.tsx` into `frontend/src/screens/groups/GroupDetailScreen.tsx` and the existing group response types into `frontend/src/types/groups.ts`. A direct source comparison confirmed the complete 417-line screen body is byte-for-byte identical to the pre-extraction version after normalizing only the component signature and module prop declaration).
 
 - [Frontend Build run 41233691287](https://github.com/apexstudying-cmd/prepza/actions/runs/41233691287) passed: source-transform/module contract tests (including the new Group Detail contract), TypeScript typecheck, service-worker checks, and production build.
 - [Release Browser and Cross-System Regression run 41233691818](https://github.com/apexstudying-cmd/prepza/actions/runs/41233691818) passed: production image, disposable PostgreSQL/Redis, migrations and SQL ledger, responsive mobile/tablet checks, B2B browser-to-ledger regression, full disposable PostgreSQL QA, online/offline and generated-artifact browser journeys, screenshot upload, and disposable service cleanup.
 - Admin Route Contract, Student Contract, Student Frontend Contract, AI Economics, AI Generation Architecture, B2B Contract, E2EE Security, E2EE Chat, Study Navigation, and Prepza Control API workflows also passed on the same code head.
 - StudyHub Library Flow was skipped by its workflow conditions. No claim is made that this separate workflow ran.
 
-**Merge status:** PR #62 remains a draft and has not been merged. This evidence applies to the tested PR code head, not to `main` until merge and post-merge verification.
+**Merge status:** PR #62 is merged. Post-merge Frontend Build and Release Browser/Cross-System Regression run [41234848528](https://github.com/apexstudying-cmd/prepza/actions/runs/41234848528) passed on exact `main` merge commit `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`.
 
 ## Earlier CI evidence — 2026-10-31 (My Study extraction)
 

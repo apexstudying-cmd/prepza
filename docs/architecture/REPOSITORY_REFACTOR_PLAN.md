@@ -3,7 +3,7 @@
 **Purpose:** make the repository easier to navigate and maintain without changing user-visible behavior, API contracts, authorization, persistence, billing, or product rules.
 
 **Baseline source checkpoint:** `f747b0d95a6b81cb2868843093546a97e3d09fb5` (2026-10-31).
-**Working branch:** `main` at documentation follow-up `3354b7aaacf1206bd893849e5e2294586378c395`; PR #61 merged as `11e626f943f05e48161e8a8b4487715ac9257f53`. PR #56, #59, and the consolidated My Study integration PR #61 are merged; the Achievements module is also present on `main`.
+**Working branch:** `main` at Group Detail refactor merge `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`; PR #61 and PR #62 are merged. PR #56, #59, and the consolidated My Study integration PR #61 are merged; the Achievements module is also present on `main`.
 **Status:** incremental refactor in progress. This document distinguishes current implementation from target structure.
 
 ## 1. Verified baseline
@@ -13,7 +13,7 @@ The initial source scan found:
 | Area | Baseline size | Observation |
 |---|---:|---|
 | `app.py` | 10,332 lines; 318 top-level function/class declarations | Flask setup, SQLAlchemy models, shared helpers, and many HTTP routes coexist in one module. |
-| `frontend/src/App.tsx` | 16,032 lines at the initial scan; 14,945 after PR #56; 14,887 after PR #59; 14,758 after the Achievements extraction on `main`; 14,573 after the My Study extraction in PR #61 (tested head `48cae152`); 14,129 on draft PR #62 after Group Detail was extracted. | Shared API/theme/icon/type definitions and several screens now live in focused modules. The app shell remains large and still needs staged extraction. |
+| `frontend/src/App.tsx` | 16,032 lines at the initial scan; 14,945 after PR #56; 14,887 after PR #59; 14,758 after the Achievements extraction on `main`; 14,573 after the My Study extraction in PR #61 (tested head `48cae152`); 14,129 on PR #62, merged as `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b` after Group Detail was extracted. | Shared API/theme/icon/type definitions and several screens now live in focused modules. The app shell remains large and still needs staged extraction. |
 | Frontend build | Long `prebuild` chain | Python scripts rewrite source files before TypeScript/Vite compilation. |
 | Local QA runner | 11 test files; 95 test functions; 98 collected cases | Latest disposable PostgreSQL CI run passed 98/98; the detailed numbered test descriptions in `actualtest.md` are explicitly retained as a historical 74-case snapshot. |
 
@@ -123,7 +123,7 @@ The architecture foundation (merged PR #56), Podcast Library extraction (merged 
 
 `App.tsx` imports these modules and retains the application-level navigation integration. The legacy `frontend/src/lib/api.ts` remains separate: it has a different chat-oriented API and CSRF state contract. These two clients must not be merged until their behavioral differences are understood and tested.
 
-The architecture foundation reduced `App.tsx` to 14,945 lines; Podcast Library reduced it to 14,887; Achievements brought it to 14,758; My Study reduced it to 14,573; and the Group Detail extraction on draft PR #62 reduces it to 14,129 lines (417 screen lines plus 27 type/comment lines moved). PR #62 code head `a342e822ca3a240257ecb5f8f84ad27d873985ac` passed Frontend Build run `41233691287` and Release Browser/Cross-System Regression run `41233691818`. The screen body was byte-for-byte compared against the pre-extraction `main` version after normalizing only the component signature and prop declaration. The exact tested branch is [PR #61](https://github.com/apexstudying-cmd/prepza/pull/61). These are incremental boundary improvements, not completion of the frontend or backend refactor.
+The architecture foundation reduced `App.tsx` to 14,945 lines; Podcast Library reduced it to 14,887; Achievements brought it to 14,758; My Study reduced it to 14,573; and the Group Detail extraction on draft PR #62 reduces it to 14,129 lines (417 screen lines plus 27 type/comment lines moved). PR #62 code head `a342e822ca3a240257ecb5f8f84ad27d873985ac` passed Frontend Build run `41233691287` and Release Browser/Cross-System Regression run `41233691818`; post-merge run `41234848528` passed on merge commit `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`. The screen body was byte-for-byte compared against the pre-extraction `main` version after normalizing only the component signature and prop declaration. The exact tested branch is [PR #61](https://github.com/apexstudying-cmd/prepza/pull/61). These are incremental boundary improvements, not completion of the frontend or backend refactor.
 
 ## 5. Known architectural risks to address
 
