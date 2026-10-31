@@ -82,7 +82,7 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId, LoadingView, Err
   const [tab, setTab] = useState<'documents' | 'materials'>('documents')
   const [documents, setDocuments] = useState<StudyHubDocument[]>([])
   const [materials, setMaterials] = useState<StudyMaterialRow[]>([])
-  const [offlineDocuments, setOfflineDocuments] = useState<HomeDocument[]>([])
+  const [offlineDocuments, setOfflineDocuments] = useState<StudyHubDocument[]>([])
   const [savedLibrary, setSavedLibrary] = useState<SavedStudyLibraryItem[]>([])
   const [csrfToken, setCsrfToken] = useState('')
   const [loading, setLoading] = useState(true)
@@ -115,7 +115,7 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId, LoadingView, Err
             file_size_bytes: null,
             page_count: row.pageCount || null,
             created_at: new Date(row.savedAt).toISOString(),
-          } as HomeDocument))
+          } as StudyHubDocument))
           setOfflineDocuments(offlineDocs)
           const cached = await listOfflineGeneratedMaterials()
           const cachedMaterials = cached.flatMap(row => {
@@ -152,7 +152,7 @@ function StudyMaterialsScreen({ setScreen, setActiveDocumentId, LoadingView, Err
     api<{ saved: SavedStudyLibraryItem[] }>('/library/saved').then(res => {
       if (!cancelled) setSavedLibrary(res.saved || [])
     }).catch(() => {})
-    api<{ documents: HomeDocument[] }>('/documents').then(async res => {
+    api<{ documents: StudyHubDocument[] }>('/documents').then(async res => {
       if (cancelled) return
       const ready = res.documents.filter(d => d.status === 'ready')
       setDocuments(ready)
