@@ -29,6 +29,17 @@ Prepza's frontend `prebuild` command runs a chain of Python source transformers 
 
 This matters because a source transform can compile and still remove or misplace a component. The earlier `ExploreScreen` runtime bug was caused by a section replacement that removed the wrapper while leaving its route reference. A regression contract now protects that wrapper after the generation UI transform.
 
+### Settings extraction — test-first evidence
+
+The Settings extraction was done as a separate slice:
+
+1. Added module-boundary and behavior-contract tests first. The first CI run failed because the feature module and imports did not exist yet (**3 expected failures, 9 existing tests passed**).
+2. Moved the existing Settings screen without redesigning its state or API behavior; moved the shared `Pill` component and push subscribe/unsubscribe helpers into focused modules.
+3. The first TypeScript run exposed a missing shared-icon import. Added an explicit regression assertion and the import.
+4. The corrected frontend build run passed **12 source-transform/module-contract tests**, **5 offline Library regression tests**, TypeScript, service-worker validation, Vite production build, and screen-loading/offline/calling architecture audits.
+
+The Settings module keeps its existing `/me`, `/profile`, `/change-email`, `/change-password`, `/delete-account`, `/logout`, notification-preference, opportunity-discovery, and push-subscription request contracts. The navigation callback is narrowed to the three routes this screen actually invokes; runtime destinations are unchanged.
+
 ### Verification evidence
 
 [Release Browser and Cross-System Regression run 41221576719](https://github.com/apexstudying-cmd/prepza/actions/runs/41221576719), tested code commit `72f086c85e814a2c5e365f17505ea8d133ccbf74`, passed:
