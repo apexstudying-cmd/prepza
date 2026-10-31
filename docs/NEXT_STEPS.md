@@ -1,7 +1,7 @@
 # Prepza — Persistent Engineering Execution Tracker
 
-Last updated: 2026-10-29
-Branch: main
+Last updated: 2026-10-31
+Branch: `refactor/architecture-foundation` (architecture refactor PR; not yet merged)
 
 Status:
 - [x] completed/verified
@@ -9,6 +9,25 @@ Status:
 - [ ] not yet completed
 
 Rule: require evidence before marking production work complete.
+
+## Repository architecture refactor (2026-10-31)
+
+See [Repository Architecture and Safe Refactor Plan](architecture/REPOSITORY_REFACTOR_PLAN.md) for the verified module map, target structure, safety rules, and staged sequence.
+
+- [x] Create an isolated refactor branch and pull request; keep changes away from `main` until the relevant CI/browser evidence is green.
+- [x] Extract the shared frontend API client, theme store, icon primitives, academic option types, and academic profile-completion screen into focused modules.
+- [x] Update build-time source transformers that assumed the API helper lived in `App.tsx`; keep the existing `lib/api.ts` chat client separate because it has a different CSRF/state contract.
+- [x] Add regression coverage for the Explore route wrapper and for the new module ownership contracts.
+- [x] Update frontend ownership guidance, README module map, architecture plan, QA test record, and learning notes.
+- [x] Verify production TypeScript/Vite build and all frontend source-transform tests.
+- [x] Verify disposable PostgreSQL/Alembic/SQL-ledger path, mobile/tablet browser checks, B2B browser-to-ledger regression, and the full 98-case disposable PostgreSQL QA suite.
+- [x] Verify online/offline Study Hub lifecycle and generated-artifact replay, including cached podcast audio and no offline generation POSTs.
+- [ ] Review and merge the architecture refactor PR after final head/CI confirmation.
+- [ ] Continue extracting large frontend feature screens in small slices; first audit every prebuild transformer that edits the relevant App.tsx section.
+- [ ] Split backend `app.py` only after designing and testing shared SQLAlchemy extensions, model import compatibility, route registration and app-factory boundaries.
+- [ ] Replace source-mutating prebuild scripts with committed source changes incrementally; do not remove the build chain until every transform has a tested source equivalent.
+
+**Current evidence:** [Release Browser and Cross-System Regression run 41219805945](https://github.com/apexstudying-cmd/prepza/actions/runs/41219805945) passed on tested code commit `d4f4e882600a3e03c80ca809475e74aa5d6a9f76`: 98 passed, 0 failed in full disposable PostgreSQL QA, responsive and B2B browser gates passed, online/offline artifact replay passed, and screenshots were uploaded. The overall product release status remains governed by the separate release gates; this refactor run does not certify external providers.
 
 ## Local Supabase data migration and database learning (2026-10-31)
 
