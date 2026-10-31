@@ -107,7 +107,7 @@ def patch_api():
                 gate_prefix = options_method_line
 
         offline_gate = f"""{gate_prefix}  const offline = typeof navigator !== 'undefined' && !navigator.onLine
-  const offlineUserId = getOfflineUserId()
+  const offlineUserId = Number(getOfflineUserId() || 0)
   const cleanPath = String(path || '').split('?')[0].split('#')[0].replace(/\\/+$/, '') || '/'
 
   // Saved StudyHub documents are the authoritative local document source
