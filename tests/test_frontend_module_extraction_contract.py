@@ -107,7 +107,7 @@ def test_achievements_screen_preserves_api_navigation_and_loading_contracts():
     ).read_text(encoding="utf-8")
     for contract in (
         "api<AchievementsResponse>('/achievements')",
-        "new ApiError",
+        "err instanceof ApiError",
         "setScreen('profile')",
         "setScreen('share-sheet')",
         "setSharing(null)",
