@@ -31,7 +31,7 @@ The repository has already extracted several domain modules from the original Fl
 - `object_storage.py` for object-storage integration.
 - `realtime_server.py`, `chat_event_queue.py`, and `chat_event_worker.py` for realtime delivery.
 
-These modules are useful foundations. The next step is to map their import contracts and remove responsibilities from `app.py) gradually, not to move them blindly.
+These modules are useful foundations. The next step is to map their import contracts and remove responsibilities from `app.py` gradually, not to move them blindly.
 
 ### Frontend
 
