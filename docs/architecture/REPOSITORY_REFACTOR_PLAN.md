@@ -84,7 +84,7 @@ The frontend already has feature-oriented folders such as:
 
 The original `App.tsx` still contains a large number of screens and shared definitions. Its first line is `// @ts-nocheck`; that should be retired gradually as modules are extracted and properly typed, not removed wholesale.
 
-## 3. First frontend extraction
+## 4. First frontend extraction
 
 The architecture branch has extracted the following existing implementations without intentionally changing their behavior:
 
@@ -100,7 +100,7 @@ The architecture branch has extracted the following existing implementations wit
 
 The first extraction reduced `App.tsx` from 16,032 to approximately 15,747 lines. This is an initial boundary improvement, not completion of the frontend refactor.
 
-## 4. Known architectural risks to address
+## 5. Known architectural risks to address
 
 1. **Build-time source rewriting.** The frontend `prebuild` chain modifies source code before compilation. A broad marker replacement removed the `ExploreScreen` wrapper while leaving its navigation route. The generation UI transform now stops before that wrapper and has a preservation guard plus a regression test. The wider transformation chain still needs auditing.
 2. **Large application entry points.** `app.py` and `App.tsx` still own too many responsibilities.
@@ -109,7 +109,7 @@ The first extraction reduced `App.tsx` from 16,032 to approximately 15,747 lines
 5. **Test coverage imbalance.** Backend route/runtime tests are more established than direct frontend component tests. Static source contracts and browser journeys complement each other but are not interchangeable.
 6. **Documentation drift.** Test counts and some QA inventory details must be refreshed from the exact runner output after a successful full run.
 
-## 5. Target structure
+## 6. Target structure
 
 This is the direction for future changes, not a claim that all these directories already exist.
 
@@ -157,7 +157,7 @@ frontend/src/
 
 Migration order: shared primitives and pure helpers first; then one screen/feature slice at a time; then move navigation composition. Preserve existing feature folders where they already have clear ownership. Do not create folders just to relocate files without improving boundaries.
 
-## 6. Non-negotiable behavior-preservation rules
+## 7. Non-negotiable behavior-preservation rules
 
 - Do not change route URLs, HTTP methods, request/response JSON, status codes, or authentication requirements as part of file movement.
 - Do not change database models, migrations, table names, indexes, or data ownership during a structural refactor.
@@ -167,7 +167,7 @@ Migration order: shared primitives and pure helpers first; then one screen/featu
 - Do not make live payment, email, AI, storage, or GPU calls as part of ordinary refactor QA.
 - Keep work on a branch and merge only after the relevant CI/browser evidence is green.
 
-## 7. Verification strategy
+## 8. Verification strategy
 
 For every extraction:
 
@@ -181,7 +181,7 @@ For every extraction:
 
 A passing compile is necessary but not sufficient. A passing test suite is evidence for the paths it covers, not proof that every screen or external provider has been verified.
 
-## 8. Planned sequence
+## 9. Planned sequence
 
 - [x] Establish an isolated refactor branch and draft PR.
 - [x] Add a regression contract for the Summary build transform preserving `ExploreScreen`.
