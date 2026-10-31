@@ -667,3 +667,5 @@ Deployment note (27 October 2026): Render's `prepza` service has auto-deploy ena
 - [ ] Keep Supabase read-only; never restore its full archive or managed schemas over the newer local schema.
 
 Learning note: developers do not memorise every command. They learn tool concepts, inspect `--help`/runbooks/history, understand target selection and side effects, rehearse destructive operations on disposable environments, and verify outcomes. The detailed command explanations and exact migration rehearsal command are in `docs/engineering/LOCAL_SUPABASE_DATA_MIGRATION_WALKTHROUGH.md`.
+
+- [x] Verify disposable-clone migration result: direct PostgreSQL query confirmed Alembic revision `20261030_shared_study_streak` and all three Shop tables plus both shared-streak tables exist. This is a partial rehearsal PASS; constraints, indexes, foreign keys and pre-existing data preservation still need inspection. Full evidence and commands: `docs/engineering/LOCAL_SUPABASE_DATA_MIGRATION_WALKTHROUGH.md`.
