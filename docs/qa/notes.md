@@ -57,7 +57,7 @@ The offline browser journey verified that saved Study Hub documents survive offl
 ### What remains
 
 - Extract additional frontend screens only after mapping and updating the prebuild scripts that currently rewrite `App.tsx`.
-- Split the very large `AdminSection`, chat, group, document-study and settings surfaces into domain-owned modules with explicit props and contract tests.
+- Split the very large `AdminSection`, chat, group, document-study and navigation surfaces into domain-owned modules with explicit props and contract tests; Settings is now extracted.
 - Design the backend `app.py` split around shared extensions, ORM model ownership, and route blueprints; do not move models/routes mechanically.
 - Keep provider checks separate: this CI run does not prove live Paystack, SES, OpenAI, R2 or GPU behavior.
 
