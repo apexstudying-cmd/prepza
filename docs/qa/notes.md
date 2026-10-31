@@ -63,7 +63,7 @@ The offline browser journey verified that saved Study Hub documents survive offl
 
 ## 2026-10-31 — Podcast Library screen extraction
 
-The follow-up work is tracked in [PR #59](https://github.com/apexstudying-cmd/prepza/pull/59), branch `refactor/podcast-library-screen`.
+The follow-up work was tracked in [PR #59](https://github.com/apexstudying-cmd/prepza/pull/59), branch `refactor/podcast-library-screen`, and merged to `main` as `6a780eaf58976e2ff851615ec266c8aed75e2071`.
 
 ### Why this was the next slice
 
