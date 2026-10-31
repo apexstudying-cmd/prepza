@@ -22,10 +22,10 @@ def test_follow_screens_keep_existing_follow_and_request_api_contracts():
     source = SCREEN_PATH.read_text(encoding="utf-8")
     for endpoint in (
         "api<{ csrf_token: string }>('/me')",
-        "\`/users/\${targetUserId}/\${key}?page=1\`",
-        "\`/users/\${person.user_id}/follow\`",
+        r"`/users/${targetUserId}/${key}?page=1`",
+        r"`/users/${person.user_id}/follow`",
         "api<{ requests: FollowRequestItem[] }>('/follow-requests')",
-        "\`/follow-requests/\${req.id}/\${action}\`",
+        r"`/follow-requests/${req.id}/${action}`",
     ):
         assert endpoint in source
     assert "'X-CSRF-Token': csrfToken" in source
