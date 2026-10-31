@@ -38,6 +38,23 @@ A declaration and route scan of the current `main` source (10,332 lines, 318 top
 
 These are navigation boundaries, not a ready-made mechanical move list. The payment routes are intentionally shown as non-contiguous because the current file has payment logic in more than one region. Before moving a route, record its URL/method, decorators, dependencies, response shape, and test coverage.
 
+### Backend model ownership map
+
+The ORM classes are also grouped in the same `app.py` file. This inventory is based on the current class declarations and should guide a future model split:
+
+| Domain | Current model declarations |
+|---|---|
+| Core identity and study content | `User`, `University`, `Program`, `ContentItem`, `Payment`, `SystemSetting`, `ViewProgress`, `Document`, `DocumentContent`, `DocumentPageText`, `DocumentReadingProgress`, `GeneratedMaterial` |
+| AI and learning science | `AiJob`, `TutorConversation`, `TutorMessage`, `StudentLearningProfile`, `LearningConcept`, `LearningEvent`, `StudentConceptMastery`, `ConceptPrerequisite` |
+| Library | `LibraryPublication`, `SavedLibraryMaterial`, `LibraryReport` |
+| Gamification and study activity | `XpEvent`, `StudyStreak`, `StudyActivityLog`, `StudyTimeLog`, `QuizAttempt`, `FlashcardSession`, `UserAchievement`, `AiUsageLog` |
+| Chat | `Conversation`, `ConversationParticipant`, `Message`, `MessageAttachment` |
+| Groups and social | `Group`, `GroupMember`, `GroupPost`, `GroupPostComment`, `GroupPostLike`, `GroupQuestionVote`, `GroupFile`, `Follow`, `FollowRequest`, `Notification`, `NotificationPreference`, `Announcement`, `ContentReport`, `UserWarning` |
+| Organisation and ambassador | `Organisation`, `OrganisationMember`, `Opportunity`, `Ambassador`, `Referral`, `AmbassadorPayout` |
+| Audit, delivery and key material | `AuditLog`, `PushSubscription`, `UserKey` |
+
+The first migration should be model extraction with no route movement: create a shared extension module, move one model domain at a time, keep model table names/constraints/relationships identical, and add metadata/table-creation and import-compatibility tests. Avoid importing `app.py` from model modules; that would create a circular dependency.
+
 ### Frontend largest remaining screen areas
 
 The current `App.tsx` scan shows these large declarations still embedded in the app shell:
