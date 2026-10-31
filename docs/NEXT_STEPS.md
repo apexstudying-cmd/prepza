@@ -1,7 +1,7 @@
 # Prepza — Persistent Engineering Execution Tracker
 
 Last updated: 2026-10-31
-Branch: `main` (architecture foundation PR #56 and Podcast Library extraction PR #59 merged)
+Branch: `main` + [PR #61](https://github.com/apexstudying-cmd/prepza/pull/61) (single integration PR for remaining My Study extraction; tested head `48cae152`)
 
 Status:
 - [x] completed/verified
@@ -14,21 +14,21 @@ Rule: require evidence before marking production work complete.
 
 See [Repository Architecture and Safe Refactor Plan](architecture/REPOSITORY_REFACTOR_PLAN.md) for the verified module map, target structure, safety rules, and staged sequence.
 
-- [x] Create an isolated refactor branch and pull request; keep changes away from `main` until the relevant CI/browser evidence is green.
-- [x] Extract the shared frontend API client, theme store, icon primitives, academic option types, academic profile-completion, ambassador and settings screens, shared Pill UI, and push notification client into focused modules.
-- [x] Extract Podcast Library screen and shared podcast metadata helpers on [PR #59](https://github.com/apexstudying-cmd/prepza/pull/59); preserve API/cache/navigation and shell feedback/loading components through explicit props. Merged to `main` as `6a780eaf58976e2ff851615ec266c8aed75e2071`.
-- [x] Update build-time source transformers that assumed the API helper lived in `App.tsx`; keep the existing `lib/api.ts` chat client separate because it has a different CSRF/state contract.
-- [x] Add regression coverage for the Explore route wrapper and for the new module ownership contracts.
-- [x] Update frontend ownership guidance, README module map, architecture plan, QA test record, and learning notes.
-- [x] Verify production TypeScript/Vite build and all frontend source-transform tests.
-- [x] Verify disposable PostgreSQL/Alembic/SQL-ledger path, mobile/tablet browser checks, B2B browser-to-ledger regression, and the full 98-case disposable PostgreSQL QA suite.
-- [x] Verify online/offline Study Hub lifecycle and generated-artifact replay, including cached podcast audio and no offline generation POSTs.
-- [x] Merge architecture foundation PR #56 after CI/browser verification (merge commit `8cc73fbf5c511fe1c5c0abdc69bcae7dc7afe779`).
-- [x] Verify Podcast Library extraction with focused frontend tests/build and full responsive/offline/cross-system CI; merge PR #59 after all gates passed.
+- [x] Create the architecture foundation and extract shared frontend API/theme/icon/type modules, onboarding, Ambassador, Settings, shared Pill UI, and push-notification helpers (PR #56 merged as `8cc73fbf5c511fe1c5c0abdc69bcae7dc7afe779`).
+- [x] Extract Podcast Library and shared podcast metadata on [PR #59](https://github.com/apexstudying-cmd/prepza/pull/59), merged as `6a780eaf58976e2ff851615ec266c8aed75e2071`.
+- [x] Extract Achievements screen and response types on `main` (commit `fced492950e6f038f4b070e3e0dd452dd474ce0d`).
+- [x] Extract My Study from the current `main` source into `frontend/src/screens/study/StudyMaterialsScreen.tsx` in the single integration [PR #61](https://github.com/apexstudying-cmd/prepza/pull/61); preserve document/material API calls, IndexedDB account scoping, online/offline merge behavior, saved Library entries, replay/navigation, and last-study resume via an explicit callback.
+- [x] Make the active Library/My Study and last-study-resume prebuild transforms module-aware; prevent the legacy student-navigation transform from reintroducing an inline My Study screen.
+- [x] Add source contracts for module ownership, online/offline/replay behavior, transformer routing, idempotency, and last-study callback wiring.
+- [x] Verify TypeScript and production Vite build, source-transform/module contracts, student/admin/B2B, AI generation/economics, and E2EE workflows on the tested PR #61 head.
+- [x] Verify disposable PostgreSQL/Alembic/SQL-ledger path, mobile/tablet browser checks, B2B browser-to-ledger regression, full 98-case disposable PostgreSQL QA suite, and online/offline Study Hub plus generated-artifact browser journeys.
+- [x] Upload responsive screenshots from the tested release-browser workflow.
+- [ ] Merge PR #61 only after this documentation/evidence update is checked on the final PR head.
 - [ ] Split backend `app.py` only after designing and testing shared SQLAlchemy extensions, model import compatibility, route registration and app-factory boundaries.
+- [ ] Continue extracting the remaining large frontend screens in reviewed feature slices; do not combine chat/E2EE or admin boundaries with unrelated behavior changes.
 - [ ] Replace source-mutating prebuild scripts with committed source changes incrementally; do not remove the build chain until every transform has a tested source equivalent.
 
-**Current evidence:** [Release Browser and Cross-System Regression run 41226775690](https://github.com/apexstudying-cmd/prepza/actions/runs/41226775690) passed on tested application-code commit `c24251a96ac20f9cb1cf4b6f4b7e36afdb3b051d`; the tested changes were merged to `main` in `6a780eaf58976e2ff851615ec266c8aed75e2071`: 98 passed, 0 failed in full disposable PostgreSQL QA, responsive and B2B browser gates passed, online/offline artifact replay passed, and screenshots were uploaded. The overall product release status remains governed by the separate release gates; this refactor run does not certify external providers.
+**Current evidence:** [Release Browser and Cross-System Regression run 41231276667](https://github.com/apexstudying-cmd/prepza/actions/runs/41231276667) passed on tested application-code commit `48cae15227e7af3fe30c6b3fc62e2a7995a59cc7`: production image build; disposable PostgreSQL/Redis; 43 migration files and controlled SQL ledger verified; 98 passed, 0 failed, 3,536 warnings; mobile/tablet responsive browser smoke; B2B browser-to-ledger checks; My Study local-PDF/offline lifecycle; all 12 generated-material replays; cached podcast audio; zero generation POSTs during offline replay; responsive screenshots uploaded. [Frontend Build run 41231276655](https://github.com/apexstudying-cmd/prepza/actions/runs/41231276655), [Student Frontend Contract run 41231276740](https://github.com/apexstudying-cmd/prepza/actions/runs/41231276740), [Study navigation run 41231276654](https://github.com/apexstudying-cmd/prepza/actions/runs/41231276654), [Student contract run 41231276634](https://github.com/apexstudying-cmd/prepza/actions/runs/41231276634), [Admin Route Contract run 41231276609](https://github.com/apexstudying-cmd/prepza/actions/runs/41231276609), [B2B validation run 41231276595](https://github.com/apexstudying-cmd/prepza/actions/runs/41231276595), [AI generation run 41231276739](https://github.com/apexstudying-cmd/prepza/actions/runs/41231276739), [AI economics run 41231276651](https://github.com/apexstudying-cmd/prepza/actions/runs/41231276651), [E2EE Security run 41231276738](https://github.com/apexstudying-cmd/prepza/actions/runs/41231276738), [E2EE Chat run 41231276664](https://github.com/apexstudying-cmd/prepza/actions/runs/41231276664), and [Prepza control API run 41231276606](https://github.com/apexstudying-cmd/prepza/actions/runs/41231276606) also passed. The separate StudyHub Library Flow workflow was skipped; Study Hub offline and artifact behavior was exercised by the release-browser workflow. This CI evidence does not certify live Paystack, SES, OpenAI, R2, or GPU provider behavior, and it does not clear unrelated product release gates.
 
 ## Local Supabase data migration and database learning (2026-10-31)
 

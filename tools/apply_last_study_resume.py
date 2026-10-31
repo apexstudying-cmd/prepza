@@ -69,6 +69,25 @@ if start >= 0:
     if old_open in study_hub:
         study_hub = study_hub.replace(old_open, new_open, 1)
         text = text[:start] + study_hub + text[section_end:]
+elif "import StudyMaterialsScreen from './screens/study/StudyMaterialsScreen'" in text:
+    route_pattern = re.compile(r"(case\s+'study-materials':\s*return\s+<StudyMaterialsScreen\b[^>]*)(\s*/>)")
+    if "onRememberLastStudyDocument={rememberLastStudyDocument}" not in text:
+        text, route_count = route_pattern.subn(
+            r"\1 onRememberLastStudyDocument={rememberLastStudyDocument}\2", text, count=1
+        )
+        if route_count != 1:
+            raise SystemExit("Extracted My Study route not found while wiring last-study callback")
+    module_path = ROOT / "frontend" / "src" / "screens" / "study" / "StudyMaterialsScreen.tsx"
+    if not module_path.exists():
+        raise SystemExit("Extracted My Study module is missing")
+    module_text = module_path.read_text(encoding="utf-8")
+    module_old_open = "const openDocument = (id: number) => { setActiveDocumentId(id); setScreen('document-study') }"
+    module_new_open = "const openDocument = (id: number) => { onRememberLastStudyDocument?.(id); setActiveDocumentId(id); setScreen('document-study') }"
+    if module_old_open in module_text:
+        module_text = module_text.replace(module_old_open, module_new_open, 1)
+        module_path.write_text(module_text, encoding="utf-8")
+    elif "onRememberLastStudyDocument?.(id)" not in module_text:
+        raise SystemExit("Extracted My Study openDocument callback anchor missing")
 
 study_marker = "function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {"
 if "rememberLastStudyDocument(activeDocumentId)" not in text:

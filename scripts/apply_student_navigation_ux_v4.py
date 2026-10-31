@@ -29,7 +29,7 @@ def main():
               { icon: '🎙️', label: 'Podcasts', action: () => setScreen('podcast-library') },"""
     text = replace_once(text, quick_old, quick_new, 'Home quick actions')
     text = replace_once(text, "{ label: 'Docs', value: summary ? String(summary.documents_count) : '—', color: '#4C7BC9', dest: 'library' as Screen },", "{ label: 'Docs', value: summary ? String(summary.documents_count) : '—', color: '#4C7BC9', dest: 'study-materials' as Screen },", 'Profile Docs shortcut')
-    if 'function StudyMaterialsScreen(' not in text:
+    if 'function StudyMaterialsScreen(' not in text and "import StudyMaterialsScreen from './screens/study/StudyMaterialsScreen'" not in text:
         marker = "function BottomNav({ active, setScreen }: { active: Screen; setScreen: (s: Screen) => void }) {"
         component = r'''
 // ─── MY STUDY ────────────────────────────────────────────────────────────────

@@ -6,6 +6,44 @@ The goal is not only to record what changed, but also what I learned, why we mad
 
 These notes should grow alongside the production-readiness audit so someone can later trace the learning curve from a working laptop setup to a deployable production system.
 
+## 2026-10-31 — My Study screen extraction and build-transformer reconciliation
+
+The remaining My Study extraction is consolidated in [PR #61](https://github.com/apexstudying-cmd/prepza/pull/61), based on the then-current `main` commit `fced492950e6f038f4b070e3e0dd452dd474ce0d`. The tested PR head is `48cae15227e7af3fe30c6b3fc62e2a7995a59cc7`.
+
+### What changed
+
+- Moved the existing My Study screen into `frontend/src/screens/study/StudyMaterialsScreen.tsx`, removing 185 source lines from `App.tsx` (14,758 → 14,573).
+- Kept the existing `/me`, `/documents`, and `/library/saved` request contracts, offline IndexedDB account scoping, parallel online/offline material merge, saved Library list, generated-material replay, and existing navigation targets.
+- Passed the existing app-shell loading, error, and empty-state components into the module through typed props. The screen does not import `App.tsx`.
+- Preserved last-study resume by passing `rememberLastStudyDocument` into the extracted screen through an optional callback wired by the prebuild transform.
+- Updated `tools/apply_library_my_study_separation.py` to recognise the extracted module, remove the duplicate Saved tab from Library, retain saved items in My Study, and remain idempotent on the next prebuild.
+- Updated `tools/apply_last_study_resume.py` to patch the extracted module/route callback rather than relying on the inline function. The legacy navigation transform now avoids re-inserting the inline screen.
+- Updated the AI-generation contract to read the screen from its feature module and added tests for module ownership, saved Library integration, online/offline/replay contracts, and both transformers' idempotency.
+
+### What the failed CI runs taught us
+
+The first integration run exposed two real issues before merge: the Library/My Study transformer had been relying on the inline screen's `savedLibrary` variable as its completion marker, and the extraction patch initially used source offsets after inserting an import. The first caused a stale Library transform to run against already-evolved `toggleSave` code; the second cut into the preceding `TopBar` component. Both were corrected, and the exact final tested head passed TypeScript, production build, source-transform tests, and the full browser regression. These failed intermediate runs remain useful evidence and are not represented as passing runs.
+
+### Verification evidence
+
+[Release Browser and Cross-System Regression run 41231276667](https://github.com/apexstudying-cmd/prepza/actions/runs/41231276667), tested head `48cae15227e7af3fe30c6b3fc62e2a7995a59cc7`, passed:
+
+- Production Docker image build; disposable PostgreSQL and Redis; 43 migration files and controlled SQL migration ledger.
+- Full disposable PostgreSQL suite: **98 passed, 0 failed, 3,536 warnings**.
+- Mobile/tablet responsive browser smoke and B2B browser-to-ledger metering regression.
+- My Study local-first PDF opening, with zero source-document detail/reading GETs; offline Study Hub lifecycle and reload/resume.
+- All 12 canonical generated-material GET/replay paths across three fixture documents; all private/cacheable; zero generation POSTs during offline replay.
+- Cached podcast descriptor and audio Blob reopened offline; responsive screenshots uploaded.
+
+The [Frontend Build run 41231276655](https://github.com/apexstudying-cmd/prepza/actions/runs/41231276655), [Student Frontend Contract run 41231276740](https://github.com/apexstudying-cmd/prepza/actions/runs/41231276740), and student/admin/B2B, AI generation/economics, E2EE, navigation and control-API workflows also passed on the same head. The separate StudyHub Library Flow workflow was skipped; its offline and replay behavior was exercised by the release-browser workflow.
+
+### What remains
+
+- `App.tsx` is still 14,573 lines and `app.py` remains approximately 10,332 lines. This extraction is a boundary improvement, not completion of repository modularization.
+- Continue with low-risk frontend slices and audit each source transformer before moving another screen.
+- Design the backend app-factory, extension, model-import and blueprint boundaries before moving any ORM models or routes.
+- Keep provider checks separate; this CI run does not prove live Paystack, SES, OpenAI, R2 or GPU behavior.
+
 ## 2026-10-31 — Behaviour-preserving repository architecture refactor
 
 The architecture plan and current module map live in [Repository Architecture and Safe Refactor Plan](../architecture/REPOSITORY_REFACTOR_PLAN.md).

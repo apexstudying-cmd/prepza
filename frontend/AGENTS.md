@@ -48,6 +48,8 @@ python -m pytest -q \
 - `src/screens/onboarding/CompleteProfileScreen.tsx` - academic profile-completion flow.
 - `src/screens/ambassador/AmbassadorScreen.tsx` - ambassador application, dashboard, referral, and payout-request UI.
 - `src/screens/settings/SettingsScreen.tsx` - account settings, privacy, notification preferences, appearance, security, logout, and account deletion.
+- `src/screens/gamification/AchievementsScreen.tsx` and `src/types/achievements.ts` - achievement list/progress UI and its typed response contract.
+- `src/screens/study/StudyMaterialsScreen.tsx` - My Study document/material lists, offline IndexedDB integration, saved Library items, and replay navigation. Its app-shell UI and last-study callback are explicit props; it must not import `App.tsx`.
 - `src/screens/podcast/PodcastLibraryScreen.tsx` - Podcast Library list, API loading, session cache, and navigation to the player.
 - `src/types/podcast.ts` - shared podcast item type and Home/Library presentation helpers.
 - `src/ui/Pill.tsx` - shared status pill component.
@@ -70,5 +72,5 @@ python -m pytest -q \
 4. Add a behavior/contract test before moving logic, then run the focused test, TypeScript check, and production build.
 5. For screen extraction, inject shared shell UI components through typed props rather than importing `App.tsx`; do not duplicate generic feedback/skeleton components or create circular imports.
 6. Do not remove `// @ts-nocheck` from the legacy App file as a blanket change. Remove it only after affected code has proper types and relevant tests pass.
-7. Build-time source transforms must preserve unrelated component declarations and route targets. Add regression coverage for each transform that edits `App.tsx`.
+7. Build-time source transforms must preserve unrelated component declarations and route targets. Add regression coverage for each transform that edits `App.tsx`; transforms must detect whether a screen is inline or module-owned before patching it.
 8. Keep the application API client and chat API client separate until their authentication, CSRF, cache, and error contracts are deliberately reconciled.
