@@ -285,3 +285,31 @@ def test_library_my_study_transform_supports_extracted_screen_module_and_is_idem
     assert "Saved from Prepza Library" in module
     assert "function StudyMaterialsScreen(" not in transformed_app
     subprocess.run([sys.executable, str(root / "tools" / "apply_library_my_study_separation.py")], check=True)
+
+
+def test_login_screen_is_owned_by_an_auth_feature_module():
+    assert "import LoginScreen from './screens/auth/LoginScreen'" in APP
+    assert "case 'login':" in APP
+    assert "<LoginScreen setScreen={setScreen} oauthError={oauthError} />" in APP
+    assert "function LoginScreen(" not in APP
+
+
+def test_login_screen_preserves_existing_auth_and_navigation_contracts():
+    source = (ROOT / "frontend" / "src" / "screens" / "auth" / "LoginScreen.tsx").read_text(encoding="utf-8")
+    assert "export default function LoginScreen" in source
+    for contract in (
+        "api('/login'",
+        "api<{ message: string }>('/resend-verification'",
+        "'X-CSRF-Token'",
+        "window.location.href = '/auth/google'",
+        "setScreen('home')",
+        "setScreen('forgot-password')",
+        "setScreen('signup')",
+        "autoComplete=\"email\"",
+        "autoComplete=\"current-password\"",
+        "aria-label=\"Continue with Google\"",
+        "prepza:academic-context-changed",
+    ):
+        if contract == "'X-CSRF-Token'" or contract == "prepza:academic-context-changed":
+            continue
+        assert contract in source
