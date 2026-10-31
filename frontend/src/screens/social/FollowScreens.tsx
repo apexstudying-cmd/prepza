@@ -5,7 +5,7 @@ import { Ic } from '../../ui/icons'
 import Pill from '../../ui/Pill'
 import type { FollowListUser, FollowRequestItem } from '../../types/social'
 
-function FollowListScreen({ mode, setScreen, targetUserId, setActiveProfileUserId, setActiveProfileName, EmptyState }: {
+export function FollowListScreen({ mode, setScreen, targetUserId, setActiveProfileUserId, setActiveProfileName, EmptyState }: {
   mode: 'followers' | 'following'
   setScreen: (s: 'student-profile' | 'explore') => void
   targetUserId: number | null
@@ -104,7 +104,7 @@ function FollowListScreen({ mode, setScreen, targetUserId, setActiveProfileUserI
   )
 }
 
-function FollowRequestsScreen({ setScreen, setActiveProfileUserId, setActiveProfileName, EmptyState }: {
+export function FollowRequestsScreen({ setScreen, setActiveProfileUserId, setActiveProfileName, EmptyState }: {
   setScreen: (s: 'student-profile' | 'explore') => void
   setActiveProfileUserId?: (id: number) => void
   setActiveProfileName?: (name: string) => void
