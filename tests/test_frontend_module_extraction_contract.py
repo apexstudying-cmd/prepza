@@ -91,3 +91,43 @@ def test_push_notification_helpers_keep_the_existing_subscription_contract():
         "subscription.unsubscribe()",
     ):
         assert contract in source
+
+def test_podcast_library_screen_is_owned_by_a_feature_module():
+    assert "import PodcastLibraryScreen from './screens/podcast/PodcastLibraryScreen'" in APP
+    assert "function PodcastLibraryScreen(" not in APP
+    assert "case 'podcast-library':" in APP
+    assert "PodcastLibraryScreen" in APP
+
+
+def test_podcast_library_preserves_fetch_cache_and_navigation_contract():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "podcast" /
+        "PodcastLibraryScreen.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "PODCAST_LIBRARY_CACHE",
+        "api<{ podcasts: PodcastItem[] }>('/podcasts')",
+        "setPodcastList(res.podcasts)",
+        "setActiveDocumentId(p.document_id)",
+        "setScreen('podcast-player')",
+        "setScreen('home')",
+        "Study Podcasts",
+        "AI-generated from your notes",
+        "Processing…",
+        "podcastDuration(p.duration_seconds)",
+    ):
+        assert contract in source
+
+
+def test_podcast_metadata_helpers_are_shared_by_home_and_library():
+    source = (
+        ROOT / "frontend" / "src" / "types" / "podcast.ts"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "export type PodcastItem",
+        "export const podcastColor",
+        "export const podcastDuration",
+        "Math.max(1, Math.round(seconds / 60))",
+    ):
+        assert contract in source
+    assert "from './types/podcast'" in APP
