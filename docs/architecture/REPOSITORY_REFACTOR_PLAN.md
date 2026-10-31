@@ -123,7 +123,7 @@ The following modules are merged into `main` by PR #56:
 
 ### Current candidate extraction — PR #57
 
-The draft PR moves the existing achievements component to `frontend/src/screens/gamification/AchievementsScreen.tsx` and shares its `Achievement` and `AchievementsResponse` types through `frontend/src/types/gamification.ts`. It preserves the existing endpoint, loading/error handling, unlocked/in-progress rendering, share flow, and navigation callbacks. This change is not considered verified until the focused contract tests and CI finish.
+PR #57 moves the existing achievements component to `frontend/src/screens/gamification/AchievementsScreen.tsx` and shares its `Achievement` and `AchievementsResponse` types through `frontend/src/types/gamification.ts`. Its original 112-line component body is identical to the pre-extraction source apart from the export and narrowed prop type. The existing endpoint, loading/error handling, unlocked/in-progress rendering, share flow, and navigation callbacks are preserved. CI run 41225741765 passed: 14 frontend contract tests, 5 offline Library tests, TypeScript/production build, the new Achievements browser flow at three responsive viewports, full 98-case PostgreSQL QA, B2B metering and online/offline generated-artifact browser journeys.
 
 ## 5. Known architectural risks to address
 
