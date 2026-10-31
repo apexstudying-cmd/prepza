@@ -4,7 +4,7 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-APP = ROOT / 'frontend' / 'src' / 'App.tsx'
+API = ROOT / 'frontend' / 'src' / 'lib' / 'appApi.ts'
 GEN = ROOT / 'frontend' / 'src' / 'offline' / 'generatedMaterials.ts'
 
 
@@ -51,38 +51,23 @@ def insert_library_save_hook(api_block: str, save_hook: str) -> str:
     return api_block[:match.start()] + indented_hook + "\n" + api_block[match.start():]
 
 
-def patch_app():
-    s = APP.read_text(encoding='utf-8')
-    # The realtime import has been rewritten by several earlier frontend transforms over time.
-    # Match the module import by its stable source path rather than requiring a particular
-    # symbol list or one-line formatting.
-    actual_anchor = next((
-        line for line in s.splitlines(True)
-        if "from './crypto/chatRealtime'" in line and line.lstrip().startswith("import")
-    ), "")
-    if not actual_anchor:
-        raise SystemExit("Offline library: realtime chat import anchor not found")
-    anchor = actual_anchor
+def patch_api():
+    s = API.read_text(encoding='utf-8')
     imports = [
-        "import { getOfflineUserId } from './offline/generatedMaterials'\n",
-        "import { getSavedStudyHubOffline, listSavedStudyHubOffline, saveStudyHubDocumentOffline } from './offline/studyHubOffline'\n",
+        "import { getOfflineUserId } from '../offline/generatedMaterials'\n",
+        "import { getSavedStudyHubOffline, listSavedStudyHubOffline, saveStudyHubDocumentOffline } from '../offline/studyHubOffline'\n",
     ]
-    insert = anchor
-    for line in imports:
+    for line in reversed(imports):
         symbol = line.split('{', 1)[1].split('}', 1)[0].split(',')[0].strip()
         if symbol not in s:
-            insert += line
-    if insert != anchor:
-        s = s.replace(anchor, insert, 1)
+            s = line + s
 
-    api_marker = "async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {"
+    api_marker = "export async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {"
     api_start = s.find(api_marker)
     if api_start < 0:
-        raise SystemExit('Offline library: api helper not found')
-    api_end = s.find('\n}\n\n// ─── Document upload helpers', api_start)
-    if api_end < 0:
-        raise SystemExit('Offline library: api helper boundary not found')
-    api_block = s[api_start:api_end]
+        raise SystemExit('Offline library: exported API helper not found')
+    api_end = len(s)
+    api_block = s[api_start:api_end].rstrip()
 
     if 'getSavedStudyHubOffline' not in api_block:
         destructure = "  const { headers: extraHeaders, ...restOptions } = options\n"
@@ -219,12 +204,12 @@ def patch_app():
     missing = [x for x in required if x not in s]
     if missing:
         raise SystemExit('Offline library verification failed: ' + ', '.join(missing))
-    APP.write_text(s, encoding='utf-8')
+    API.write_text(s, encoding='utf-8')
 
 
 def main():
     patch_generated_user_id()
-    patch_app()
+    patch_api()
     print('Offline StudyHub local document routing and save/download hook applied and verified.')
 
 
