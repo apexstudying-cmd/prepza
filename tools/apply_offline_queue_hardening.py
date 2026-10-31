@@ -1,8 +1,8 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-APP = ROOT / 'frontend' / 'src' / 'App.tsx'
-text = APP.read_text(encoding='utf-8')
+API = ROOT / 'frontend' / 'src' / 'lib' / 'appApi.ts'
+text = API.read_text(encoding='utf-8')
 
 MARKER = "const PREPZA_OFFLINE_QUEUE_STORE = 'syncQueue'"
 if MARKER not in text:
@@ -57,5 +57,5 @@ required = ['userId: number | null', 'dedupeKey: string', 'prepzaOfflineQueueDed
 missing = [x for x in required if x not in text]
 if missing:
     raise SystemExit('Offline queue hardening verification failed: ' + ', '.join(missing))
-APP.write_text(text, encoding='utf-8')
+API.write_text(text, encoding='utf-8')
 print('Offline mutation queue hardening, account isolation, retry, and authoritative conflict reconciliation applied and verified.')
