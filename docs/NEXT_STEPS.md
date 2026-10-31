@@ -1,7 +1,7 @@
 # Prepza — Persistent Engineering Execution Tracker
 
 Last updated: 2026-10-31
-Branch: `main`; PR #62 merged as `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`.
+Branch: `main`; PR #62 merged as `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`; PR #64 is open pending final review/merge.
 
 Status:
 - [x] completed/verified
@@ -26,7 +26,7 @@ See [Repository Architecture and Safe Refactor Plan](architecture/REPOSITORY_REF
 - [x] Merge the consolidated integration PR #61 after final-head checks passed; squash merge is `11e626f943f05e48161e8a8b4487715ac9257f53`.
 - [ ] Split backend `app.py` only after designing and testing shared SQLAlchemy extensions, model import compatibility, route registration and app-factory boundaries.
 - [x] Extract the existing Group Detail screen into `frontend/src/screens/groups/GroupDetailScreen.tsx` and group response types into `frontend/src/types/groups.ts` in [PR #62](https://github.com/apexstudying-cmd/prepza/pull/62), squash-merged to `main` as `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`, preserving the original 417-line screen body byte-for-byte; only module imports/props and type exports changed. Frontend Build run [41233691287](https://github.com/apexstudying-cmd/prepza/actions/runs/41233691287) and Release Browser/Cross-System Regression run [41233691818](https://github.com/apexstudying-cmd/prepza/actions/runs/41233691818) passed on the PR code head `a342e822ca3a240257ecb5f8f84ad27d873985ac`; post-merge Frontend Build and Release Browser/Cross-System Regression run [41234848528](https://github.com/apexstudying-cmd/prepza/actions/runs/41234848528) also passed on exact merge commit `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`.
-- [x] Extract the existing follower/following and follow-request screens into `frontend/src/screens/social/FollowScreens.tsx` with shared contracts in `frontend/src/types/social.ts` in consolidated PR #64; preserve screen bodies and route behavior.
+- [~] Extract the existing follower/following and follow-request screens into `frontend/src/screens/social/FollowScreens.tsx` with shared contracts in `frontend/src/types/social.ts` in PR #64; original screen bodies are preserved and all PR-head checks pass. Awaiting final review/merge and post-merge verification.
 - [ ] Continue extracting the remaining large frontend screens in reviewed feature slices; do not combine chat/E2EE or admin boundaries with unrelated behavior changes.
 - [ ] Replace source-mutating prebuild scripts with committed source changes incrementally; do not remove the build chain until every transform has a tested source equivalent.
 
