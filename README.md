@@ -4,7 +4,7 @@ Prepza is a Progressive Web App for university students. The current repository 
 
 ## Repository status
 
-This documentation was written from the implementation on main at commit b63df1045c6643c0495b53b355873a5c14f986ef and is intended to describe the code that actually exists, not a planned architecture.
+This documentation was refreshed against the implementation on main at commit `6a780eaf58976e2ff851615ec266c8aed75e2071` and is intended to describe the code that actually exists, not a planned architecture.
 
 The repository's automated CI suite was green on that audit checkpoint. That is not the same as production deployment verification: the Render environment, live provider credentials, live storage migration, backup/restore drill, and real infrastructure capacity still require deployment-time verification.
 
