@@ -91,3 +91,40 @@ def test_push_notification_helpers_keep_the_existing_subscription_contract():
         "subscription.unsubscribe()",
     ):
         assert contract in source
+
+
+
+def test_my_study_screen_is_owned_by_its_feature_module():
+    assert "import StudyMaterialsScreen from './screens/study/StudyMaterialsScreen'" in APP
+    assert "case 'study-materials':" in APP
+    assert "function StudyMaterialsScreen(" not in APP
+    assert "function mergeStudyMaterialRows(" not in APP
+
+
+def test_my_study_module_preserves_online_offline_and_library_contracts():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "study" / "StudyMaterialsScreen.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "listSavedStudyHubOffline",
+        "listOfflineGeneratedMaterials",
+        "setOfflineUserId",
+        "get('/me')",
+        "get('/library/saved')",
+        "get('/documents')",
+        "'X-CSRF-Token': csrfToken",
+        "prepza-open-material",
+        "setScreen('document-study')",
+        "setScreen('upload')",
+    ):
+        assert contract in source
+
+
+def test_my_study_material_merge_deduplicates_by_document_and_material_id():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "study" / "StudyMaterialsScreen.tsx"
+    ).read_text(encoding="utf-8")
+    assert "new Set(current.map(row => `${row.documentId}:${row.materialId}`))" in source
+    assert "if (seen.has(key)) continue" in source
+    assert "setMaterials(current => mergeStudyMaterialRows(current, cachedMaterials))" in source
+    assert "setMaterials(current => mergeStudyMaterialRows(current, rows))" in source
