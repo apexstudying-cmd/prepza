@@ -48,6 +48,7 @@ python -m pytest -q \
 - `src/screens/onboarding/CompleteProfileScreen.tsx` - academic profile-completion flow.
 - `src/screens/ambassador/AmbassadorScreen.tsx` - ambassador application, dashboard, referral, and payout-request UI.
 - `src/screens/settings/SettingsScreen.tsx` - account settings, privacy, notification preferences, appearance, security, logout, and account deletion.
+- `src/screens/gamification/AchievementsScreen.tsx` - achievements loading, progress display, and sharing; `src/types/gamification.ts` owns the shared achievement response types.
 - `src/ui/Pill.tsx` - shared status pill component.
 - `src/lib/pushNotifications.ts` - browser push subscription/unsubscription helpers using the shared application API client.
 - `src/screens/<domain>/` - home for additional screen-level compositions, grouped by feature domain.
