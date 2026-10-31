@@ -10,6 +10,19 @@ Status:
 
 Rule: require evidence before marking production work complete.
 
+## Local Supabase data migration and database learning (2026-10-31)
+
+- [x] Create the durable engineering walkthrough: [Local Supabase Data Migration Walkthrough](engineering/LOCAL_SUPABASE_DATA_MIGRATION_WALKTHROUGH.md). It records the verified local backup, Supabase custom-format export, archive check, schema inventory, Alembic revision investigation, Docker/frontend/backend/hosting concepts, commands, mistakes, and current safety boundaries.
+- [x] Verify source archive integrity and initial public table-name inventory (local: 112; Supabase: 107; five local-only table names; no Supabase-only names found in that inventory).
+- [x] Rebuild app image from local commit `49310553`; fresh image Alembic head is `20261030_shared_study_streak`; local database still records `20261007_doc_material`.
+- [x] Confirm `20261007_doc_material` is the revision ID declared inside `20261007_document_content_material_link.py`, not a missing migration file.
+- [~] Compare full table definitions, constraints, indexes, defaults, and sequence behavior; review the four pending migrations against the actual local schema and source data.
+- [ ] Rehearse a selective data-only import against a disposable database without restoring Supabase-managed schemas or replacing the current local schema.
+- [ ] Import approved application data into local PostgreSQL only after rehearsal and backup verification.
+- [ ] Verify imported account login, row counts, foreign-key integrity, and sequence next values.
+- [ ] Update the walkthrough and QA record with actual import and browser/login evidence.
+- Guardrail: Supabase remains read-only; no full-archive restore; no production changes; do not run `alembic upgrade head` on the working local DB until the pending migrations and their preconditions are reviewed.
+
 ## AI tutor identity and architecture checkpoint (2026-10-29)
 
 - [x] Morio identity: main document-tutor prompt, scoped E2EE prompt, student-facing Home/document/chat labels, and `@Morio` mention updated. Internal Ada-named routes/functions remain compatibility details. Frontend build, identity contract, Chat UX Contract, E2EE security, and full responsive/offline/cross-system browser regression passed on runtime commit `fe8bbbb195d2090c481052172b8af5ec9176e9bc` in [run 40856781684](https://github.com/apexstudying-cmd/prepza/actions/runs/40856781684).
