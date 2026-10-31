@@ -6,6 +6,36 @@ The goal is not only to record what changed, but also what I learned, why we mad
 
 These notes should grow alongside the production-readiness audit so someone can later trace the learning curve from a working laptop setup to a deployable production system.
 
+## 2026-10-31 — Local Supabase data migration and deployment architecture
+
+The full, step-by-step record lives in [Local Supabase Data Migration Walkthrough](../engineering/LOCAL_SUPABASE_DATA_MIGRATION_WALKTHROUGH.md). This section is a short learning index; the walkthrough is the source of truth for commands, detailed outputs, and the import checklist.
+
+### What I learned and verified
+
+- PostgreSQL custom-format dumps (`pg_dump -Fc`) can be inspected and selectively restored with `pg_restore`. A successful `pg_restore --list` verifies archive readability, not destination compatibility.
+- We exported Supabase through its Session Pooler after the direct database hostname did not resolve from Docker. The export was read-only and used TLS; credentials were passed through environment variables and are not recorded here.
+- We backed up the existing local database before attempting any import. The source archive is separate from the destination recovery backup.
+- Alembic is schema version control for SQLAlchemy/PostgreSQL. Alembic's revision ID is declared inside a migration file; it does not have to match the filename.
+- The local database revision (`20261007_doc_material`) is a valid revision declared in `20261007_document_content_material_link.py`. The rebuilt app image contains later migrations through `20261030_shared_study_streak`.
+- Building a Docker image does not automatically apply Alembic migrations. In this Compose setup the app starts Gunicorn; no automatic migration command was found in the Dockerfile/Compose app startup configuration.
+- GitHub stores repository history and documentation. Hosting runs deployed artifacts. Docker's build context and `.dockerignore` determine which repository files are sent to the builder; the current `COPY . .` means docs are copied into the runtime image unless excluded.
+
+### Current state — do not overstate completion
+
+- Supabase source archive created and readable; local backup created.
+- Initial public table inventory: local 112, Supabase 107. Five table names are local-only; no source-only names were found in this first comparison.
+- The inventory does not prove matching columns, constraints, indexes, defaults, or sequences are compatible.
+- Data import and local login are **not yet performed or verified**.
+- Supabase remains a read-only source. No full-archive restore or live schema change is permitted for this task.
+
+### Next learning steps
+
+1. Compare actual table definitions and sequence behavior, not only table names or raw SQL text.
+2. Review all pending Alembic operations and rehearse them on a disposable database.
+3. Plan a data-only allowlisted import, including foreign-key order and sequence repair.
+4. Verify the existing account can log in locally and test representative screens.
+5. Record the actual results in the walkthrough and QA evidence.
+
 ## 2026-10-04 — Starting the learning record
 
 ### 1. Docker: the basic idea
