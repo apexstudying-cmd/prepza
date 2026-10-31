@@ -3,7 +3,7 @@
 **Purpose:** make the repository easier to navigate and maintain without changing user-visible behavior, API contracts, authorization, persistence, billing, or product rules.
 
 **Baseline source checkpoint:** `f747b0d95a6b81cb2868843093546a97e3d09fb5` (2026-10-31).
-**Working branch:** `main`; PR #61 and PR #62 are merged (PR #62 merge `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`); PR #64 is open with passing PR-head checks, pending merge. PR #56, #59, and the consolidated My Study integration PR #61 are merged; the Achievements module is also present on `main`.
+**Working branch:** `main`; PR #61, PR #62, and PR #64 are merged (PR #62 merge `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`; PR #64 merge `7b0e9301543beabc5dee02af2388983737bada5c`). PR #56, #59, and the consolidated My Study integration PR #61 are merged; the Achievements module is also present on `main`.
 **Status:** incremental refactor in progress. This document distinguishes current implementation from target structure.
 
 ## 1. Verified baseline
@@ -64,7 +64,7 @@ The current `App.tsx` scan shows these large declarations still embedded in the 
 | `AdminSection` | 1,961 | High; split by admin domain after mapping state and permissions |
 | `App` composition root | 538 | High; move navigation state/history into `app/navigation/` behind storage/history contract tests, leaving providers and route composition in `App` |
 | `GroupDetailScreen` | Extracted in PR #62 | Existing 417-line screen body moved verbatim; app-shell feedback components passed as props |
-| `FollowListScreen` + `FollowRequestsScreen` | Extracted in PR #64 (open) | Existing follower/following and request screens moved to one social module; existing state and request flows retained |
+| `FollowListScreen` + `FollowRequestsScreen` | Extracted in PR #64 (merged) | Existing follower/following and request screens moved to one social module; existing state and request flows retained |
 | `ChatDetailScreen` | 406 | High; extract only after mapping E2EE, realtime and message-state dependencies |
 | `SettingsScreen` | Extracted | Account, privacy, notification, appearance and security settings now live in `screens/settings/SettingsScreen.tsx` |
 | `PodcastLibraryScreen` | Extracted | Podcast list now lives in `screens/podcast/PodcastLibraryScreen.tsx`; shared item metadata lives in `types/podcast.ts` |
@@ -217,7 +217,7 @@ A passing compile is necessary but not sufficient. A passing test suite is evide
 - [x] Complete full CI and browser verification for the current extraction (tested code commit `ba93150bf9df4348aada6d680bf4bfc4ddc595bb`; run 41222704363).
 - [x] Reconcile the QA test record, learning notes and NEXT_STEPS tracker against the 11-file/98-case runner and successful CI output.
 - [x] Extract Group Detail into a feature-owned module in draft PR #62; verify byte-for-byte screen body preservation, typecheck, production build, disposable database QA, responsive, B2B, and online/offline browser regression.
-- [x] Extract the existing follower/following and follow-request screens into a shared social feature module with a dedicated API/state/navigation/type contract test; no screen body or interaction logic was rewritten.
+- [x] Extract the existing follower/following and follow-request screens into a shared social feature module with a dedicated API/state/navigation/type contract test; no screen body or interaction logic was rewritten. PR #64 merged as `7b0e9301543beabc5dee02af2388983737bada5c`; post-merge Frontend Build and Release Browser/Cross-System Regression passed.
 - [ ] Continue frontend screen extraction in small, dependency-mapped slices.
 - [ ] Design and implement backend app-factory/extensions boundaries with compatibility tests.
 - [ ] Extract backend route/service domains incrementally.
