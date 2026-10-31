@@ -5,6 +5,8 @@
 GitHub Actions [Release Browser and Cross-System Regression run 41219805945](https://github.com/apexstudying-cmd/prepza/actions/runs/41219805945) passed on tested code commit `d4f4e882600a3e03c80ca809475e74aa5d6a9f76`. The workflow built the production Docker image; started disposable PostgreSQL and Redis; applied Alembic migrations and the controlled SQL migration ledger; passed mobile/tablet responsive browser checks, B2B browser-to-ledger metering, the full disposable PostgreSQL QA suite (**98 passed, 0 failed, 3,536 warnings**), and online/offline Study Hub plus generated-artifact browser journeys; and uploaded responsive screenshots. The browser journey verified offline Study Hub reload/resume, existing Summary/Flashcards/Practice Questions/Mind Maps across multiple saved documents, podcast audio playback from cached assets, and no generation POSTs during offline replay. This is CI evidence only: it does not prove live Paystack, SES, OpenAI, R2 or GPU provider behavior, and does not itself clear the overall release gates.
 
 
+Historical entries below preserve evidence from the dates they were recorded. Where an older section says 74 cases/10 files, that is a historical snapshot and is superseded by the latest 98-case/11-file runner inventory above.
+
 This file is the authoritative human-readable record of the **full local QA suite** run by `tools/run_local_qa.py`.
 
 It answers four questions exactly:
@@ -382,7 +384,7 @@ This is the broadest end-to-end route and business-behavior layer.
 
 ## 5. Coverage map
 
-The 74 collected cases cover these major boundaries:
+The historical 74-case snapshot covered these major boundaries:
 
 | Area | What is proven |
 |---|---|
