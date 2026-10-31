@@ -101,6 +101,7 @@ The frontend is being split into feature-owned modules incrementally:
 - `frontend/src/screens/onboarding/CompleteProfileScreen.tsx` owns the academic profile completion flow.
 - `frontend/src/screens/ambassador/AmbassadorScreen.tsx` owns the ambassador application, dashboard, referrals, and payout-request UI.
 - `frontend/src/screens/settings/SettingsScreen.tsx` owns account settings, security, privacy, notifications, appearance, logout, and account deletion.
+- `frontend/src/screens/gamification/AchievementsScreen.tsx` owns the achievements list, progress display, and share flow; `frontend/src/types/gamification.ts` owns the shared achievement API types.
 - `frontend/src/ui/Pill.tsx` provides the shared status pill; `frontend/src/lib/pushNotifications.ts` owns browser push subscription lifecycle.
 - Existing feature modules remain grouped under `crypto/`, `offline/`, `generation/`, `admin/`, `organisation/`, and `share/`.
 
