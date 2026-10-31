@@ -61,6 +61,28 @@ The offline browser journey verified that saved Study Hub documents survive offl
 - Design the backend `app.py` split around shared extensions, ORM model ownership, and route blueprints; do not move models/routes mechanically.
 - Keep provider checks separate: this CI run does not prove live Paystack, SES, OpenAI, R2 or GPU behavior.
 
+## 2026-10-31 — Gamification screen extraction (PR #57)
+
+- Moved the existing Achievements screen into `frontend/src/screens/gamification/AchievementsScreen.tsx`.
+- Moved `Achievement` and `AchievementsResponse` contracts into `frontend/src/types/gamification.ts`, shared by the screen and Profile cache.
+- Kept the original 112-line component body identical; only exported it and narrowed its navigation callback type to the two destinations it actually uses.
+- Added module ownership/contract tests and a browser flow that navigates Profile → Achievements, checks unlocked and in-progress entries, opens the share panel, and closes it.
+- Updated the README, frontend engineering guide, architecture plan and next-step tracker.
+
+[Release Browser and Cross-System Regression run 41225741765](https://github.com/apexstudying-cmd/prepza/actions/runs/41225741765) passed on code commit `2b7ea5b28dc6be1f68426f1b545e3b3d7141c336`:
+
+- Frontend module/source-transform tests: **14 passed**.
+- Offline Library regression tests: **5 passed**.
+- TypeScript check, service-worker validation, frontend architecture audits and production Vite build: PASS.
+- Production Docker image, disposable PostgreSQL/Redis, Alembic migrations and controlled SQL migration ledger: PASS.
+- Full disposable PostgreSQL QA: **98 passed, 0 failed, 3,536 warnings**.
+- Mobile/tablet responsive browser checks: PASS, including the new Achievements screen journey at 360×800, 390×844 and 768×1024.
+- B2B browser-to-ledger metering regression: PASS.
+- Online/offline Study Hub and generated-artifact browser journeys: PASS.
+- Responsive screenshot artifact uploaded.
+
+No database, API, authentication, billing, entitlement or product-rule changes were made. The workflow used disposable CI services and synthetic browser fixtures; no live external provider calls were made.
+
 ## 2026-10-31 — Local Supabase data migration and deployment architecture
 
 The full, step-by-step record lives in [Local Supabase Data Migration Walkthrough](../engineering/LOCAL_SUPABASE_DATA_MIGRATION_WALKTHROUGH.md). This section is a short learning index; the walkthrough is the source of truth for commands, detailed outputs, and the import checklist.
