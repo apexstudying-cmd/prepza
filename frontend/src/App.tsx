@@ -804,9 +804,10 @@ function TopBar({ title, onBack, setScreen, rightEl }: { title?: string; onBack?
           <div style={{ color: '#fff' }}>{Ic.back()}</div>
         </button>
       )}
-      {title && <span style={{ flex: 1, fontWeight: 800, fontSize: c(90px + env(safe-area-inset-bottom, 0px))'}}/>
+      {title && <span style={{ flex: 1, fontWeight: 800, fontSize: 17, color: '#fff' }}>{title}</span>}
+      {rightEl}
     </div>
-  </div>
+  )
 }
 
 
