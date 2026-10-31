@@ -1,8 +1,8 @@
 # Prepza — Actual QA Test Record
 
-## Latest CI evidence — 2026-10-26
+## Latest CI evidence — 2026-10-31
 
-GitHub Actions [Release Browser and Cross-System Regression run 41](https://github.com/apexstudying-cmd/prepza/actions/runs/40324221821) passed on code commit `6c88a908c5088d23f869d6a564b9ff1c90b8caed`. Its successful job built the production app image, started disposable PostgreSQL and Redis, applied Alembic migrations, ran the full disposable PostgreSQL QA suite, completed mobile/tablet responsive checks and online/offline/generated-artifact browser journeys, and uploaded responsive screenshots. This is a CI run record; it does not replace the exact suite inventory below or prove external live-provider behavior. The release status remains BLOCKED pending remaining gates.
+GitHub Actions [Release Browser and Cross-System Regression run 41219805945](https://github.com/apexstudying-cmd/prepza/actions/runs/41219805945) passed on tested code commit `d4f4e882600a3e03c80ca809475e74aa5d6a9f76`. The workflow built the production Docker image; started disposable PostgreSQL and Redis; applied Alembic migrations and the controlled SQL migration ledger; passed mobile/tablet responsive browser checks, B2B browser-to-ledger metering, the full disposable PostgreSQL QA suite (**98 passed, 0 failed, 3,536 warnings**), and online/offline Study Hub plus generated-artifact browser journeys; and uploaded responsive screenshots. The browser journey verified offline Study Hub reload/resume, existing Summary/Flashcards/Practice Questions/Mind Maps across multiple saved documents, podcast audio playback from cached assets, and no generation POSTs during offline replay. This is CI evidence only: it does not prove live Paystack, SES, OpenAI, R2 or GPU provider behavior, and does not itself clear the overall release gates.
 
 
 This file is the authoritative human-readable record of the **full local QA suite** run by `tools/run_local_qa.py`.
@@ -16,22 +16,19 @@ It answers four questions exactly:
 
 ## 1. Exact suite size
 
-The full QA runner currently executes **10 test files**.
+The current `tools/run_local_qa.py` runner executes **11 test files**.
 
-Those files contain:
+The current runner contains:
 
-- **72 test functions** named `test_...`
-- **75 collected pytest test cases**
-- The difference is caused by one parametrized test:
-  - `test_generation_request_ceilings_are_enforced` runs for **4 material types**: summary, podcast, flashcards, and mind map.
-  - Therefore that one function contributes 4 collected cases instead of 1.
-  - 71 functions + 3 extra parameter cases = **74 collected cases**.
+- **95 test functions** named `test_...` across the 11 files.
+- **98 collected pytest cases**.
+- The difference is caused by the parametrized `test_generation_request_ceilings_are_enforced`, which runs for four material types (summary, podcast, flashcards, and mind map), adding three cases beyond the function count.
 
 The latest successful full run proved:
 
-**74 passed, 0 failed, 3375 warnings.**
+**98 passed, 0 failed, 3,536 warnings.**
 
-Warnings are not failed tests. The current warnings are primarily technical-debt warnings such as deprecated `datetime.utcnow()` usage and a legacy SQLAlchemy `Query.get()` usage.
+Warnings are not failed tests. The current warnings are primarily technical-debt warnings such as deprecated `datetime.utcnow()` usage and legacy SQLAlchemy `Query.get()` usage.
 
 ## 2. Exact QA users and roles
 
@@ -78,13 +75,13 @@ The production-style focused scripts (`scripts/test_realtime_runtime.py` and `sc
 2. Refuses to bootstrap QA from an existing database whose name is already `prepza_qa` or ends in `_qa`.
 3. Creates/uses the disposable PostgreSQL database `prepza_qa`.
 4. Runs `alembic upgrade head`.
-5. Runs the 10 test files below with pytest.
+5. Runs the 11 test files below with pytest.
 6. Sets `REDIS_URL=memory://` for the disposable suite so rate-limit counters and Socket.IO test behavior are isolated from the running production-style Redis service.
 7. Retains the QA database after the run so failures can be inspected.
 
 This is deliberate: the suite tests the real Flask application and PostgreSQL schema, while avoiding accidental changes to the normal application database.
 
-## 4. Exact test files and test functions
+## 4. Detailed test descriptions (historical 74-case snapshot; use the current inventory above for the latest suite)
 
 ### A. `tests/test_local_qa_real_world.py` — 15 test functions
 
@@ -329,7 +326,7 @@ This is the broadest end-to-end route and business-behavior layer.
       - podcast: maximum 50 minutes
       - flashcards: maximum 50 cards
       - mind map: maximum 50 nodes
-    - This is the reason the 71 functions become 74 collected pytest cases.
+    - This explains the historical 74-case count in this older numbered inventory; the current suite has 95 functions and 98 collected cases.
 
 64. **`test_generation_store_exposes_inflight_family_lookup`**
     - Verifies the generation store exposes the in-flight family lookup required for request coalescing.
@@ -372,6 +369,16 @@ This is the broadest end-to-end route and business-behavior layer.
 72. **`test_redis_stream_queue_is_not_treated_as_postgres_source_of_truth`**
     - Verifies the code explicitly treats PostgreSQL as durable source of truth.
     - Verifies Redis Stream enqueue/ack/recovery primitives exist.
+
+### K. `scripts/test_personal_streak_runtime.py` — 7 test functions
+
+- `test_threshold_and_repeated_same_day_syncs` — qualifying study-time threshold and repeated same-day sync behavior.
+- `test_consecutive_days_gap_and_longest_streak` — consecutive-day progression, gaps and longest-streak retention.
+- `test_milestones_are_exactly_once_and_duplicate_reach_preserves_streak` — exactly-once milestone awards and duplicate reach behavior.
+- `test_nairobi_calendar_boundary_is_authoritative` — Nairobi local-date boundary semantics.
+- `test_unrelated_actions_do_not_create_a_streak_day` — unrelated activity cannot qualify as a study day.
+- `test_streak_route_uses_qualifying_study_time_for_calendar` — streak calendar uses qualifying study-time records.
+- `test_concurrent_threshold_syncs_credit_one_day_and_one_streak` — concurrent threshold updates do not double-credit a day or streak.
 
 ## 5. Coverage map
 
@@ -444,7 +451,7 @@ This is what makes a 74-case integration run repeatable rather than dependent on
 
 A strong way to explain the suite is:
 
-> "I built a disposable PostgreSQL-backed integration test environment around the real Prepza Flask application. The full runner executes 10 test modules containing 71 test functions and 74 collected pytest cases. The test world creates seven controlled users—six students and one admin—with two organisation tenants. The suite exercises route registration and dispatch, authentication and authorization, CSRF and session invalidation, organisation/opportunity workflows, targeting, rate limits, B2B metering, AI economics and artifact reuse, and realtime/E2EE behavior. It deliberately uses real PostgreSQL and Alembic migrations, while isolating Redis-dependent test behavior so the test environment remains deterministic. The 74/74 result gives us evidence across the application boundaries rather than only proving individual functions exist."
+> "I built a disposable PostgreSQL-backed integration test environment around the real Prepza Flask application. The current runner executes 11 test modules containing 95 test functions and 98 collected pytest cases. The test world creates seven controlled users—six students and one admin—with two organisation tenants. The suite exercises route registration and dispatch, authentication and authorization, CSRF and session invalidation, organisation/opportunity workflows, targeting, rate limits, B2B metering, AI economics and artifact reuse, and realtime/E2EE behavior. It deliberately uses real PostgreSQL and Alembic migrations, while isolating Redis-dependent test behavior so the test environment remains deterministic. The 98/98 result gives us evidence across the application boundaries rather than only proving individual functions exist."
 
 ## 9. Current relationship to production-style runtime tests
 
@@ -458,7 +465,7 @@ Both are necessary. Passing one does not make the other unnecessary.
 
 ---
 
-**Last verified full-suite result:** 74 passed, 0 failed, 3375 warnings.
+**Latest verified full-suite result:** 98 passed, 0 failed, 3,536 warnings (run 41219805945, tested code commit `d4f4e882600a3e03c80ca809475e74aa5d6a9f76`).
 
 
 ## 7. 2026-10-05 — Authoritative test inventory and release-gate status
@@ -469,7 +476,7 @@ This section records the current inventory after the self-contained focused real
 
 | Gate / command | Coverage | Latest known evidence | Status |
 |---|---|---|---|
-| `python tools/run_local_qa.py` | Disposable PostgreSQL + Alembic + the 10-file real-world suite below | **74 passed, 0 failed, 3375 warnings** on the documented full run | GREEN |
+| `python tools/run_local_qa.py` | Disposable PostgreSQL + Alembic + the current 11-file suite | **98 passed, 0 failed, 3,536 warnings** in run 41219805945 | GREEN |
 | `pytest scripts/test_calling_runtime.py -q` | Authenticated Socket.IO 1:1 call signaling | **4 passed in 3.31s** after the fixture/auth reconciliation | GREEN |
 | `pytest scripts/test_realtime_runtime.py -q` | Focused authenticated Socket.IO chat presence, membership, delivery, multi-tab presence and message dispatch | Executed in the focused-runtime verification sequence; the exact latest numeric result is not preserved in the current repository notes | **Do not infer a result** |
 | Redis-backed Compose inspection | Production-style Redis configuration + dedicated chat worker | Compose/runtime path is documented separately; local full QA intentionally uses `REDIS_URL=memory://` | PARTIAL / separate gate |
@@ -478,7 +485,7 @@ This section records the current inventory after the self-contained focused real
 
 ### B. Full local QA files — reuse, do not duplicate
 
-The authoritative full suite currently reuses these 10 files:
+The current full suite reuses these 11 files:
 
 1. `tests/test_local_qa_real_world.py`
 2. `tests/test_route_security_matrix.py`
@@ -490,8 +497,9 @@ The authoritative full suite currently reuses these 10 files:
 8. `tests/test_ai_economics.py`
 9. `tests/test_ai_reusable_generation.py`
 10. `tests/test_realtime_e2ee_runtime.py`
+11. `scripts/test_personal_streak_runtime.py`
 
-Together they are currently **71 test functions / 74 collected cases**.
+Together they currently contain **95 test functions / 98 collected cases**. The seventh personal-streak runtime test module covers qualifying study-time thresholds, repeated same-day syncs, consecutive-day gaps, longest streak, exactly-once milestones, the Nairobi calendar boundary, exclusion of unrelated actions, route calendar behavior, and concurrent threshold updates.
 
 Focused runtime scripts remain outside that 74-case suite because they exercise a different purpose:
 
