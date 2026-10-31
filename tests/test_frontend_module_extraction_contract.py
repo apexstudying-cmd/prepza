@@ -41,3 +41,52 @@ def test_extracted_onboarding_preserves_academic_profile_update_contract():
         "setScreen('home')",
     ):
         assert required in source
+
+
+def test_settings_screen_is_owned_by_its_feature_module():
+    assert "import SettingsScreen from './screens/settings/SettingsScreen'" in APP
+    assert "import Pill from './ui/Pill'" in APP
+    assert "case 'settings':" in APP
+    assert "function SettingsScreen(" not in APP
+    assert "function Pill(" not in APP
+
+
+def test_settings_screen_preserves_existing_account_and_security_contracts():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "settings" / "SettingsScreen.tsx"
+    ).read_text(encoding="utf-8")
+    for endpoint in (
+        "/me",
+        "/api/opportunity-discovery",
+        "/notification-preferences",
+        "/change-email",
+        "/change-password",
+        "/delete-account",
+        "/logout",
+        "/profile",
+    ):
+        assert endpoint in source
+    for contract in (
+        "'X-CSRF-Token': csrfToken",
+        "setScreen('edit-profile')",
+        "setScreen('subscription')",
+        "setScreen('payment-history')",
+        "resetToAuth()",
+        "TERMS_TEXT",
+        "PRIVACY_TEXT",
+    ):
+        assert contract in source
+
+
+def test_push_notification_helpers_keep_the_existing_subscription_contract():
+    source = (
+        ROOT / "frontend" / "src" / "lib" / "pushNotifications.ts"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "/push/vapid-public-key",
+        "/push/subscribe",
+        "'X-CSRF-Token': csrfToken",
+        "userVisibleOnly: true",
+        "subscription.unsubscribe()",
+    ):
+        assert contract in source
