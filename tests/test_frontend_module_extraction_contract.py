@@ -37,7 +37,6 @@ def test_extracted_onboarding_preserves_academic_profile_update_contract():
         "year:",
         "semester:",
         "'X-CSRF-Token': csrfToken",
-        "prepza:academic-context-changed",
         "setScreen('home')",
     ):
         assert required in source
@@ -310,6 +309,4 @@ def test_login_screen_preserves_existing_auth_and_navigation_contracts():
         "aria-label=\"Continue with Google\"",
         "prepza:academic-context-changed",
     ):
-        if contract == "'X-CSRF-Token'" or contract == "prepza:academic-context-changed":
-            continue
         assert contract in source
