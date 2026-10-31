@@ -17,6 +17,7 @@ The architecture plan and current module map live in [Repository Architecture an
 - Moved the shared icon map to `frontend/src/ui/icons.tsx`.
 - Moved the shared university/program option types to `frontend/src/types/academic.ts`.
 - Moved the existing academic profile-completion screen to `frontend/src/screens/onboarding/CompleteProfileScreen.tsx`.
+- Moved the existing ambassador application/dashboard/referrals/payout-request screen to `frontend/src/screens/ambassador/AmbassadorScreen.tsx`, keeping its API paths and profile-navigation callback intact.
 - Kept `App.tsx` as the integration point and navigation composition root. It fell from 16,032 to 15,747 lines; this is only the first extraction, not a complete frontend rewrite.
 - Added a repository architecture plan, frontend module ownership guidance, and a README module map.
 
