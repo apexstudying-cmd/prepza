@@ -8,6 +8,7 @@ on:
     paths:
       - 'frontend/**'
       - 'tools/apply_generation_ui_build.py'
+      - 'tests/test_frontend_module_extraction_contract.py'
       - '.github/workflows/frontend-build.yml'
 
 permissions:
