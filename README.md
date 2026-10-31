@@ -99,6 +99,7 @@ The frontend is being split into feature-owned modules incrementally:
 - `frontend/src/ui/icons.tsx` owns shared icon primitives.
 - `frontend/src/types/academic.ts` owns university/program option contracts.
 - `frontend/src/screens/onboarding/CompleteProfileScreen.tsx` owns the academic profile completion flow.
+- `frontend/src/screens/ambassador/AmbassadorScreen.tsx` owns the ambassador application, dashboard, referrals, and payout-request UI.
 - Existing feature modules remain grouped under `crypto/`, `offline/`, `generation/`, `admin/`, `organisation/`, and `share/`.
 
 New screens should normally live under `frontend/src/screens/<domain>/` and be connected through the application shell. The extraction is behavior-preserving: screen navigation, API payloads, CSRF requirements, and business rules must remain unchanged. See [Repository Architecture and Safe Refactor Plan](docs/architecture/REPOSITORY_REFACTOR_PLAN.md) for the staged plan and current risks.
