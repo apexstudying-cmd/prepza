@@ -61,6 +61,32 @@ The offline browser journey verified that saved Study Hub documents survive offl
 - Design the backend `app.py` split around shared extensions, ORM model ownership, and route blueprints; do not move models/routes mechanically.
 - Keep provider checks separate: this CI run does not prove live Paystack, SES, OpenAI, R2 or GPU behavior.
 
+## 2026-10-31 — Podcast Library screen extraction
+
+The follow-up work is tracked in [PR #59](https://github.com/apexstudying-cmd/prepza/pull/59), branch `refactor/podcast-library-screen`.
+
+### Why this was the next slice
+
+The Podcast Library was a relatively contained screen: it loads the user's podcast list, renders the same loading/empty/error states, displays episode metadata, and navigates to the existing player. Its list cache and metadata helpers were previously mixed into `App.tsx`. The screen does not own generation or audio playback; those remain in their existing modules.
+
+### What changed
+
+- Moved `PodcastLibraryScreen` to `frontend/src/screens/podcast/PodcastLibraryScreen.tsx`.
+- Moved the shared `PodcastItem` type, podcast colour helper and duration formatter to `frontend/src/types/podcast.ts`; Home and the Library now share that contract.
+- Kept the session-level podcast-list cache beside the screen that owns it.
+- Kept the exact `GET /podcasts` request, player navigation, Home back navigation, duration formatting, loading delay/skeleton, and empty/error presentation.
+- Passed the existing app-shell skeleton/feedback components through typed props. The feature module does not import `App.tsx`, duplicate generic components, or introduce a circular dependency.
+- Removed 58 lines from `App.tsx` (14,945 → 14,887); the file remains large and needs further staged extraction.
+
+### Test-first and build evidence
+
+1. Added three module-boundary/behavior-contract tests before the implementation and committed a temporary module placeholder.
+2. The first focused CI run failed as expected: all three new contracts reported the missing import/module/helper.
+3. Implemented the module and integration wiring.
+4. The corrected frontend build workflow passed **15 source-transform/module-contract tests**, **5 offline Library regression tests**, TypeScript, service-worker validation, the production Vite build, and the screen-loading/offline/calling architecture audits.
+
+The full release browser workflow is being run against the exact PR head separately. Do not treat the focused frontend build as proof of the responsive, offline, database or B2B browser gates.
+
 ## 2026-10-31 — Local Supabase data migration and deployment architecture
 
 The full, step-by-step record lives in [Local Supabase Data Migration Walkthrough](../engineering/LOCAL_SUPABASE_DATA_MIGRATION_WALKTHROUGH.md). This section is a short learning index; the walkthrough is the source of truth for commands, detailed outputs, and the import checklist.
