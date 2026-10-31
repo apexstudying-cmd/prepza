@@ -3,7 +3,7 @@
 **Purpose:** make the repository easier to navigate and maintain without changing user-visible behavior, API contracts, authorization, persistence, billing, or product rules.
 
 **Baseline source checkpoint:** `f747b0d95a6b81cb2868843093546a97e3d09fb5` (2026-10-31).
-**Working branch:** `main` (architecture foundation PR #56 and Podcast Library extraction PR #59 are merged).
+**Working branch:** `main` plus the single integration PR [#61](https://github.com/apexstudying-cmd/prepza/pull/61) for the remaining My Study extraction and build-transformer reconciliation. PR #56 and #59 are merged; the Achievements module is also present on `main`.
 **Status:** incremental refactor in progress. This document distinguishes current implementation from target structure.
 
 ## 1. Verified baseline
@@ -13,7 +13,7 @@ The initial source scan found:
 | Area | Baseline size | Observation |
 |---|---:|---|
 | `app.py` | 10,332 lines; 318 top-level function/class declarations | Flask setup, SQLAlchemy models, shared helpers, and many HTTP routes coexist in one module. |
-| `frontend/src/App.tsx` | 16,032 lines at the initial scan; 14,945 lines after architecture foundation PR #56; 14,887 lines after the Podcast Library extraction in PR #59. | Shared API/theme/icon/type definitions and several screens now live in focused modules. The app shell still contains many large screens and remains the next major frontend refactor target. |
+| `frontend/src/App.tsx` | 16,032 lines at the initial scan; 14,945 after PR #56; 14,887 after PR #59; 14,758 after the Achievements extraction on `main`; 14,573 after the My Study extraction in PR #61 (tested head `48cae152`). | Shared API/theme/icon/type definitions and several screens now live in focused modules. The app shell remains large and still needs staged extraction. |
 | Frontend build | Long `prebuild` chain | Python scripts rewrite source files before TypeScript/Vite compilation. |
 | Local QA runner | 11 test files; 95 test functions; 98 collected cases | Latest disposable PostgreSQL CI run passed 98/98; the detailed numbered test descriptions in `actualtest.md` are explicitly retained as a historical 74-case snapshot. |
 
@@ -104,7 +104,7 @@ The original `App.tsx` still contains a large number of screens and shared defin
 
 ## 4. First frontend extraction
 
-The architecture foundation (merged PR #56) and Podcast Library extraction (merged PR #59) have moved the following existing implementations without intentionally changing their behavior:
+The architecture foundation (merged PR #56), Podcast Library extraction (merged PR #59), Achievements extraction on `main`, and My Study extraction in PR #61 have moved the following existing implementations without intentionally changing their behavior:
 
 | New module | Responsibility |
 |---|---|
@@ -117,10 +117,13 @@ The architecture foundation (merged PR #56) and Podcast Library extraction (merg
 | `frontend/src/screens/settings/SettingsScreen.tsx` | Existing account, security, privacy, notification, appearance and deletion settings. |
 | `frontend/src/screens/podcast/PodcastLibraryScreen.tsx` | Existing Podcast Library list; its shared UI primitives are passed as typed props from the app shell. |
 | `frontend/src/types/podcast.ts` | Shared podcast item type, episode colour and duration formatting used by Home and Podcast Library. |
+| `frontend/src/screens/gamification/AchievementsScreen.tsx` | Existing achievements list, progress/unlock presentation and share flow; shared response types live in `frontend/src/types/achievements.ts`. |
+| `frontend/src/types/achievements.ts` | Typed achievement and response contracts shared with the profile and achievements screens. |
+| `frontend/src/screens/study/StudyMaterialsScreen.tsx` | My Study document/material lists, online/offline merging, saved Library entries and existing-material replay. Shell feedback components and last-study persistence are passed through explicit props. |
 
 `App.tsx` imports these modules and retains the application-level navigation integration. The legacy `frontend/src/lib/api.ts` remains separate: it has a different chat-oriented API and CSRF state contract. These two clients must not be merged until their behavioral differences are understood and tested.
 
-The architecture foundation reduced `App.tsx` to 14,945 lines. The Podcast Library extraction reduced it to 14,887 lines. PR #59 merged to `main` as `6a780eaf58976e2ff851615ec266c8aed75e2071`. These are incremental boundary improvements, not completion of the frontend refactor.
+The architecture foundation reduced `App.tsx` to 14,945 lines; Podcast Library reduced it to 14,887; the Achievements extraction on `main` brought it to 14,758; and My Study extraction reduced the source file to 14,573 lines (185 lines moved) on tested PR #61 head `48cae15227e7af3fe30c6b3fc62e2a7995a59cc7`. The exact tested branch is [PR #61](https://github.com/apexstudying-cmd/prepza/pull/61). These are incremental boundary improvements, not completion of the frontend or backend refactor.
 
 ## 5. Known architectural risks to address
 
