@@ -1953,3 +1953,7 @@ The pre-change local backup was restored successfully into disposable database `
 A stale running app container contained migration files only through `20261007_doc_material`. A one-off container from the rebuilt app image contained the four newer migrations and reported `20261030_shared_study_streak` as its Alembic head. The one-off container ran `alembic upgrade head` with `DATABASE_URL` redirected to the disposable clone and returned successfully.
 
 **Verification remains pending:** query the clone's `alembic_version`, Shop/streak tables, columns, indexes, constraints, foreign keys and preserved sentinel/data counts. Do not mark migration PASS based only on the process exit. No migration was run against working local `prepza` or live Supabase; no Supabase data has yet been imported. See `docs/engineering/LOCAL_SUPABASE_DATA_MIGRATION_WALKTHROUGH.md` for exact commands and learning notes.
+
+## 2026-10-31 — disposable Alembic migration database-side verification
+
+After the one-off container ran `alembic upgrade head` against `prepza_migration_test_20261031`, direct PostgreSQL queries confirmed Alembic revision `20261030_shared_study_streak` and existence of `shop_listing`, `shop_saved_listing`, `shop_report`, `study_friend_streak`, and `study_friend_streak_activity`. This is a **partial rehearsal PASS**. Column definitions, indexes, constraints, foreign keys and preservation of pre-existing records remain to be checked. The working local DB and Supabase have not been migrated.
