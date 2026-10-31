@@ -91,3 +91,31 @@ def test_push_notification_helpers_keep_the_existing_subscription_contract():
         "subscription.unsubscribe()",
     ):
         assert contract in source
+
+
+def test_achievements_screen_is_owned_by_its_feature_module():
+    assert "import AchievementsScreen from './screens/gamification/AchievementsScreen'" in APP
+    assert "case 'achievements':" in APP
+    assert "function AchievementsScreen(" not in APP
+    assert "type Achievement =" not in APP
+
+
+def test_achievements_screen_preserves_api_navigation_and_loading_contracts():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "gamification" /
+        "AchievementsScreen.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "api<AchievementsResponse>('/achievements')",
+        "new ApiError",
+        "setScreen('profile')",
+        "setScreen('share-sheet')",
+        "setSharing(null)",
+        "a.done",
+        "formatAchievementDate(a.unlocked_at)",
+        "cancelled = true",
+    ):
+        assert contract in source
+    assert "export type Achievement" in (
+        ROOT / "frontend" / "src" / "types" / "gamification.ts"
+    ).read_text(encoding="utf-8")
