@@ -25,7 +25,7 @@ if MARKER in text:
     print('Offline data foundation already applied and verified.')
     raise SystemExit(0)
 
-OLD = '''export export async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+OLD = '''export async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
   const { headers: extraHeaders, ...restOptions } = options
   const res = await fetch(path, {
     credentials: 'include',
@@ -136,7 +136,7 @@ async function clearPrepzaOfflineData(): Promise<void> {
   }
 }
 
-async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+export async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
   const { headers: extraHeaders, ...restOptions } = options
   const method = String(restOptions.method || 'GET').toUpperCase()
   const cacheKey = path
