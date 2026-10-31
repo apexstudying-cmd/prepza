@@ -3,9 +3,7 @@ import { api, ApiError } from '../../lib/appApi'
 import { N, useTheme } from '../../theme/theme'
 import { Ic } from '../../ui/icons'
 import Pill from '../../ui/Pill'
-import type { Achievement } from '../../types/gamification'
-
-type AchievementsResponse = { unlocked_count: number; total_count: number; achievements: Achievement[] }
+import type { Achievement, AchievementsResponse } from '../../types/gamification'
 
 function formatAchievementDate(iso: string | null): string {
   if (!iso) return ''
