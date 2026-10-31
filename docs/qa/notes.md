@@ -85,7 +85,7 @@ The Podcast Library was a relatively contained screen: it loads the user's podca
 3. Implemented the module and integration wiring.
 4. The corrected frontend build workflow passed **15 source-transform/module-contract tests**, **5 offline Library regression tests**, TypeScript, service-worker validation, the production Vite build, and the screen-loading/offline/calling architecture audits.
 
-The full release browser workflow is being run against the exact PR head separately. Do not treat the focused frontend build as proof of the responsive, offline, database or B2B browser gates.
+The full release browser workflow passed against the exact application-code commit `c24251a96ac20f9cb1cf4b6f4b7e36afdb3b051d` in [run 41226775690](https://github.com/apexstudying-cmd/prepza/actions/runs/41226775690): production image build, disposable PostgreSQL/Redis, Alembic and SQL migration-ledger checks, responsive browser checks, B2B browser-to-ledger regression, **98 passed / 0 failed** in the full disposable PostgreSQL suite, and online/offline Study Hub plus generated-artifact journeys all passed. The browser run also verified cached podcast audio and that offline artifact replay made no generation POSTs. The focused frontend build [run 41226775687](https://github.com/apexstudying-cmd/prepza/actions/runs/41226775687) passed 15 source-transform/module-contract tests, 5 offline Library regression tests, TypeScript, service-worker validation, Vite build, and architecture audits. Documentation-only commits after the tested application-code SHA do not change runtime source. Live external provider behavior remains outside these tests.
 
 ## 2026-10-31 — Local Supabase data migration and deployment architecture
 
