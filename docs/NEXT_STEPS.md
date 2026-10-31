@@ -1,7 +1,7 @@
 # Prepza — Persistent Engineering Execution Tracker
 
 Last updated: 2026-10-31
-Branch: `refactor/architecture-foundation` (architecture refactor PR; not yet merged)
+Branch: `main` (architecture foundation PR #56 merged); follow-up branch `refactor/podcast-library-screen` (PR #59 in progress)
 
 Status:
 - [x] completed/verified
@@ -15,15 +15,15 @@ Rule: require evidence before marking production work complete.
 See [Repository Architecture and Safe Refactor Plan](architecture/REPOSITORY_REFACTOR_PLAN.md) for the verified module map, target structure, safety rules, and staged sequence.
 
 - [x] Create an isolated refactor branch and pull request; keep changes away from `main` until the relevant CI/browser evidence is green.
-- [x] Extract the shared frontend API client, theme store, icon primitives, academic option types, academic profile-completion, ambassador and settings screens, shared Pill UI, and push notification client into focused modules.
+- [x] Extract the shared frontend API client, theme store, icon primitives, academic option types, academic profile-completion, ambassador and settings screens, shared Pill UI, and push notification client into focused modules.\n- [~] Extract Podcast Library screen and shared podcast metadata helpers on [PR #59](https://github.com/apexstudying-cmd/prepza/pull/59); preserve API/cache/navigation and shell feedback/loading components through explicit props.
 - [x] Update build-time source transformers that assumed the API helper lived in `App.tsx`; keep the existing `lib/api.ts` chat client separate because it has a different CSRF/state contract.
 - [x] Add regression coverage for the Explore route wrapper and for the new module ownership contracts.
 - [x] Update frontend ownership guidance, README module map, architecture plan, QA test record, and learning notes.
 - [x] Verify production TypeScript/Vite build and all frontend source-transform tests.
 - [x] Verify disposable PostgreSQL/Alembic/SQL-ledger path, mobile/tablet browser checks, B2B browser-to-ledger regression, and the full 98-case disposable PostgreSQL QA suite.
 - [x] Verify online/offline Study Hub lifecycle and generated-artifact replay, including cached podcast audio and no offline generation POSTs.
-- [ ] Review and merge the architecture refactor PR after final head/CI confirmation.
-- [ ] Continue extracting large frontend feature screens in small slices; first audit every prebuild transformer that edits the relevant App.tsx section.
+- [x] Merge architecture foundation PR #56 after CI/browser verification (merge commit `8cc73fbf5c511fe1c5c0abdc69bcae7dc7afe779`).
+- [~] Continue extracting large frontend feature screens in small slices; Podcast Library is extracted on PR #59 and is awaiting final full browser/cross-system CI before merge.
 - [ ] Split backend `app.py` only after designing and testing shared SQLAlchemy extensions, model import compatibility, route registration and app-factory boundaries.
 - [ ] Replace source-mutating prebuild scripts with committed source changes incrementally; do not remove the build chain until every transform has a tested source equivalent.
 
