@@ -83,7 +83,9 @@ Student browser
 - frontend/src/offline/ — offline study, generated material, chat, activity, avatar, and account-isolation code.
 - frontend/src/crypto/ — E2EE chat, keys, groups, calls, and secure study/chat components.
 - migrations/ — hand-managed SQL migration collection.
-- scripts/ — focused runtime/browser/QA execution and release checks.\n- tools/ — QA runners, audits, diagnostics, seed helpers, migration/backup helpers, build transformations, and architecture checks.\n- archive/ — historical patches and one-off migration artifacts kept for reference, not used as the canonical runtime path.
+- scripts/ — focused runtime/browser/QA execution and release checks.
+- tools/ — QA runners, audits, diagnostics, seed helpers, migration/backup helpers, build transformations, and architecture checks.
+- archive/ — historical patches and one-off migration artifacts kept for reference, not used as the canonical runtime path.
 - .github/workflows/ — repository CI and validation workflows.
 - Dockerfile / docker-compose.vps.yml / deploy/vps/ — VPS deployment scaffolding.
 
@@ -240,7 +242,10 @@ At the Day 9 checkpoint, the configured 11-workflow launch-contract family passe
 See:
 
 - docs/DAY10_TECHNICAL_DOCUMENTATION.md
-- docs/DAY8_RUNTIME_READINESS.md\n- docs/operations/INFRASTRUCTURE_DEPENDENCIES.md\n- docs/operations/REALTIME_DEPLOYMENT.md\n- docs/setup/SES_OTP_SETUP.md
+- docs/DAY8_RUNTIME_READINESS.md
+- docs/operations/INFRASTRUCTURE_DEPENDENCIES.md
+- docs/operations/REALTIME_DEPLOYMENT.md
+- docs/setup/SES_OTP_SETUP.md
 - docs/LAUNCH_READINESS.md
 - docs/e2ee-multidevice-architecture.md
 - docs/e2ee-study-chat-rollout.md
