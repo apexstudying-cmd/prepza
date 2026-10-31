@@ -205,7 +205,7 @@ A passing compile is necessary but not sufficient. A passing test suite is evide
 - [x] Fix the destructive Summary section boundary and add a post-transform preservation guard.
 - [x] Wire relevant frontend and full release regression workflows to pull requests.
 - [x] Extract the first shared frontend API/theme/icon/type modules and onboarding screen.
-- [x] Complete full CI and browser verification for the current extraction (tested code commit `d4f4e882600a3e03c80ca809475e74aa5d6a9f76`; run 41219805945).
+- [x] Complete full CI and browser verification for the current extraction (tested code commit `8204f5511761686319d63b938d72ab7542d97ed9`; run 41220919224).
 - [x] Reconcile the QA test record, learning notes and NEXT_STEPS tracker against the 11-file/98-case runner and successful CI output.
 - [ ] Continue frontend screen extraction in small, dependency-mapped slices.
 - [ ] Design and implement backend app-factory/extensions boundaries with compatibility tests.
