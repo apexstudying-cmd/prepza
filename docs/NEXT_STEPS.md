@@ -23,7 +23,8 @@ See [Repository Architecture and Safe Refactor Plan](architecture/REPOSITORY_REF
 - [x] Verify disposable PostgreSQL/Alembic/SQL-ledger path, mobile/tablet browser checks, B2B browser-to-ledger regression, and the full 98-case disposable PostgreSQL QA suite.
 - [x] Verify online/offline Study Hub lifecycle and generated-artifact replay, including cached podcast audio and no offline generation POSTs.
 - [x] Review and merge architecture refactor PR #56 after final head/CI confirmation (merged as `8cc73fbf5c511fe1c5c0abdc69bcae7dc7afe779`).
-- [ ] Complete CI verification and review of draft PR #57 (Achievements screen extraction).
+- [x] Complete CI verification for PR #57 (Achievements screen extraction): 14 frontend contracts, 5 offline Library tests, production build, responsive Achievements browser flow, full 98-case QA, B2B, and offline/generated-artifact browser journeys passed in run 41225741765.
+- [ ] Mark PR #57 ready for review and merge the verified extraction.
 - [ ] Continue extracting large frontend feature screens in small slices; first audit every prebuild transformer that edits the relevant App.tsx section.
 - [ ] Split backend `app.py` only after designing and testing shared SQLAlchemy extensions, model import compatibility, route registration and app-factory boundaries.
 - [ ] Replace source-mutating prebuild scripts with committed source changes incrementally; do not remove the build chain until every transform has a tested source equivalent.
