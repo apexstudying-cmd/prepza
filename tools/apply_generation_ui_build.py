@@ -12,6 +12,7 @@ IMPORT = "import { PodcastGenerationScreen, FlashcardsGenerationScreen, SummaryG
 STUDY_IMPORT = "import { PracticeQuestionsGenerationScreen, MindMapGenerationScreen } from './generation/StudyGenerationScreensClean'\n"
 
 text = APP.read_text(encoding='utf-8')
+original_text = text
 gen_text = GEN.read_text(encoding='utf-8')
 # GenerationScreens.tsx is already the current source-of-truth implementation.
 # Do not rewrite it during every build; repeated text transforms were producing
@@ -74,7 +75,7 @@ function FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: Scre
 }
 
 '''),
-    ('// ─── SUMMARY', '// ─── CHATS', '''// ─── SUMMARY
+    ('// ─── SUMMARY', 'function ExploreScreen(', '''// ─── SUMMARY
 function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
   return <div style={{ colorScheme: 'var(--prepza-generation-color-scheme, light)', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><SummaryGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
 }
@@ -152,6 +153,9 @@ else:
 text = text.replace('Opening document…', '')
 text = text.replace('Opening document...', '')
 text = text.replace('Opening document', '')
+
+if 'function ExploreScreen(' in original_text and 'function ExploreScreen(' not in text:
+    raise SystemExit('generation UI transformation removed the ExploreScreen component definition')
 
 APP.write_text(text, encoding='utf-8')
 print('Generation UI build transformation applied.')
