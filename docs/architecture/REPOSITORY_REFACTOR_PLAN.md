@@ -2,9 +2,10 @@
 
 **Purpose:** make the repository easier to navigate and maintain without changing user-visible behavior, API contracts, authorization, persistence, billing, or product rules.
 
-**Baseline source checkpoint:** `f747b0d95a6b81cb2868843093546a97e3d09fb5` (2026-10-31).
-**Working branch:** `refactor/architecture-foundation`.
-**Status:** incremental refactor in progress. This document distinguishes current implementation from target structure.
+**Initial source checkpoint:** `f747b0d95a6b81cb2868843093546a97e3d09fb5` (2026-10-31).
+**Current main checkpoint after PR #56:** `8cc73fbf5c511fe1c5c0abdc69bcae7dc7afe779`.
+**Current working branch:** `refactor/achievements-screen` (PR #57, draft).
+**Status:** PR #56 is merged; the next behavior-preserving screen extraction is under verification.
 
 ## 1. Verified baseline
 
@@ -13,7 +14,7 @@ The initial source scan found:
 | Area | Baseline size | Observation |
 |---|---:|---|
 | `app.py` | 10,332 lines; 318 top-level function/class declarations | Flask setup, SQLAlchemy models, shared helpers, and many HTTP routes coexist in one module. |
-| `frontend/src/App.tsx` | 16,032 lines; 154 declarations at the initial scan. After the first extraction: 15,747 lines; 149 declarations. | The first extraction moved shared API/theme/icon/type definitions plus the academic profile-completion and ambassador screens into focused modules. Many screens still remain in the composition file. |
+| `frontend/src/App.tsx` | 16,032 lines at initial scan; 14,945 lines after merged PR #56; 14,817 lines on the current PR #57 branch. | Shared API/theme/icon/type/notification modules and several screens are now extracted. App remains the navigation/composition root with many feature screens still embedded. |
 | Frontend build | Long `prebuild` chain | Python scripts rewrite source files before TypeScript/Vite compilation. |
 | Local QA runner | 11 test files; 95 test functions; 98 collected cases | Latest disposable PostgreSQL CI run passed 98/98; the detailed numbered test descriptions in `actualtest.md` are explicitly retained as a historical 74-case snapshot. |
 
@@ -66,7 +67,8 @@ The current `App.tsx` scan shows these large declarations still embedded in the 
 | `GroupDetailScreen` | 418 | Medium; extract group detail UI and explicit callbacks |
 | `ChatDetailScreen` | 406 | High; extract only after mapping E2EE, realtime and message-state dependencies |
 | `SettingsScreen` | Extracted | Account, privacy, notification, appearance and security settings now live in `screens/settings/SettingsScreen.tsx` |
-| `AmbassadorScreen` | 367 | Medium; extract as a self-contained business feature |
+| `AchievementsScreen` | Extracted on PR #57 | Gamification achievements and share flow now live in `screens/gamification/AchievementsScreen.tsx`; verification is pending CI |
+| `AmbassadorScreen` | Extracted | Ambassador application, dashboard, referrals and payout request now live in `screens/ambassador/AmbassadorScreen.tsx` |
 | `ChatsScreen` | 358 | High; extract after mapping realtime and encryption integration |
 | `ChatOptionsScreen` | 331 | Medium |
 | `PodcastPlayerScreen` | 327 | Medium |
@@ -101,21 +103,27 @@ The frontend already has feature-oriented folders such as:
 
 The original `App.tsx` still contains a large number of screens and shared definitions. Its first line is `// @ts-nocheck`; that should be retired gradually as modules are extracted and properly typed, not removed wholesale.
 
-## 4. First frontend extraction
+## 4. Merged frontend architecture foundation (PR #56)
 
-The architecture branch has extracted the following existing implementations without intentionally changing their behavior:
+The following modules are merged into `main` by PR #56:
 
-| New module | Responsibility |
+| Module | Responsibility |
 |---|---|
-| `frontend/src/lib/appApi.ts` | The existing App-level cookie-authenticated JSON fetch helper and `ApiError`. |
-| `frontend/src/theme/theme.ts` | Existing brand palette and shared light/dark theme store. |
-| `frontend/src/ui/icons.tsx` | Existing shared `Ic` icon map. |
-| `frontend/src/types/academic.ts` | Shared university and program option types. |
-| `frontend/src/screens/onboarding/CompleteProfileScreen.tsx` | Existing academic-profile completion screen. |
+| `frontend/src/lib/appApi.ts` | App-level cookie-authenticated JSON API helper and `ApiError`. |
+| `frontend/src/theme/theme.ts` | Shared brand palette and light/dark theme store. |
+| `frontend/src/ui/icons.tsx` | Shared icon primitives. |
+| `frontend/src/ui/Pill.tsx` | Shared status pill. |
+| `frontend/src/types/academic.ts` | University and program option types. |
+| `frontend/src/lib/pushNotifications.ts` | Browser push subscription lifecycle. |
+| `frontend/src/screens/onboarding/CompleteProfileScreen.tsx` | Academic profile-completion screen. |
+| `frontend/src/screens/ambassador/AmbassadorScreen.tsx` | Ambassador application, dashboard, referrals and payout-request screen. |
+| `frontend/src/screens/settings/SettingsScreen.tsx` | Account, security, privacy, notifications, appearance, logout and account deletion. |
 
-`App.tsx` imports these modules and retains the application-level navigation integration. The legacy `frontend/src/lib/api.ts` remains separate: it has a different chat-oriented API and CSRF state contract. These two clients must not be merged until their behavioral differences are understood and tested.
+`App.tsx` remains the application integration and navigation root. The legacy `frontend/src/lib/api.ts` remains separate because its chat-oriented CSRF/current-user state contract differs from `appApi.ts`.
 
-The first extraction reduced `App.tsx` from 16,032 to approximately 15,747 lines. This is an initial boundary improvement, not completion of the frontend refactor.
+### Current candidate extraction — PR #57
+
+The draft PR moves the existing achievements component to `frontend/src/screens/gamification/AchievementsScreen.tsx` and shares its `Achievement` and `AchievementsResponse` types through `frontend/src/types/gamification.ts`. It preserves the existing endpoint, loading/error handling, unlocked/in-progress rendering, share flow, and navigation callbacks. This change is not considered verified until the focused contract tests and CI finish.
 
 ## 5. Known architectural risks to address
 
