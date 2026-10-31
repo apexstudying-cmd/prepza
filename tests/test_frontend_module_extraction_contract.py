@@ -141,6 +141,8 @@ def test_achievements_screen_is_owned_by_a_gamification_module():
     assert "function AchievementsScreen(" not in APP
     assert "case 'achievements':" in APP
     assert "from './types/achievements'" in APP
+    assert "function formatAchievementDate(" not in APP
+    assert "type Achievement =" not in APP
 
 
 def test_achievements_screen_preserves_load_share_and_navigation_contracts():
