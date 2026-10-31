@@ -97,7 +97,13 @@ def test_splash_screen_uses_the_canonical_192px_icon():
     assert 'src={logoImg}' not in app
     # The academic profile screen now owns one of the app-shell brand marks.
     profile_screen = source("frontend/src/screens/onboarding/CompleteProfileScreen.tsx")
-    assert app.count('src="/icon-192.png"') + profile_screen.count('src="/icon-192.png"') >= 9
+    login_screen = source("frontend/src/screens/auth/LoginScreen.tsx")
+    assert (
+        app.count('src="/icon-192.png"')
+        + profile_screen.count('src="/icon-192.png"')
+        + login_screen.count('src="/icon-192.png"')
+        >= 9
+    )
 
     manifest = source("frontend/public/manifest.json")
     assert '"src": "/icon-192.png"' in manifest
