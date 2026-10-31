@@ -231,15 +231,16 @@ def test_last_study_resume_transform_updates_extracted_my_study_module(tmp_path)
     (root / "tools" / "apply_last_study_resume.py").write_text(
         script.read_text(encoding="utf-8"), encoding="utf-8"
     )
-    app = """import StudyMaterialsScreen from './screens/study/StudyMaterialsScreen'
-    // ─── HOME ─────────────────────────────────────────────────────────────────────
-    const featuredDoc = activeDocs[0]
-    const restDocs = activeDocs.slice(1)
-    case 'study-materials': return <StudyMaterialsScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
-    function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
-      useEffect(() => { return () => {} }, [])
-    }
-    """
+    app = (
+        "import StudyMaterialsScreen from './screens/study/StudyMaterialsScreen'\n"
+        "// ─── HOME ─────────────────────────────────────────────────────────────────────\n"
+        "  const featuredDoc = activeDocs[0]\n"
+        "  const restDocs = activeDocs.slice(1)\n"
+        "case 'study-materials': return <StudyMaterialsScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />\n"
+        "function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {\n"
+        "  useEffect(() => { return () => {} }, [])\n"
+        "}\n"
+    )
     module = """const openDocument = (id: number) => { setActiveDocumentId(id); setScreen('document-study') }
     """
     (root / "frontend" / "src" / "App.tsx").write_text(app, encoding="utf-8")
@@ -256,3 +257,31 @@ def test_last_study_resume_transform_updates_extracted_my_study_module(tmp_path)
     subprocess.run([sys.executable, str(root / "tools" / "apply_last_study_resume.py")], check=True)
     assert transformed_app.count("onRememberLastStudyDocument={rememberLastStudyDocument}") == 1
     assert transformed_module.count("onRememberLastStudyDocument?.(id)") == 1
+
+
+def test_library_my_study_transform_supports_extracted_screen_module_and_is_idempotent(tmp_path):
+    import shutil
+    import subprocess
+    import sys
+
+    root = tmp_path
+    (root / "tools").mkdir()
+    (root / "frontend" / "src" / "screens" / "study").mkdir(parents=True)
+    shutil.copyfile(
+        ROOT / "tools" / "apply_library_my_study_separation.py",
+        root / "tools" / "apply_library_my_study_separation.py",
+    )
+    shutil.copyfile(ROOT / "frontend" / "src" / "App.tsx", root / "frontend" / "src" / "App.tsx")
+    shutil.copyfile(
+        ROOT / "frontend" / "src" / "screens" / "study" / "StudyMaterialsScreen.tsx",
+        root / "frontend" / "src" / "screens" / "study" / "StudyMaterialsScreen.tsx",
+    )
+    subprocess.run([sys.executable, str(root / "tools" / "apply_library_my_study_separation.py")], check=True)
+    transformed_app = (root / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+    module = (root / "frontend" / "src" / "screens" / "study" / "StudyMaterialsScreen.tsx").read_text(encoding="utf-8")
+    assert "useState<'Browse' | 'Published'>" in transformed_app
+    assert "activeTab === 'Saved'" not in transformed_app
+    assert "saveActionError" in transformed_app
+    assert "Saved from Prepza Library" in module
+    assert "function StudyMaterialsScreen(" not in transformed_app
+    subprocess.run([sys.executable, str(root / "tools" / "apply_library_my_study_separation.py")], check=True)
