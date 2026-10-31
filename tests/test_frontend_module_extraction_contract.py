@@ -135,3 +135,49 @@ def test_podcast_metadata_helpers_are_shared_by_home_and_library():
     ):
         assert contract in source
     assert "from './types/podcast'" in APP
+
+def test_achievements_screen_is_owned_by_a_gamification_module():
+    assert "import AchievementsScreen from './screens/gamification/AchievementsScreen'" in APP
+    assert "function AchievementsScreen(" not in APP
+    assert "case 'achievements':" in APP
+    assert "from './types/achievements'" in APP
+    assert "function formatAchievementDate(" not in APP
+    assert "type Achievement =" not in APP
+
+
+def test_achievements_screen_preserves_load_share_and_navigation_contracts():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "gamification" /
+        "AchievementsScreen.tsx"
+    ).read_text(encoding="utf-8")
+    assert "export default function AchievementsScreen" in source
+    assert "setScreen: (s: 'profile' | 'share-sheet') => void" in source
+    for contract in (
+        "api<AchievementsResponse>('/achievements')",
+        "let cancelled = false",
+        "if (!cancelled) setAchievementsList(res.achievements)",
+        "const unlocked = achievementsList.filter(a => a.done)",
+        "const locked = achievementsList.filter(a => !a.done)",
+        "formatAchievementDate(a.unlocked_at)",
+        "setScreen('profile')",
+        "setScreen('share-sheet')",
+        "Achievement Unlocked",
+        "Join me on Prepza",
+        "<Pill",
+    ):
+        assert contract in source
+
+
+def test_achievement_types_keep_the_profile_and_screen_response_contract():
+    source = (
+        ROOT / "frontend" / "src" / "types" / "achievements.ts"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "export type Achievement",
+        "unlocked_at: string | null",
+        "progress: number",
+        "total: number",
+        "export type AchievementsResponse",
+        "achievements: Achievement[]",
+    ):
+        assert contract in source
