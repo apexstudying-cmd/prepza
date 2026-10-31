@@ -96,7 +96,11 @@ def test_podcast_library_screen_is_owned_by_a_feature_module():
     assert "import PodcastLibraryScreen from './screens/podcast/PodcastLibraryScreen'" in APP
     assert "function PodcastLibraryScreen(" not in APP
     assert "case 'podcast-library':" in APP
-    assert "PodcastLibraryScreen" in APP
+    assert "DelayedScreenSkeleton={DelayedScreenSkeleton}" in APP
+    assert "SkeletonPodcastLibrary={SkeletonPodcastLibrary}" in APP
+    assert "EmptyState={EmptyState}" in APP
+    assert "ErrorState={ErrorState}" in APP
+    assert "PODCAST_LIBRARY_CACHE" not in APP
 
 
 def test_podcast_library_preserves_fetch_cache_and_navigation_contract():
