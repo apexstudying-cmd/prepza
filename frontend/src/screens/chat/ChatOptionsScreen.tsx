@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '../../lib/appApi'
 import { N, useTheme } from '../../theme/theme'
 import { Ic } from '../../ui/icons'
+import Avi from '../../ui/Avi'
 import Pill from '../../ui/Pill'
 import type { ChatDetail, ChatMessageData } from '../../types/chat'
 
