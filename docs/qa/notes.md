@@ -2133,3 +2133,10 @@ Backend inventory for the next phase: app.py remains a global-app module with ap
 ### Post-merge status — PR #68
 
 PR #68 was squash-merged to main as 74dcebce5dd05ad08b5e3d77007cc5205f0b7bc0. The exact application-code head verified by Frontend Build and Release Browser/Cross-System Regression was cc665bce25bb570abe659d33e675b5f8acba690a; later PR commits were documentation-only. Main now imports XPProgressScreen from the gamification module, and the inline XP screen declaration is gone. This note does not claim separate post-merge CI ran on the squash commit.
+
+
+## 2026-11-05 — backend shared-extension boundary (PR #69; verification pending)
+
+The backend's first refactor slice isolates SQLAlchemy extension ownership without moving model classes or routes. The shared `db` instance is now defined in `extensions.py`, while `app.py` retains the legacy exported name by importing it. PostgreSQL engine defaults are configured before explicit `db.init_app(app)`, replacing the previous constructor monkey-patch.
+
+The focused tests are intended to prove SQLite initialization, PostgreSQL option defaults and overrides, and the preserved import surface. The dedicated CI workflow and full release regression must pass before merge. This is not an app-factory conversion and does not complete backend extraction.
