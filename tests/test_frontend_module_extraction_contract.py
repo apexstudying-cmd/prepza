@@ -339,10 +339,7 @@ def test_study_navigation_transform_supports_extracted_splash_and_is_idempotent(
     }
     // prepza: study-navigation-polish-v2
     """
-    splash = """export default function SplashScreen({ setScreen, brandline }: {
-      setScreen: (s: 'home' | 'complete-profile' | 'login') => void
-      brandline: string
-    }) {
+    splash = """export default function SplashScreen({ setScreen, brandline }: { setScreen: (s: 'home' | 'complete-profile' | 'login') => void; brandline: string }) {
       const [state, setState] = useState<'checking' | 'retry'>('checking')
       const checkSession = async (attempt = 0): Promise<void> => {
         setState('checking')
