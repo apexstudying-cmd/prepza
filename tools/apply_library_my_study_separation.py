@@ -1,3 +1,8 @@
+from __future__ import annotations
+
+from pathlib import Path
+import re
+
 APP = Path(__file__).resolve().parents[1] / "frontend" / "src" / "App.tsx"
 LIBRARY_MODULE = APP.parent / "screens" / "library" / "LibraryScreen.tsx"
 text = APP.read_text(encoding="utf-8")
