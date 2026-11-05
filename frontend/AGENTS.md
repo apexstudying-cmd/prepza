@@ -86,3 +86,7 @@ python -m pytest -q \
 - src/screens/chat/ChatOptionsScreen.tsx (PR #67, merged as 62cdf80f2652746593b58f131c939f95442b0446) - chat metadata, member list, rename/leave/mute controls, message search, and shared-media UI. Keep the chat-options route and existing chat API/CSRF behavior unchanged. Its ChatDetail and ChatMessageData contracts are shared from src/types/chat.ts; its file-extension helper, image extension list, and navigation/profile callbacks are explicit props. Do not couple this module to App.tsx.
 - src/types/chat.ts - shared chat detail, message, and attachment response types. Preserve the existing API response field names and optionality.
 - src/ui/Avi.tsx - shared Prepza avatar visual primitive, reused by the app shell and extracted chat screen. Preserve its existing visual output.
+
+
+- src/screens/onboarding/SplashScreen.tsx - branded startup, existing-session restoration, confirmed-401 routing, transient-failure retry, and manual retry UI. The app shell injects the existing brandline and offline-resume callback. Keep the 2.2-second splash timing, /me response checks, route targets, and canonical /icon-192.png asset unchanged.
+- src/screens/profile/EditProfileScreen.tsx - profile editing, academic catalogue selection, profile PATCH, avatar processing/upload/confirmation, and offline avatar cache maintenance. Preserve the CSRF headers, 512×512 WebP processing, 512 KB post-processing limit, existing profile endpoints, academic-context event, and return-to-profile behavior.
