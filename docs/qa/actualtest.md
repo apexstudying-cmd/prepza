@@ -129,3 +129,7 @@ The focused route contract [42019950835](https://github.com/apexstudying-cmd/pre
 On tested application-code head `55fbf1ce588c6650b5171bd4c752e10055614df7`, Student Frontend [42019950427], Admin Route [42019950566], B2B [42019950492], E2EE Security [42019950395], Study Navigation [42019950431], Prepza Control API [42019950757], AI Economics [42019950545], and Kokoro Python syntax [42019950385] passed.
 
 Release Browser/Cross-System Regression [42019950561](https://github.com/apexstudying-cmd/prepza/actions/runs/42019950561) passed production image build, disposable PostgreSQL/Redis, Alembic migrations and the controlled SQL migration ledger, application startup, mobile/tablet responsive checks, B2B browser-to-ledger metering, 98/98 PostgreSQL QA tests, online/offline Study Hub and generated-artifact browser journeys, screenshot upload, and disposable service cleanup. This PR makes no schema, migration, permission, signup, or model changes. It extracts only two public read-only route handlers.
+
+### Post-merge status — PR #73
+
+PR #73 was squash-merged to `main` as `d57cfecde2c98b59eec867c70cca4270ed2b1e73`. The code tested on head `55fbf1ce588c6650b5171bd4c752e10055614df7` is the merged application code; the subsequent PR commits before merge only updated documentation. The focused contract and full release regression evidence above are from the tested code head. No separate post-merge workflow is claimed.
