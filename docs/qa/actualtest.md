@@ -119,3 +119,13 @@ Tested application-code head: `0f61c64793cc32befb8ea22ba8ffedf68ef12412`, rebuil
 - StudyHub Library Flow [42014965411] was skipped by workflow conditions; it is not counted as a pass.
 
 PR #69 is the one cohesive review for this Library + Notifications extraction. It remains a draft at this recorded point; the code head passed, but the PR has not yet been marked ready or merged. No live Paystack, SES, OpenAI, R2, or GPU provider check is implied.
+
+## 2026-11-05 — Public academic catalog route extraction (PR #73)
+
+The public university and program lookup handlers were moved from `app.py` to `academic_catalog_routes.py`. The registrar receives the existing Flask app and University/Program model classes explicitly; it does not import `app.py`. It registers the same paths and GET methods with the original Flask endpoint names `list_universities` and `list_programs`. The handler bodies compare byte-for-byte against the previous main source after removing the registrar indentation.
+
+The focused route contract [42019950835](https://github.com/apexstudying-cmd/prepza/actions/runs/42019950835) passed Python compilation and all five tests. It validates active university/program filtering, alphabetical ordering, the existing missing/inactive-university 404 response, response JSON shapes, endpoint names, and route registration position.
+
+On tested application-code head `55fbf1ce588c6650b5171bd4c752e10055614df7`, Student Frontend [42019950427], Admin Route [42019950566], B2B [42019950492], E2EE Security [42019950395], Study Navigation [42019950431], Prepza Control API [42019950757], AI Economics [42019950545], and Kokoro Python syntax [42019950385] passed.
+
+Release Browser/Cross-System Regression [42019950561](https://github.com/apexstudying-cmd/prepza/actions/runs/42019950561) passed production image build, disposable PostgreSQL/Redis, Alembic migrations and the controlled SQL migration ledger, application startup, mobile/tablet responsive checks, B2B browser-to-ledger metering, 98/98 PostgreSQL QA tests, online/offline Study Hub and generated-artifact browser journeys, screenshot upload, and disposable service cleanup. This PR makes no schema, migration, permission, signup, or model changes. It extracts only two public read-only route handlers.
