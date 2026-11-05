@@ -743,7 +743,7 @@ PR #68 was squash-merged to main as 74dcebce5dd05ad08b5e3d77007cc5205f0b7bc0 aft
 
 PR #70 was squash-merged to main as 907658079a63a61439b42ea7de33d46ca31d0658 after Backend Shared Extension Contract [42010022947] and Release Browser/Cross-System Regression [42010022682] passed on the application-code head. The dedicated contract passed all six tests. No separate post-merge workflow run is claimed.
 
-## 2026-11-05 — Library and Notifications feature extraction (PR #69; verified, awaiting merge)
+## 2026-11-05 — Library and Notifications feature extraction (PR #69; merged)
 
 PR #69 now groups the Library screen and Notifications feature boundaries in one reviewable change. The Library UI, response types, shared material-type helpers, and module-aware My Study transform are extracted. Notifications is moved end-to-end: its existing frontend screen and response type live in feature-owned files, and its five existing Flask handlers plus serializer live in `notification_routes.py`. The `notifications` UI route and backend registration point remain unchanged; app-shell empty/loading views and backend app/db/model/CSRF dependencies are passed explicitly. The existing notification preference helpers remain in app.py because other feature flows call them.
 
