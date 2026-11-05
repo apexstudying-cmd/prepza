@@ -73,7 +73,7 @@ The current `App.tsx` scan shows these large declarations still embedded in the 
 | `ChatOptionsScreen` | Extracted in PR #67 (pending verification) | The original 331-line body is preserved after explicit injection of the existing file-extension helper and image-type list; shared chat types and the existing Avi primitive now have owned modules. |
 | `PodcastPlayerScreen` | 327 | Medium |
 | `DocumentStudyScreen` | 323 | High; protect reader progress/offline contracts |
-| `LibraryScreen` | 305 | Medium |
+| `LibraryScreen` | Extracted in PR #71 (verification pending) | Existing 300-line screen moved verbatim to `screens/library/LibraryScreen.tsx`; shared contracts and material labels now have feature-owned modules. Prebuild transforms must target the extracted module. |
 | `SignupScreen` | Extracted in PR #66 | Auth flow screens are owned by `screens/auth/AuthScreens.tsx`; route IDs and auth/CSRF behavior remain in the app shell. |
 
 Line counts are approximate source spans between top-level declarations, not exact executable statement counts. They are useful for prioritization, not a complexity score.
@@ -309,3 +309,11 @@ The first focused workflow attempt failed only because the dedicated test enviro
 ### PR #70 post-merge status
 
 PR #70 was squash-merged to main as 907658079a63a61439b42ea7de33d46ca31d0658. Backend Shared Extension Contract [42010022947] passed all six focused tests and compilation; Release Browser/Cross-System Regression [42010022682] passed all release gates. The shared extension boundary is now on main. The app remains a module-global Flask entry point; 59 model declarations and 156 route decorators remain to be extracted in bounded, separately verified slices. No separate post-merge workflow run is claimed.
+
+## 2026-11-05 frontend Library extraction — PR #71 in verification
+
+PR #71 moves the active 300-line `LibraryScreen` into `frontend/src/screens/library/LibraryScreen.tsx`, moves `LibraryPublicationSummary`, `SavedLibraryItem`, and `MySubmission` into `frontend/src/types/library.ts`, and moves the shared material-type list/label helper into `frontend/src/lib/library.ts`. The original component body compares byte-for-byte against the previous `main` source after only its module export/signature change. Existing `publish-library` and admin consumers continue to import the same material-type helper. The route still injects the same navigation and active-document callbacks plus the existing app-shell EmptyState/ErrorState components.
+
+CI surfaced two build-time ownership assumptions. First, the My Study/Library separation test copied only App.tsx and asserted the Library tab state was still inline; its fixture now copies the extracted Library module and asserts the transformation on that module. Second, `apply_library_material_type_restriction.py` assumed `LIBRARY_MATERIAL_TYPES` lived in App.tsx; it now targets `lib/library.ts` when present and retains the legacy App fallback, with dedicated coverage for both modes and idempotence. These are compatibility updates to the existing prebuild chain, not UI/API behavior changes.
+
+Do not merge until Frontend Build (including the production prebuild/Vite path), student/related contracts, and full Release Browser/Cross-System Regression pass on the final application-code head.
