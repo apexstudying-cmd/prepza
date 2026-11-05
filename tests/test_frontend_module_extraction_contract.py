@@ -440,3 +440,34 @@ def test_new_chat_module_preserves_search_direct_chat_and_group_creation_contrac
         "<Avi",
     ):
         assert contract in source
+
+
+def test_student_profile_screen_is_owned_by_the_profile_feature_module():
+    assert "import StudentProfileScreen from './screens/profile/StudentProfileScreen'" in APP
+    assert "case 'student-profile':" in APP
+    assert "function StudentProfileScreen(" not in APP
+
+
+def test_student_profile_module_preserves_follow_privacy_and_message_contracts():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "profile" / "StudentProfileScreen.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "/public-profile",
+        "/follow-summary",
+        "method: 'DELETE'",
+        "method: 'POST'",
+        "'X-CSRF-Token': csrfToken",
+        "is_pending",
+        "is_private",
+        "api<{ id: number; reused: boolean }>('/chats', {",
+        "participant_ids: [targetUserId]",
+        "setActiveConversationId?.(res.id)",
+        "setScreen('chat-detail')",
+        "setScreen('chat-options')",
+        "formatStudyTime(profile.weekly_study_seconds)",
+        "followers_count",
+        "following_count",
+        "documents_count",
+    ):
+        assert contract in source
