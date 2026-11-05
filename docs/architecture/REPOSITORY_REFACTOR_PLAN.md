@@ -304,3 +304,8 @@ Do not move all 59 models into a single models.py. Extract by bounded domain onl
 Backend Shared Extension Contract [run 42010022947](https://github.com/apexstudying-cmd/prepza/actions/runs/42010022947) passed all six focused tests and Python compilation. Full Release Browser/Cross-System Regression [run 42010022682](https://github.com/apexstudying-cmd/prepza/actions/runs/42010022682) passed production image build, disposable PostgreSQL/Redis startup, Alembic migrations, SQL migration-ledger checks, app startup, mobile/tablet browser checks, B2B browser-to-ledger regression, full PostgreSQL QA, online/offline and generated-artifact browser journeys, screenshot upload, and cleanup. The separate StudyHub Library Flow workflow was skipped by its conditions and is not counted as a pass.
 
 The first focused workflow attempt failed only because the dedicated test environment omitted `psycopg2-binary`; the workflow was corrected to install the repository-pinned driver and the rerun passed. This is recorded as a test-environment correction, not an application-code failure.
+
+
+### PR #70 post-merge status
+
+PR #70 was squash-merged to main as 907658079a63a61439b42ea7de33d46ca31d0658. Backend Shared Extension Contract [42010022947] passed all six focused tests and compilation; Release Browser/Cross-System Regression [42010022682] passed all release gates. The shared extension boundary is now on main. The app remains a module-global Flask entry point; 59 model declarations and 156 route decorators remain to be extracted in bounded, separately verified slices. No separate post-merge workflow run is claimed.
