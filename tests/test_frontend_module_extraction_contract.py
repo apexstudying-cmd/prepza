@@ -517,3 +517,27 @@ def test_share_opportunity_form_preserves_existing_local_form_fields_and_navigat
         "onChange={upd('desc')}",
     ):
         assert contract in source
+
+
+def test_study_streak_screen_is_owned_by_the_gamification_module():
+    assert "import StudyStreakScreen from './screens/gamification/StudyStreakScreen'" in APP
+    assert "case 'study-streak':" in APP
+    assert "function StudyStreakScreen(" not in APP
+
+
+def test_study_streak_module_preserves_calendar_loading_navigation_and_milestones():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "gamification" / "StudyStreakScreen.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "api<StreakResponse>('/streak' + (viewMonth ? `?month=${viewMonth}` : ''))",
+        "if (cancelled) return",
+        "return () => { cancelled = true }",
+        "setSelectedDay(isSelected ? null : d)",
+        "setViewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)",
+        "setScreen('profile')",
+        "setScreen('share-sheet')",
+        "milestones.filter(m => m.done)",
+        "formatStudyDuration(d.study_seconds)",
+    ):
+        assert contract in source
