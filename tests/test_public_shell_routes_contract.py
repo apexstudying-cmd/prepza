@@ -104,7 +104,7 @@ def test_health_keeps_existing_503_response_when_database_probe_fails():
 def test_public_shell_routes_are_registered_at_the_original_app_initialization_point():
     root = Path(__file__).resolve().parents[1]
     app_source = (root / "app.py").read_text(encoding="utf-8")
-    registrar = "register_public_shell_routes(app, db, limiter, _sweep_expired_opportunities_safe)"
+    registrar = "register_public_shell_routes(app, db, limiter, lambda: _sweep_expired_opportunities_safe())"
     register_at = app_source.index(registrar)
 
     assert register_at > app_source.index("def track_last_active(")
