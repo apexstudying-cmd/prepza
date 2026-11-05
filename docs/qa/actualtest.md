@@ -149,3 +149,15 @@ No model schema or migration changed. At this tested source head, `app.py` has 5
 ### Post-merge status — PR #74
 
 PR #74 was squash-merged to `main` as `6b82aba7bd7d167488c4a0e9921be6deb50a7648`. The code tested on head `f7c8ec327483f4d5170bfa0aa4ec60285d81574f` is the merged application source; the subsequent commits before merge changed documentation only. The focused 10-test backend extension/model contract and full release browser evidence above are from that tested source head. No separate post-merge workflow is claimed.
+
+
+## 2026-11-05 — Backend public shell and health route extraction (PR #76)
+
+PR #76 moves the existing `GET /`, `GET /sw.js`, and `GET /health` handlers from `app.py` into `public_shell_routes.py`. The registrar receives the existing Flask app, SQLAlchemy extension, limiter, and expiry-sweep callback explicitly; the new module does not import the partially initialized `app.py` module. The three handler bodies match the prior source after normalizing nesting/indentation and replacing the health handler's direct sweep call with the injected callback.
+
+- Backend Public and Academic Route Contracts [run 42025424615](https://github.com/apexstudying-cmd/prepza/actions/runs/42025424615): Python compilation and both route-contract test modules passed.
+- Backend Shared Extension Contract [run 42025424857](https://github.com/apexstudying-cmd/prepza/actions/runs/42025424857): passed.
+- Release Browser/Cross-System Regression [run 42025424651](https://github.com/apexstudying-cmd/prepza/actions/runs/42025424651): passed production image, disposable PostgreSQL/Redis, Alembic migrations and SQL ledger, app startup, mobile/tablet responsive checks, B2B browser-to-ledger metering, full PostgreSQL QA, online/offline generated-artifact journeys, screenshot upload, and cleanup.
+- StudyHub Library Flow [run 42025424617](https://github.com/apexstudying-cmd/prepza/actions/runs/42025424617) was skipped by workflow conditions and is not counted as passing.
+
+The tested application-code head is `1e5880012fa017dca085ea811fa3215d12f32177`; subsequent PR commits only update documentation. On the PR source, `app.py` contains 146 inline route decorators, while `public_shell_routes.py`, `notification_routes.py`, and `academic_catalog_routes.py` register three, five, and two routes respectively. All 156 route registrations remain. This is a narrow route-ownership extraction only: the global Flask app, ORM model ownership, middleware, database schema, and migrations are unchanged.
