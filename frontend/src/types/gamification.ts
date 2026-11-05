@@ -12,16 +12,4 @@ export type XpProgressResponse = {
   how_to_earn: HowToEarnItem[]
 }
 
-export type StreakCalendarDay = { date: string; studied: boolean; is_future: boolean; study_seconds: number }
-export type StreakMilestone = { days: number; label: string; xp: string; done: boolean }
-export type StreakResponse = {
-  current_streak: number
-  longest_streak: number
-  calendar_month: string
-  calendar_start_weekday: number
-  earliest_month: string
-  calendar: StreakCalendarDay[]
-  milestones: StreakMilestone[]
-}
-
 export type StudyTimeResponse = { period: string; total_seconds: number; by_feature: Record<string, number> }
