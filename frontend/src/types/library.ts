@@ -9,3 +9,5 @@ export type MySubmission = {
   unit_id: number | null; unit_code: string | null; status: string; rejection_reason: string | null
   view_count: number; save_count: number; created_at: string | null; updated_at: string | null
 }
+
+export type PublishableDoc = { id: number; title: string; status: string; file_type: string | null; page_count: number | null }
