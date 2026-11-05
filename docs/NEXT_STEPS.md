@@ -783,3 +783,18 @@ PR #74 was squash-merged to `main` as `6b82aba7bd7d167488c4a0e9921be6deb50a7648`
 - [ ] Continue with the high-risk ChatDetail/Chats, DocumentStudy/Reader, AdminSection, generation-flow and app-navigation boundaries only after dependency mapping and dedicated behavior contracts.
 
 StudyHub Library Flow [42022943808](https://github.com/apexstudying-cmd/prepza/actions/runs/42022943808) was skipped by workflow conditions and is not counted as passing. The tested application-code head was `f5f8afb34a8d74c742de4b4d33762ec882b05a81`; subsequent PR commits updated documentation only.
+
+
+## 2026-11-05 — Splash and Edit Profile extraction (PR #77; verification in progress)
+
+- [x] Extract the existing SplashScreen to frontend/src/screens/onboarding/SplashScreen.tsx and EditProfileScreen to frontend/src/screens/profile/EditProfileScreen.tsx in the same consolidated PR. App.tsx is reduced from 11,853 to 11,591 lines on the PR branch (262 fewer lines).
+- [x] Compare both component bodies directly against the base main source. Both are byte-for-byte identical after normalising only module exports, the explicit brandline prop, narrowed navigation callback types, and the extracted local EditProfileMe response type.
+- [x] Preserve Splash session restoration: 2.2-second display timing, /me request, full academic-profile check, confirmed-401 login routing, one retry for other failures, manual retry UI, and canonical /icon-192.png asset.
+- [x] Preserve Edit Profile behavior: /me, university/program loading, profile PATCH, academic-context event, image processing to 512×512 WebP at quality 0.82, 512 KB size limit, signed upload and confirmation endpoints, CSRF headers, offline avatar cache writes/removal, and return-to-profile navigation.
+- [x] Update apply_study_navigation_polish.py to handle the module-owned SplashScreen and pass offline resume behavior from the app shell. The transform now re-runs idempotently even when its historical marker already exists; it no longer silently skips the module patch. Update the production-build verifier and workflow anchors to check the new module boundary.
+- [x] Frontend Build [run 42030603950](https://github.com/apexstudying-cmd/prepza/actions/runs/42030603950) passed 76 source/module contract tests, 5 offline Library regression tests, TypeScript, service-worker validation, production build, and architecture audits.
+- [x] Student Frontend [42030604065], Student Contract [42030603908], Admin Route [42030604002], B2B [42030603900], AI Generation [42030604051], AI Economics [42030604139], Prepza Control API [42030603917], E2EE Security [42030603959], and E2EE Chat [42030604078] passed on the tested code head.
+- [ ] Full Release Browser/Cross-System Regression [run 42030603969](https://github.com/apexstudying-cmd/prepza/actions/runs/42030603969) is still running; do not merge or call the extraction release-verified until it completes successfully.
+- [ ] Continue with the high-risk ChatDetail/Chats, DocumentStudy/Reader, AdminSection/admin panels, generation flows, Podcast Player, Home/Explore, and app-shell boundaries only after dependency mapping and dedicated behavior contracts. Backend extraction remains a separate staged effort.
+
+PR #77 is intentionally one consolidated review rather than separate PRs for each screen. The frontend refactor remains incomplete.
