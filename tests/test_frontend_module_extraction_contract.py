@@ -408,3 +408,35 @@ def test_edit_profile_module_preserves_profile_and_avatar_contracts():
         "setScreen('profile')",
     ):
         assert contract in source
+
+
+def test_new_chat_screen_is_owned_by_a_chat_feature_module():
+    assert "import NewChatScreen from './screens/chat/NewChatScreen'" in APP
+    assert "case 'new-chat':" in APP
+    assert "setActiveConversationId={setActiveConversationId}" in APP
+    assert "function NewChatScreen(" not in APP
+
+
+def test_new_chat_module_preserves_search_direct_chat_and_group_creation_contracts():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "chat" / "NewChatScreen.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "api<{ csrf_token: string }>('/me')",
+        "/users/search?q=",
+        "}, 300)",
+        "clearTimeout(t)",
+        "api<{ id: number; reused: boolean }>('/chats')",
+        "is_group: false",
+        "participant_ids: [userId]",
+        "is_group: true",
+        "participant_ids: selectedIds",
+        "'X-CSRF-Token': csrfToken",
+        "setActiveConversationId(res.id)",
+        "setScreen('chat-detail')",
+        "setMode('new-chat')",
+        "setMode('new-group')",
+        "Create Group",
+        "<Avi",
+    ):
+        assert contract in source
