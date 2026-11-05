@@ -90,3 +90,6 @@ python -m pytest -q \
 
 - src/screens/onboarding/SplashScreen.tsx - branded startup, existing-session restoration, confirmed-401 routing, transient-failure retry, and manual retry UI. The app shell injects the existing brandline and offline-resume callback. Keep the 2.2-second splash timing, /me response checks, route targets, and canonical /icon-192.png asset unchanged.
 - src/screens/profile/EditProfileScreen.tsx - profile editing, academic catalogue selection, profile PATCH, avatar processing/upload/confirmation, and offline avatar cache maintenance. Preserve the CSRF headers, 512×512 WebP processing, 512 KB post-processing limit, existing profile endpoints, academic-context event, and return-to-profile behavior.
+
+
+- src/screens/chat/NewChatScreen.tsx - direct chat and group chat creation UI. Preserve the 300 ms debounced student search and cancellation cleanup, CSRF-protected /chats POST payloads, direct-chat reuse, group name/member validation, selected participant state, and chat-detail navigation. Keep encryption/realtime behavior owned by the existing chat-detail and crypto modules.
