@@ -5,7 +5,7 @@ import { Ic } from '../../ui/icons'
 import { formatStudyTime } from '../../lib/studyTime'
 import type { StudyTimeResponse } from '../../types/gamification'
 
-export default function TimeStudiedScreen({ setScreen }: { setScreen: (s: 'profile') => void }) {
+export default function TimeStudiedScreen({ setScreen }: { setScreen: (s: 'profile' | 'share-sheet') => void }) {
   const { tokens: T } = useTheme()
   const [period, setPeriod] = useState<'day' | 'week' | 'month'>('week')
   const [data, setData] = useState<StudyTimeResponse | null>(null)
