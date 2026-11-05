@@ -1,7 +1,7 @@
 # Prepza — Persistent Engineering Execution Tracker
 
 Last updated: 2026-11-05
-Branch: `main`; PR #62 merged as `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`; PR #64 merged as `7b0e9301543beabc5dee02af2388983737bada5c`; PR #65 Login extraction verified in CI, with evidence updates on its draft branch.
+Branch: `main`; PR #62 merged as `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`; PR #64 merged as `7b0e9301543beabc5dee02af2388983737bada5c`; PR #65 Login extraction squash-merged as `222b4011c40ddadaae3bdcf331022b79a78f5926` after the documentation-complete CI run passed.
 
 Status:
 - [x] completed/verified
@@ -700,9 +700,9 @@ Learning note: developers do not memorise every command. They learn tool concept
 - [x] Extract the existing Login screen into `frontend/src/screens/auth/LoginScreen.tsx`; preserve the original component body, visual markup, local state, sign-in/resend endpoints, request payloads, Google OAuth URL, error handling, and existing navigation destinations. The only intended differences are the exported module boundary and narrower navigation callback type.
 - [x] Verify the focused frontend module/source-transform contracts, offline Library regression, functional wiring/schema audits, TypeScript check, service-worker validation, and production build: [Frontend Build run 41241016697](https://github.com/apexstudying-cmd/prepza/actions/runs/41241016697) passed.
 - [x] Verify the student-facing/Morio contracts: [Student Frontend Contract run 41241016700](https://github.com/apexstudying-cmd/prepza/actions/runs/41241016700) passed, including Morio identity/icon and student screen end-to-end contracts.
-- [x] Verify the release browser/cross-system suite: [Release Browser/Cross-System Regression run 41241016614](https://github.com/apexstudying-cmd/prepza/actions/runs/41241016614) passed, including production image, disposable PostgreSQL/Redis, migrations and controlled SQL ledger, mobile/tablet browser checks, B2B browser-to-ledger regression, full disposable PostgreSQL QA, and online/offline generated-artifact journeys.
+- [x] Verify the release browser/cross-system suite: [Release Browser/Cross-System Regression run 41241016614](https://github.com/apexstudying-cmd/prepza/actions/runs/41241016614) passed, including production image, disposable PostgreSQL/Redis, migrations and controlled SQL ledger, mobile/tablet browser checks, B2B browser-to-ledger regression, full disposable PostgreSQL QA, and online/offline generated-artifact journeys. The documentation-complete PR-head rerun [Release Browser/Cross-System Regression run 42000088464](https://github.com/apexstudying-cmd/prepza/actions/runs/42000088464) also passed on head `99583ad6ca22031031a86e069764d71609aed0dd`.
 - [x] Confirm the PR-reported E2EE Security, Student Contract, Admin Route, B2B Contract, AI Economics, AI Generation Architecture, Study Navigation, and Prepza Control API workflows passed. StudyHub Library Flow was skipped by workflow conditions and is not counted as passing.
-- [ ] Integrate PR #65 into the coordinated remaining frontend refactor only after checking the final branch state and ensuring documentation/evidence is committed. Do not claim backend refactor or repository-wide completion from this screen-level extraction.
+- [x] Integrate PR #65 into `main` after the documentation-complete Frontend Build, Student Frontend Contract, security, contract, and Release Browser/Cross-System Regression checks passed. Squash merge: `222b4011c40ddadaae3bdcf331022b79a78f5926`. The current work remains an incremental screen extraction, not completion of the repository-wide refactor.
 - [ ] Continue the remaining frontend extractions and prebuild-transform retirement; then design backend app-factory/extensions boundaries and route/service extraction with contract tests.
 
 Evidence is limited to the exact PR workflow runs linked above. These CI results do not certify live Paystack, SES, OpenAI, R2, or GPU provider behavior and do not clear unrelated release gates.
