@@ -97,3 +97,6 @@ python -m pytest -q \
 
 - src/screens/gamification/TimeStudiedScreen.tsx - day/week/month study-time view. Preserve the default week selection, /study-time?period= request, cancellation guard on state updates, formatStudyTime output, and return navigation to Profile.
 - src/screens/opportunities/ShareOppForm.tsx - local Share Opportunity form. Preserve its existing title, organisation, type, deadline, location, reward, description and link fields; category options; controlled description input; and current back/post navigation. Do not imply that this form itself submits a backend opportunity unless that behavior is separately implemented.
+
+
+- src/screens/profile/StudentProfileScreen.tsx - another student's public profile, privacy-aware display, follow/unfollow and pending requests, direct-message creation, and profile statistics. Preserve /public-profile and /follow-summary requests, CSRF-protected follow and chat requests, private-profile behavior, and the existing chat-detail/chat-options/back destinations.
