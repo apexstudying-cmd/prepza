@@ -414,4 +414,4 @@ ProfileScreen now lives in screens/profile/ProfileScreen.tsx. Its PROFILE_CACHE 
 
 ### Document Ready module — 2026-11-05
 
-DocReadyScreen now resides in screens/study/DocReadyScreen.tsx; DocumentDetail is shared from types/documents.ts. Existing TopBar is injected by App.tsx, and the route dispatcher remains centralized. The original screen body was verified byte-for-byte after export/prop/local-route-type normalisation. CI is pending on the new code head.
+DocReadyScreen now resides in screens/study/DocReadyScreen.tsx; DocumentDetail is shared from types/documents.ts. Existing TopBar is injected by App.tsx, and the route dispatcher remains centralized. The original screen body was verified byte-for-byte after export/prop/local-route-type normalisation. Frontend Build [42036938429] passed 90 frontend source/module contracts, 5 offline Library tests, TypeScript, production build, architecture audits and launch-wiring verification. Full release regression [42036938563] remains queued.
