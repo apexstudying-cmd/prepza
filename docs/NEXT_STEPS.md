@@ -1,7 +1,7 @@
 # Prepza — Persistent Engineering Execution Tracker
 
-Last updated: 2026-10-31
-Branch: `main`; PR #62 merged as `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`; PR #64 merged as `7b0e9301543beabc5dee02af2388983737bada5c`.
+Last updated: 2026-11-05
+Branch: `main`; PR #62 merged as `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`; PR #64 merged as `7b0e9301543beabc5dee02af2388983737bada5c`; PR #65 Login extraction verified in CI, with evidence updates on its draft branch.
 
 Status:
 - [x] completed/verified
