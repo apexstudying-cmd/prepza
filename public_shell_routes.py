@@ -6,7 +6,6 @@ module so route registration never imports a partially initialized app.
 """
 
 from flask import jsonify, send_from_directory
-from sqlalchemy import text
 
 
 def register_public_shell_routes(app, db, limiter, sweep_expired_opportunities_safe):
@@ -38,6 +37,7 @@ def register_public_shell_routes(app, db, limiter, sweep_expired_opportunities_s
         Deliberately excluded from rate limiting (it's an automated, low-value
         target for abuse) and returns no sensitive data.
         """
+        from sqlalchemy import text
         try:
             db.session.execute(text("SELECT 1"))
             sweep_expired_opportunities_safe()
