@@ -847,3 +847,12 @@ PR #77 is intentionally one consolidated review rather than separate PRs for eac
 - [x] Add source contracts for profile data requests, cached state, saved/activity/material tabs, cancellation, university/program loading, follow requests, achievements, and existing navigation destinations.
 - [x] Frontend Build [42036291254](https://github.com/apexstudying-cmd/prepza/actions/runs/42036291254) passed on the ProfileScreen code head: 88 frontend source/module contract tests, 5 offline Library regression tests, TypeScript, service-worker validation, production build, architecture audits and launch-wiring verification.
 - [ ] Full Release Browser/Cross-System Regression [42036291297](https://github.com/apexstudying-cmd/prepza/actions/runs/42036291297) and the remaining contract/security workflows are queued on the ProfileScreen code head. Await these before merge or declaring full release verification.
+
+
+## 2026-11-05 follow-up — Document Ready extraction (PR #77)
+
+- [x] Extract DocReadyScreen into frontend/src/screens/study/DocReadyScreen.tsx (73 lines); App.tsx reduced by 69 lines.
+- [x] Move the shared DocumentDetail contract into frontend/src/types/documents.ts and import it from App.tsx and DocReadyScreen.
+- [x] Preserve the DocReadyScreen body byte-for-byte against base main after normalising only the module export, injected TopBar component, and local DocReadyRoute type replacing the App-local Screen alias.
+- [x] Add source contracts for document detail loading/error handling, metadata labels, all seven existing action destinations, and the existing header.
+- [ ] Latest Frontend Build and full Release Browser/Cross-System Regression are queued on code head 74b8fac; wait for all checks before calling this extraction verified.
