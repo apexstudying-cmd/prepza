@@ -85,8 +85,8 @@ Route audit: the existing study-streak and time-studied route cases render Study
 PR #68 was squash-merged to main as 74dcebce5dd05ad08b5e3d77007cc5205f0b7bc0. The tested application-code head was cc665bce25bb570abe659d33e675b5f8acba690a; subsequent commits in the PR changed documentation only. The verified XP Progress screen extraction is now on main. The CI evidence above is from the exact tested PR head; no separate post-merge workflow run is claimed here.
 
 
-## 2026-11-05 — backend shared-extension boundary (PR #69; pending verification)
+## 2026-11-05 — backend shared-extension boundary (PR #70; pending verification)
 
 The first backend refactor slice creates `extensions.py` with one shared SQLAlchemy extension and explicit `init_extensions(app)`. `app.py` imports and initializes that object after setting its existing configuration, so existing `from app import db` consumers retain their public import path. `db_runtime.py` no longer monkey-patches SQLAlchemy's constructor; the existing PostgreSQL pool defaults and SQLite/missing-URI behavior are retained.
 
-Focused contract tests and a dedicated CI workflow were added for extension initialization and configuration precedence. CI and release browser regression have not yet been recorded as passing for PR #69. This change does not move models/routes, alter schema, or introduce an app factory.
+Focused contract tests and a dedicated CI workflow were added for extension initialization and configuration precedence. CI and release browser regression have not yet been recorded as passing for PR #70. This change does not move models/routes, alter schema, or introduce an app factory.
