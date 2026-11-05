@@ -246,8 +246,8 @@ Already-separated backend areas include AI economics/generation, usage and organ
 
 ### Concrete blockers to a conventional app factory
 
-- app.py constructs a module-global Flask app and binds db = SQLAlchemy(app) during import. It also binds Flask-Limiter and initializes Sentry at module scope.
-- db_runtime.py currently monkey-patches SQLAlchemy.__init__ so database pool options are applied before the engine is created. This is an initialization workaround, not a clean shared-extension boundary.
+- app.py still constructs a module-global Flask app, configures Flask-Limiter, and initializes Sentry at module scope. PR #70 introduces a shared SQLAlchemy extension in extensions.py and explicitly initializes it from app.py; the app remains a global-app entry point.
+- The former db_runtime.py constructor monkey-patch has been replaced on the backend refactor branch by explicit configure-before-init through extensions.py. PR #70 passed its focused extension contract and full release browser/cross-system regression; merge status is recorded below.
 - Several modules still import the global app or its models from app.py; examples include chat_interactions.py, chat_group_routes.py, and prepza_control.py. Other modules use deferred imports from app inside functions, including document and generation paths.
 - Existing register_* modules are not all pure registration functions: some perform schema/bootstrap work inside app.app_context() while they are registered during application import.
 - tools/route_inventory.py and tools/route_coverage_matrix.py import the module-global app; retain that compatibility export throughout the migration.
@@ -271,3 +271,36 @@ The active study-streak and time-studied routes continue to use StudyActivityScr
 
 
 PR #68 (active XP Progress screen and shared study-time formatter) was squash-merged to main as 74dcebce5dd05ad08b5e3d77007cc5205f0b7bc0 after Frontend Build, student contracts, related admin/B2B/AI/E2EE/navigation/control checks, and full Release Browser/Cross-System Regression passed on tested code head cc665bce25bb570abe659d33e675b5f8acba690a. Later PR commits were documentation-only. This is another completed frontend slice, not completion of the repository-wide refactor.
+
+
+## 2026-11-05 backend shared-extension boundary — PR #70 in verification
+
+PR #70 introduces a module-global `db = SQLAlchemy()` in `extensions.py` and an explicit `init_extensions(app)` function. The function applies the existing PostgreSQL pool defaults before calling `db.init_app(app)`. `app.py` imports the same shared `db` object and initializes it after setting its existing configuration, preserving the legacy `from app import db` compatibility export used by models, route modules, Alembic, and scripts.
+
+The constructor monkey-patch was removed from `db_runtime.py`. Existing PostgreSQL pool defaults, environment variable names, `setdefault` behavior, and SQLite/missing-URI bypass behavior are retained. No model, route, schema, migration, endpoint, or business logic is moved or changed in this slice.
+
+Focused tests cover shared extension initialization with SQLite, PostgreSQL pool configuration, explicit-option precedence, and the absence of constructor patching. A dedicated GitHub Actions workflow compiles the entry point and extension modules and runs this focused contract. This PR remains draft until those checks and the full release regression complete. The global Flask app remains in app.py; no app factory is claimed.
+
+
+## Backend ownership map — audited app.py baseline
+
+The audited baseline contains 59 inline `db.Model` classes and 156 decorated Flask route handlers. These are declaration counts, not a claim that each route decorator maps to a unique URL or that every model has no equivalent dynamically declared table in another module. Use this list as a starting map and confirm each model's relationships, importers, Alembic metadata, and runtime registration before moving it.
+
+| Domain candidate | Inline model declarations to map | Main extraction cautions |
+|---|---|---|
+| Identity and platform | `User`, `SystemSetting`, `UserKey`, `AuditLog`, `RequestObservabilityEvent`, `PushSubscription`, `Notification`, `NotificationPreference`, `Announcement`, `ContentReport`, `UserWarning` | Session/auth decorators, admin permissions, request lifecycle hooks, notification producers, and observability scrubbing |
+| Academic catalog | `University`, `Program`, `ContentItem` | Seed/import scripts, public catalogue route contracts, and foreign-key consumers |
+| Billing and organisations | `Payment`, `Organisation`, `OrganisationMember`, `Opportunity`, `Ambassador`, `Referral`, `AmbassadorPayout` | Paystack/webhook idempotency, B2B ledger integrity, entitlement writes, and dynamically registered billing models |
+| Documents and learning | `DocumentContent`, `DocumentPageText`, `Document`, `DocumentReadingProgress`, `GeneratedMaterial`, `AiJob`, `TutorConversation`, `TutorMessage`, `StudentLearningProfile`, `LearningConcept`, `LearningEvent`, `StudentConceptMastery`, `ConceptPrerequisite`, `LibraryPublication`, `SavedLibraryMaterial`, `LibraryReport`, `XpEvent`, `StudyStreak`, `StudyActivityLog`, `StudyTimeLog`, `QuizAttempt`, `FlashcardSession`, `UserAchievement`, `AiUsageLog` | Retrieval permissions, document ownership, generated-material invalidation, offline sync, XP/streak time boundaries, and AI usage accounting |
+| Chat and community | `Conversation`, `ConversationParticipant`, `Message`, `MessageAttachment`, `Group`, `GroupMember`, `GroupPost`, `GroupPostComment`, `GroupPostLike`, `GroupQuestionVote`, `GroupFile`, `Follow`, `FollowRequest` | E2EE key material, realtime event ordering, message idempotency, attachment authorization, and social notification side effects |
+
+The 156 route decorators span the public shell/health, authentication, profile, document upload/read/study, AI generation, learning activity, library, subscription/payment, admin, ambassador, discovery/opportunities, social/community, and chat domains. The route extraction sequence should prioritize bounded route families already covered by standalone `register_*` modules, but only after import and extension ownership are stable. Preserve route paths, HTTP methods, endpoint names, decorator order, auth/CSRF behavior, response payloads, and registration timing.
+
+Do not move all 59 models into a single models.py. Extract by bounded domain only after a generated import/relationship graph and Alembic metadata tests show no duplicate tables, missing relationships, changed naming, or migration drift.
+
+
+### PR #70 verification and merge readiness
+
+Backend Shared Extension Contract [run 42010022947](https://github.com/apexstudying-cmd/prepza/actions/runs/42010022947) passed all six focused tests and Python compilation. Full Release Browser/Cross-System Regression [run 42010022682](https://github.com/apexstudying-cmd/prepza/actions/runs/42010022682) passed production image build, disposable PostgreSQL/Redis startup, Alembic migrations, SQL migration-ledger checks, app startup, mobile/tablet browser checks, B2B browser-to-ledger regression, full PostgreSQL QA, online/offline and generated-artifact browser journeys, screenshot upload, and cleanup. The separate StudyHub Library Flow workflow was skipped by its conditions and is not counted as a pass.
+
+The first focused workflow attempt failed only because the dedicated test environment omitted `psycopg2-binary`; the workflow was corrected to install the repository-pinned driver and the rerun passed. This is recorded as a test-environment correction, not an application-code failure.

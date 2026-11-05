@@ -83,3 +83,16 @@ Route audit: the existing study-streak and time-studied route cases render Study
 ### Post-merge status — PR #68
 
 PR #68 was squash-merged to main as 74dcebce5dd05ad08b5e3d77007cc5205f0b7bc0. The tested application-code head was cc665bce25bb570abe659d33e675b5f8acba690a; subsequent commits in the PR changed documentation only. The verified XP Progress screen extraction is now on main. The CI evidence above is from the exact tested PR head; no separate post-merge workflow run is claimed here.
+
+
+## 2026-11-05 — backend shared-extension boundary (PR #70; pending verification)
+
+The first backend refactor slice creates `extensions.py` with one shared SQLAlchemy extension and explicit `init_extensions(app)`. `app.py` imports and initializes that object after setting its existing configuration, so existing `from app import db` consumers retain their public import path. `db_runtime.py` no longer monkey-patches SQLAlchemy's constructor; the existing PostgreSQL pool defaults and SQLite/missing-URI behavior are retained.
+
+Focused contract tests and a dedicated CI workflow were added for extension initialization and configuration precedence. Backend Shared Extension Contract [run 42010022947](https://github.com/apexstudying-cmd/prepza/actions/runs/42010022947) passed all six focused tests and compilation. Release Browser/Cross-System Regression [run 42010022682](https://github.com/apexstudying-cmd/prepza/actions/runs/42010022682) passed production image, disposable database/migrations, responsive browser checks, B2B metering, full PostgreSQL QA, online/offline generated-artifact journeys, screenshot upload, and cleanup. StudyHub Library Flow was skipped by workflow conditions and is not counted as a pass. This change does not move models/routes, alter schema, or introduce an app factory.
+
+
+Focused verification update: Backend Shared Extension Contract [run 42010022947](https://github.com/apexstudying-cmd/prepza/actions/runs/42010022947) passed on the application-code head `606481cc09f0db8ed945533cff38e0f39b3ac938`, including dependency installation, Python compilation, and all six focused contract tests. The first attempt [run 42009691957](https://github.com/apexstudying-cmd/prepza/actions/runs/42009691957) failed because the focused test environment omitted the PostgreSQL DBAPI driver; the workflow was corrected to install the pinned `psycopg2-binary` dependency. Full Release Browser/Cross-System Regression [run 42010022682](https://github.com/apexstudying-cmd/prepza/actions/runs/42010022682) remains in progress; PR #70 is not ready to merge until it passes.
+
+
+PR #70 verification is complete. The exact application source was tested by the focused extension workflow and full release regression; subsequent branch changes were documentation-only. The first focused attempt omitted the PostgreSQL DBAPI driver, which was added to the workflow before the passing rerun.
