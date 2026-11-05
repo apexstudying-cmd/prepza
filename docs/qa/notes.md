@@ -2192,3 +2192,18 @@ The current tested source is 10,174 lines in `app.py`, with 57 ORM model classes
 ### Post-merge status — PR #74
 
 The academic catalog model ownership move is merged to `main` as `6b82aba7bd7d167488c4a0e9921be6deb50a7648`. The app compatibility exports remain in place; `academic_models.py` uses the single shared SQLAlchemy extension and keeps the same 59-model metadata. The current root entry point is 10,174 lines, with 57 inline model declarations and 149 inline route decorators.
+
+
+## 2026-11-05 — Backend public shell and health routes (PR #76)
+
+This is the next bounded backend route extraction after shared SQLAlchemy extension initialization, academic catalog route registration, and the academic model ownership move. The existing root document, service-worker, and health handlers were moved into `public_shell_routes.py`. The registrar accepts the global Flask app and its existing dependencies as arguments and does not import `app.py`, avoiding a circular dependency on a partially initialized module.
+
+The handler bodies compare with the old inline implementations after removing the new registrar's nesting indentation. The only intentional dependency substitution is in `health`: it now invokes the injected safe opportunity-expiry sweep callback instead of closing over the app module's private function. The route decorator order and endpoint names remain the same; `/health` remains limiter-exempt. The module retains the lazy SQLAlchemy `text` import.
+
+Evidence on tested application-code head `1e5880012fa017dca085ea811fa3215d12f32177`:
+- Backend Public and Academic Route Contracts [42025424615](https://github.com/apexstudying-cmd/prepza/actions/runs/42025424615): Python compilation and public-shell/academic route tests passed.
+- Backend Shared Extension Contract [42025424857](https://github.com/apexstudying-cmd/prepza/actions/runs/42025424857): passed.
+- Release Browser/Cross-System Regression [42025424651](https://github.com/apexstudying-cmd/prepza/actions/runs/42025424651): production image, disposable PostgreSQL/Redis, migrations/ledger, app boot, responsive browser, B2B browser-to-ledger, PostgreSQL QA, online/offline journeys, screenshots, and cleanup passed.
+- StudyHub Library Flow [42025424617](https://github.com/apexstudying-cmd/prepza/actions/runs/42025424617) was skipped and is not counted as a pass.
+
+After this move, the PR source has 146 route decorators left inline in `app.py`; 3 public-shell routes are registered in `public_shell_routes.py`, 5 in `notification_routes.py`, and 2 in `academic_catalog_routes.py`. All 156 application route registrations remain. The global `app` compatibility entry point, models, middleware, and schema are deliberately unchanged. Continue route extraction by domain; do not combine this work with a factory conversion or model move.
