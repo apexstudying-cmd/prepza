@@ -101,6 +101,12 @@ def test_health_keeps_existing_503_response_when_database_probe_fails():
     assert sweeps == []
 
 
+def test_health_keeps_the_original_lazy_sqlalchemy_text_import():
+    source = (Path(__file__).resolve().parents[1] / "public_shell_routes.py").read_text(encoding="utf-8")
+    health = source[source.index("    def health():"):]
+    assert "        from sqlalchemy import text" in health
+
+
 def test_public_shell_routes_are_registered_at_the_original_app_initialization_point():
     root = Path(__file__).resolve().parents[1]
     app_source = (root / "app.py").read_text(encoding="utf-8")
