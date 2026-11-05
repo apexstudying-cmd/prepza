@@ -93,3 +93,7 @@ python -m pytest -q \
 
 
 - src/screens/chat/NewChatScreen.tsx - direct chat and group chat creation UI. Preserve the 300 ms debounced student search and cancellation cleanup, CSRF-protected /chats POST payloads, direct-chat reuse, group name/member validation, selected participant state, and chat-detail navigation. Keep encryption/realtime behavior owned by the existing chat-detail and crypto modules.
+
+
+- src/screens/gamification/TimeStudiedScreen.tsx - day/week/month study-time view. Preserve the default week selection, /study-time?period= request, cancellation guard on state updates, formatStudyTime output, and return navigation to Profile.
+- src/screens/opportunities/ShareOppForm.tsx - local Share Opportunity form. Preserve its existing title, organisation, type, deadline, location, reward, description and link fields; category options; controlled description input; and current back/post navigation. Do not imply that this form itself submits a backend opportunity unless that behavior is separately implemented.
