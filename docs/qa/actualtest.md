@@ -164,3 +164,16 @@ Evidence on tested code head `f5f8afb34a8d74c742de4b4d33762ec882b05a81`:
 - StudyHub Library Flow [42022943808](https://github.com/apexstudying-cmd/prepza/actions/runs/42022943808) was skipped by workflow conditions and is not counted as a pass.
 
 The verification is scoped to the tested PR head; subsequent PR changes are documentation-only. This extraction does not complete the remaining chat, document study/reader, admin or app-navigation boundaries.
+
+
+## 2026-11-05 — Splash and Edit Profile extraction (PR #77; current PR head)
+
+The existing SplashScreen and EditProfileScreen component bodies were moved into their feature-owned modules. Direct source comparison against base main confirms both bodies are byte-for-byte identical after normalising only module exports, the explicit splash brandline prop, narrower navigation callback types, and the local EditProfileMe response contract. App.tsx now contains only the imports and route composition for these screens.
+
+The Study Navigation prebuild transformer was updated for the new SplashScreen ownership boundary. The app shell supplies the offline-resume callback; SplashScreen does not import App.tsx or duplicate navigation-state parsing. The transform handles both inline legacy and extracted module modes and re-applies idempotently even when the existing marker is already present. The production-build verifier and workflow anchors now inspect the extracted module.
+
+Frontend Build [42030603950](https://github.com/apexstudying-cmd/prepza/actions/runs/42030603950) passed 76 frontend source/module tests, 5 offline Library tests, TypeScript, service-worker validation, production Vite build, and architecture audits. Student Frontend [42030604065], Student Contract [42030603908], Admin Route [42030604002], B2B [42030603900], AI Generation [42030604051], AI Economics [42030604139], Prepza Control API [42030603917], E2EE Security [42030603959], and E2EE Chat [42030604078] passed.
+
+The full Release Browser/Cross-System Regression [42030603969] was still in progress when this evidence note was written. Its completion is required before the PR is considered release-verified. StudyHub Library Flow was skipped by workflow conditions and is not counted as passing.
+
+No API, authentication, authorization, database, product-rule, screen-design, or business-logic rewrite was included. The refactor remains incomplete: ChatDetail/Chats, DocumentStudy/Reader, AdminSection, generation flows, Podcast Player, Home/Explore and app-shell boundaries still require dependency mapping and behavior contracts.
