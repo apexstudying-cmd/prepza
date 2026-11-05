@@ -78,3 +78,8 @@ PR #68 moves the active XPProgressScreen from frontend/src/App.tsx to frontend/s
 - StudyHub Library Flow [run 42006708366](https://github.com/apexstudying-cmd/prepza/actions/runs/42006708366) was skipped by workflow conditions and is not represented as a pass.
 
 Route audit: the existing study-streak and time-studied route cases render StudyActivityScreen. The older inline StudyStreakScreen and TimeStudiedScreen declarations were left in App.tsx and were not reconnected or deleted. The XP route remains unchanged. These checks do not claim full frontend refactor completion or live third-party provider verification.
+
+
+### Post-merge status — PR #68
+
+PR #68 was squash-merged to main as 74dcebce5dd05ad08b5e3d77007cc5205f0b7bc0. The tested application-code head was cc665bce25bb570abe659d33e675b5f8acba690a; subsequent commits in the PR changed documentation only. The verified XP Progress screen extraction is now on main. The CI evidence above is from the exact tested PR head; no separate post-merge workflow run is claimed here.
