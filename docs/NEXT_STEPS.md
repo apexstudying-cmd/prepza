@@ -836,3 +836,13 @@ PR #77 is intentionally one consolidated review rather than separate PRs for eac
 - [x] The first typecheck identified the existing share-sheet navigation in TimeStudiedScreen; the module callback type and regression contract now include both profile and share-sheet routes. No UI or runtime logic was changed for this correction.
 - [x] Frontend Build [42034876037](https://github.com/apexstudying-cmd/prepza/actions/runs/42034876037) passed on the Study Streak code head: 86 frontend source/module contract tests, 5 offline Library regression tests, TypeScript, service-worker validation, production Vite build, architecture audits, and launch-wiring verification.
 - [ ] Full Release Browser/Cross-System Regression [42034875673](https://github.com/apexstudying-cmd/prepza/actions/runs/42034875673) remains queued/in progress on the same application-code head; do not mark the latest code head fully release-verified until it succeeds.
+
+
+## 2026-11-05 follow-up — Profile screen extraction (PR #77)
+
+- [x] Extract ProfileScreen into frontend/src/screens/profile/ProfileScreen.tsx (179 lines) and move its screen-owned PROFILE_CACHE with it.
+- [x] Move shared ProfileMe and HomeDocument contracts to frontend/src/types/profile.ts and GamificationSummary to frontend/src/types/gamification.ts; App.tsx imports those shared types.
+- [x] Keep the existing SkeletonProfile implementation in App.tsx and inject it as a component prop; route dispatch and app-level state ownership remain centralized.
+- [x] Directly compare the moved ProfileScreen component body with base main; it is byte-for-byte identical after normalising only the module export, explicit SkeletonProfile prop, and narrowed route callback type.
+- [x] Add source contracts for profile data requests, cached state, saved/activity/material tabs, cancellation, university/program loading, follow requests, achievements, and existing navigation destinations.
+- [ ] Frontend Build [42035896916](https://github.com/apexstudying-cmd/prepza/actions/runs/42035896916) and Release Browser/Cross-System Regression [42035896997](https://github.com/apexstudying-cmd/prepza/actions/runs/42035896997) are running/queued on the ProfileScreen code head; wait for both before calling this extraction verified.
