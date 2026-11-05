@@ -3,7 +3,7 @@
 **Purpose:** make the repository easier to navigate and maintain without changing user-visible behavior, API contracts, authorization, persistence, billing, or product rules.
 
 **Baseline source checkpoint:** `f747b0d95a6b81cb2868843093546a97e3d09fb5` (2026-10-31).
-**Working branch:** `main`; PR #61, #62, #64, #65, #66, and #67 are merged (PR #62 merge `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`; PR #64 merge `7b0e9301543beabc5dee02af2388983737bada5c`; PR #65 merge `222b4011c40ddadaae3bdcf331022b79a78f5926`; PR #66 merge `29b582b6ca9e47b8a0cd725673c6be76b71358a1`). PR #56, #59, and the consolidated My Study integration PR #61 are also merged; the Achievements module is present on `main`. PR #67 was squash-merged to main as 62cdf80f2652746593b58f131c939f95442b0446.
+**Working branch:** `main`; PR #61, #62, #64, #65, #66, and #67 are merged (PR #62 merge `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`; PR #64 merge `7b0e9301543beabc5dee02af2388983737bada5c`; PR #65 merge `222b4011c40ddadaae3bdcf331022b79a78f5926`; PR #66 merge `29b582b6ca9e47b8a0cd725673c6be76b71358a1`). PR #56, #59, and the consolidated My Study integration PR #61 are also merged; the Achievements module is present on `main`. PR #67 was squash-merged to main as 62cdf80f2652746593b58f131c939f95442b0446. PR #68 (XP Progress), #69 (Library + Notifications), and #70 (shared SQLAlchemy extension) are also merged. PR #73 contains the verified public academic-catalog route extraction and is awaiting final merge.
 **Status:** incremental refactor in progress. This document distinguishes current implementation from target structure.
 
 ## 1. Verified baseline
@@ -13,7 +13,7 @@ The initial source scan found:
 | Area | Baseline size | Observation |
 |---|---:|---|
 | `app.py` | 10,332 lines; 318 top-level function/class declarations | Flask setup, SQLAlchemy models, shared helpers, and many HTTP routes coexist in one module. |
-| `frontend/src/App.tsx` | 16,032 lines at the initial scan; 14,945 after PR #56; 14,887 after PR #59; 14,758 after the Achievements extraction on `main`; 14,573 after the My Study extraction in PR #61 (tested head `48cae152`); 14,129 on PR #62, merged as `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b` after Group Detail was extracted; 13,739 on PR #64 after the two social follow screens were extracted; 12,979 after PR #66 merged the auth-flow screens; 12,622 on main after PR #67 merged Chat Options, shared chat types, and the Avi primitive. | Shared API/theme/icon/type definitions and several screens now live in focused modules. The app shell remains large and still needs staged extraction. |
+| `frontend/src/App.tsx` | 16,032 lines at the initial scan; 14,945 after PR #56; 14,887 after PR #59; 14,758 after the Achievements extraction on `main`; 14,573 after the My Study extraction in PR #61 (tested head `48cae152`); 14,129 on PR #62, merged as `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b` after Group Detail was extracted; 13,739 on PR #64 after the two social follow screens were extracted; 12,979 after PR #66 merged the auth-flow screens; 12,622 on main after PR #67 merged Chat Options, shared chat types, and the Avi primitive. The current `main` snapshot after PR #69 is 12,044 lines. | Shared API/theme/icon/type definitions and several screens now live in focused modules. The app shell remains large and still needs staged extraction. |
 | Frontend build | Long `prebuild` chain | Python scripts rewrite source files before TypeScript/Vite compilation. |
 | Local QA runner | 11 test files; 95 test functions; 98 collected cases | Latest disposable PostgreSQL CI run passed 98/98; the detailed numbered test descriptions in `actualtest.md` are explicitly retained as a historical 74-case snapshot. |
 
@@ -70,10 +70,10 @@ The current `App.tsx` scan shows these large declarations still embedded in the 
 | `PodcastLibraryScreen` | Extracted | Podcast list now lives in `screens/podcast/PodcastLibraryScreen.tsx`; shared item metadata lives in `types/podcast.ts` |
 | `AmbassadorScreen` | Extracted | `screens/ambassador/AmbassadorScreen.tsx` owns the application, dashboard, referrals and payout-request UI |
 | `ChatsScreen` | 358 | High; extract after mapping realtime and encryption integration |
-| `ChatOptionsScreen` | Extracted in PR #67 (pending verification) | The original 331-line body is preserved after explicit injection of the existing file-extension helper and image-type list; shared chat types and the existing Avi primitive now have owned modules. |
+| `ChatOptionsScreen` | Extracted in merged PR #67 | The original 331-line body is preserved after explicit injection of the existing file-extension helper and image-type list; shared chat types and the existing Avi primitive now have owned modules. |
 | `PodcastPlayerScreen` | 327 | Medium |
 | `DocumentStudyScreen` | 323 | High; protect reader progress/offline contracts |
-| `LibraryScreen` | 305 | Medium |
+| `LibraryScreen` | Extracted in merged PR #69 |
 | `SignupScreen` | Extracted in PR #66 | Auth flow screens are owned by `screens/auth/AuthScreens.tsx`; route IDs and auth/CSRF behavior remain in the app shell. |
 
 Line counts are approximate source spans between top-level declarations, not exact executable statement counts. They are useful for prioritization, not a complexity score.
@@ -310,11 +310,11 @@ The first focused workflow attempt failed only because the dedicated test enviro
 
 PR #70 was squash-merged to main as 907658079a63a61439b42ea7de33d46ca31d0658. Backend Shared Extension Contract [42010022947] passed all six focused tests and compilation; Release Browser/Cross-System Regression [42010022682] passed all release gates. The shared extension boundary is now on main. The app remains a module-global Flask entry point; 59 model declarations and 156 route decorators remain to be extracted in bounded, separately verified slices. No separate post-merge workflow run is claimed.
 
-## 2026-11-05 — Notifications backend route boundary (PR #69; final verification pending)
+## 2026-11-05 — Notifications backend route boundary (verified in merged PR #69)
 
 The existing five notification HTTP handlers and serializer are extracted into `notification_routes.py` and registered with `register_notification_routes(app, db, Notification, require_csrf)` from app.py at the same route-registration position. The new module does not import the partially initialized app module. The serializer and 110-line route block were directly compared against the previous app.py source; contents are identical after indentation under the registration function. Route names, paths, methods, decorator placement, login and per-user authorization checks, announcement pin ordering, response shapes, and commits remain unchanged. `get_or_create_notification_prefs` and `should_notify` stay in app.py because they're used elsewhere.
 
-After this extraction, app.py no longer owns the five notification route decorators (151 remain inline at the pre-merge snapshot); the five routes are registered by the new module. All 59 inline ORM model classes remain unchanged. PR #70's shared SQLAlchemy extension and `from app import db` compatibility work is preserved by rebasing this feature branch onto current main before final CI. The PR remains draft pending verification of the combined final head.
+After this extraction, app.py no longer owns the five notification route decorators (151 remain inline at the pre-merge snapshot); the five routes are registered by the new module. All 59 inline ORM model classes remain unchanged. PR #70's shared SQLAlchemy extension and `from app import db` compatibility work is preserved by rebasing this feature branch onto current main before final CI. The combined PR #69 final-head verification passed and the PR was squash-merged to main as `9a937eaca65f8995de5dc20cb3876577cc133445`.
 
 
 ## PR #69 final verification — Library and Notifications (2026-11-05)
@@ -323,4 +323,14 @@ PR #69 now combines the Library UI/types/shared helpers and module-aware prebuil
 
 The branch was reconstructed on top of main commit `78c243a651cb8226f26db43d768f6b8b60f7955d`, preserving PR #70's `extensions.py` and explicit SQLAlchemy initialization. Tested application-code head: `0f61c64793cc32befb8ea22ba8ffedf68ef12412`. Frontend Build [42014965585] passed 69 source/module tests, 5 offline Library tests, functional wiring and ORM/schema audits, TypeScript, service-worker validation, and production build. Student Frontend [42014965317], Student Contract [42014965345], Admin Route [42014965329], E2EE Security [42014965431], E2EE Chat [42014965239], B2B [42014965382], AI Economics [42014965486], AI Generation [42014965230], Prepza Control API [42014965409], Study Navigation [42014965246], Study Hub Runtime [42014965289], and Backend Shared Extension Contract [42014965594] passed. Full Release Browser/Cross-System Regression [42014965433] passed production image, disposable PostgreSQL/Redis, migrations/ledger, responsive checks, B2B ledger regression, 98/98 PostgreSQL QA, online/offline generated-artifact browser journeys, screenshot upload, and cleanup. StudyHub Library Flow [42014965411] was skipped and is not counted as passing.
 
-At this branch code head, `app.py` is 10,223 lines with 151 inline Flask route decorators and 59 inline ORM models; `notification_routes.py` owns five of the 156 total route registrations. This is incremental extraction, not backend completion. PR #69 is still awaiting merge; the frontend's high-risk chat, document study/reader, admin, generation, and app-navigation boundaries and 59 inline models remain future work.
+At this branch code head, `app.py` is 10,223 lines with 151 inline Flask route decorators and 59 inline ORM models; `notification_routes.py` owns five of the 156 total route registrations. This is incremental extraction, not backend completion. PR #69 is merged to main as `9a937eaca65f8995de5dc20cb3876577cc133445`; the frontend's high-risk chat, document study/reader, admin, generation, and app-navigation boundaries and 59 inline models remain future work.
+
+## 2026-11-05 — Public academic catalog route extraction (PR #73; verified)
+
+The original public `list_universities` and `list_programs` handlers now live in `academic_catalog_routes.py`, registered through `register_academic_catalog_routes(app, University, Program)` at their original initialization position after the models and before signup. Both handler bodies were compared with the previous main source and are byte-for-byte identical after removing registrar indentation. The original Flask endpoint names are explicitly retained.
+
+The move preserves GET paths/methods, active-only filtering, alphabetical ordering, missing/inactive university 404 response, and JSON field shapes. No ORM model, migration, database schema, permission, signup flow, or business rule was changed. Focused contract run [42019950835](https://github.com/apexstudying-cmd/prepza/actions/runs/42019950835) passed Python compilation and all 5 tests.
+
+On tested application-code head `55fbf1ce588c6650b5171bd4c752e10055614df7`, Student Frontend Contract [42019950427], Admin Route Contract [42019950566], B2B Contract [42019950492], E2EE Security [42019950395], Study Navigation [42019950431], Prepza Control API [42019950757], AI Economics [42019950545], and Kokoro syntax [42019950385] passed. Full Release Browser/Cross-System Regression [42019950561] passed production image, disposable PostgreSQL/Redis, Alembic migration and controlled SQL-ledger checks, app startup, mobile/tablet browser checks, B2B browser-to-ledger regression, 98/98 PostgreSQL QA tests, online/offline and generated-artifact browser journeys, screenshot upload, and cleanup.
+
+The application source at this tested head is 10,191 lines with 149 inline `@app` route decorators and 59 inline ORM model classes. The total route registrations remain 156: 149 inline in `app.py`, five in `notification_routes.py`, and two in `academic_catalog_routes.py`. This is a small route-family extraction, not full backend extraction or app-factory conversion.
