@@ -280,3 +280,20 @@ PR #70 introduces a module-global `db = SQLAlchemy()` in `extensions.py` and an 
 The constructor monkey-patch was removed from `db_runtime.py`. Existing PostgreSQL pool defaults, environment variable names, `setdefault` behavior, and SQLite/missing-URI bypass behavior are retained. No model, route, schema, migration, endpoint, or business logic is moved or changed in this slice.
 
 Focused tests cover shared extension initialization with SQLite, PostgreSQL pool configuration, explicit-option precedence, and the absence of constructor patching. A dedicated GitHub Actions workflow compiles the entry point and extension modules and runs this focused contract. This PR remains draft until those checks and the full release regression complete. The global Flask app remains in app.py; no app factory is claimed.
+
+
+## Backend ownership map — audited app.py baseline
+
+The audited baseline contains 59 inline `db.Model` classes and 156 decorated Flask route handlers. These are declaration counts, not a claim that each route decorator maps to a unique URL or that every model has no equivalent dynamically declared table in another module. Use this list as a starting map and confirm each model's relationships, importers, Alembic metadata, and runtime registration before moving it.
+
+| Domain candidate | Inline model declarations to map | Main extraction cautions |
+|---|---|---|
+| Identity and platform | `User`, `SystemSetting`, `UserKey`, `AuditLog`, `RequestObservabilityEvent`, `PushSubscription`, `Notification`, `NotificationPreference`, `Announcement`, `ContentReport`, `UserWarning` | Session/auth decorators, admin permissions, request lifecycle hooks, notification producers, and observability scrubbing |
+| Academic catalog | `University`, `Program`, `ContentItem` | Seed/import scripts, public catalogue route contracts, and foreign-key consumers |
+| Billing and organisations | `Payment`, `Organisation`, `OrganisationMember`, `Opportunity`, `Ambassador`, `Referral`, `AmbassadorPayout` | Paystack/webhook idempotency, B2B ledger integrity, entitlement writes, and dynamically registered billing models |
+| Documents and learning | `DocumentContent`, `DocumentPageText`, `Document`, `DocumentReadingProgress`, `GeneratedMaterial`, `AiJob`, `TutorConversation`, `TutorMessage`, `StudentLearningProfile`, `LearningConcept`, `LearningEvent`, `StudentConceptMastery`, `ConceptPrerequisite`, `LibraryPublication`, `SavedLibraryMaterial`, `LibraryReport`, `XpEvent`, `StudyStreak`, `StudyActivityLog`, `StudyTimeLog`, `QuizAttempt`, `FlashcardSession`, `UserAchievement`, `AiUsageLog` | Retrieval permissions, document ownership, generated-material invalidation, offline sync, XP/streak time boundaries, and AI usage accounting |
+| Chat and community | `Conversation`, `ConversationParticipant`, `Message`, `MessageAttachment`, `Group`, `GroupMember`, `GroupPost`, `GroupPostComment`, `GroupPostLike`, `GroupQuestionVote`, `GroupFile`, `Follow`, `FollowRequest` | E2EE key material, realtime event ordering, message idempotency, attachment authorization, and social notification side effects |
+
+The 156 route decorators span the public shell/health, authentication, profile, document upload/read/study, AI generation, learning activity, library, subscription/payment, admin, ambassador, discovery/opportunities, social/community, and chat domains. The route extraction sequence should prioritize bounded route families already covered by standalone `register_*` modules, but only after import and extension ownership are stable. Preserve route paths, HTTP methods, endpoint names, decorator order, auth/CSRF behavior, response payloads, and registration timing.
+
+Do not move all 59 models into a single models.py. Extract by bounded domain only after a generated import/relationship graph and Alembic metadata tests show no duplicate tables, missing relationships, changed naming, or migration drift.
