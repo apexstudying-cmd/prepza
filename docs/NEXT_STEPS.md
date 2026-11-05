@@ -807,3 +807,12 @@ PR #77 is intentionally one consolidated review rather than separate PRs for eac
 - [x] Add source contracts for debounced student search, cancellation/timeout cleanup, direct chat create/reuse, group validation/creation, CSRF headers, selected participant handling, and chat-detail navigation.
 - [x] Latest Frontend Build [42031983870] passed 78 source/module contract tests, 5 offline Library regression tests, TypeScript, service-worker validation, production build, and architecture audits. Student Frontend [42031983952], Student Contract [42031983901], Admin Route [42031984066], B2B [42031983984], AI Economics [42031983713], AI Generation [42031983800], Prepza Control API [42031983813], E2EE Chat [42031983969], and E2EE Security [42031983859] passed.
 - [x] Full Release Browser/Cross-System Regression [42031984075](https://github.com/apexstudying-cmd/prepza/actions/runs/42031984075) passed on the New Chat code head: production image, disposable PostgreSQL/Redis, 43 migration files and controlled ledger, app startup, mobile/tablet browser checks, B2B browser-to-ledger metering, 98/98 PostgreSQL QA, online/offline Study Hub and generated-artifact journeys, screenshot upload, and cleanup. The commits after this tested application-code head are documentation-only.
+
+
+## 2026-11-05 follow-up — Time Studied and Share Opportunity extractions (PR #77)
+
+- [x] Extract TimeStudiedScreen into frontend/src/screens/gamification/TimeStudiedScreen.tsx (61 lines); App.tsx reduced by 54 lines.
+- [x] Extract ShareOppForm into frontend/src/screens/opportunities/ShareOppForm.tsx (45 lines); App.tsx reduced by 40 lines.
+- [x] Directly compare both moved component bodies against base main: both are byte-for-byte identical after normalising only module exports and narrowed navigation callback types.
+- [x] Add focused source contracts for study period selection, /study-time loading/cancellation, duration formatting, and profile navigation; add form field, category, controlled description, and existing navigation contracts.
+- [ ] Latest Frontend Build [42034151911](https://github.com/apexstudying-cmd/prepza/actions/runs/42034151911) and full Release Browser/Cross-System Regression [42034151448](https://github.com/apexstudying-cmd/prepza/actions/runs/42034151448) are running on the latest code head. Do not mark these two extractions release-verified until the latest checks pass.
