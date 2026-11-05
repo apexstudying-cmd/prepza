@@ -371,6 +371,7 @@ def test_study_navigation_transform_supports_extracted_splash_and_is_idempotent(
     assert "resumeOffline={() =>" in transformed_app
     assert "const resumeable: Screen[]" in transformed_app
     assert "resumeOffline()" in transformed_module
+    assert "brandline, resumeOffline" in transformed_module
     assert "typeof navigator !== 'undefined' && !navigator.onLine" in transformed_module
 
     subprocess.run(command, cwd=root, check=True)
