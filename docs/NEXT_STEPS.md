@@ -826,3 +826,12 @@ PR #77 is intentionally one consolidated review rather than separate PRs for eac
 - [x] Frontend Build [42033518073] passed 80 source/module contract tests, 5 offline Library tests, TypeScript, service-worker validation, production build and architecture audits. Student Frontend, Student Contract, Admin Route, B2B, AI economics, AI generation, Prepza Control API, and E2EE Chat passed on the tested code head.
 - [x] Full Release Browser/Cross-System Regression [42033518119](https://github.com/apexstudying-cmd/prepza/actions/runs/42033518119) passed on the Student Profile code head: production image, PostgreSQL/Redis, 43 migration files and controlled ledger, app startup, mobile/tablet browser checks, B2B metering, 98/98 PostgreSQL QA, online/offline Study Hub and generated-artifact journeys, screenshots, and cleanup.
 - [ ] E2EE Security Regression [42033518226](https://github.com/apexstudying-cmd/prepza/actions/runs/42033518226) is still running at the checkout step; wait for its result before merge. Subsequent PR commits are documentation-only.
+
+
+## 2026-11-05 follow-up — Study Streak extraction (PR #77)
+
+- [x] Extract StudyStreakScreen and its local streak response types into frontend/src/screens/gamification/StudyStreakScreen.tsx (214 lines); App.tsx reduced by 205 lines.
+- [x] Compare the moved component body with base main; it is byte-for-byte identical after normalising only the module export and navigation callback type.
+- [x] Add contracts for month-scoped /streak loading, cancellation, selected-day interaction, month navigation, milestones, duration formatting, and profile/share-sheet navigation.
+- [x] The first typecheck identified the existing share-sheet navigation in TimeStudiedScreen; the module callback type and regression contract now include both profile and share-sheet routes. No UI or runtime logic was changed for this correction.
+- [ ] Frontend Build [42034876037](https://github.com/apexstudying-cmd/prepza/actions/runs/42034876037) and Release Browser/Cross-System Regression [42034875673](https://github.com/apexstudying-cmd/prepza/actions/runs/42034875673) are queued on the Study Streak code head; wait for their results before marking it verified.
