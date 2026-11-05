@@ -247,7 +247,7 @@ Already-separated backend areas include AI economics/generation, usage and organ
 ### Concrete blockers to a conventional app factory
 
 - app.py constructs a module-global Flask app and binds db = SQLAlchemy(app) during import. It also binds Flask-Limiter and initializes Sentry at module scope.
-- The former db_runtime.py constructor monkey-patch has been replaced on the backend refactor branch by explicit configure-before-init through extensions.py. PR #69 verification is pending; do not treat this as merged until CI passes.
+- The former db_runtime.py constructor monkey-patch has been replaced on the backend refactor branch by explicit configure-before-init through extensions.py. PR #70 verification is pending; do not treat this as merged until CI passes.
 - Several modules still import the global app or its models from app.py; examples include chat_interactions.py, chat_group_routes.py, and prepza_control.py. Other modules use deferred imports from app inside functions, including document and generation paths.
 - Existing register_* modules are not all pure registration functions: some perform schema/bootstrap work inside app.app_context() while they are registered during application import.
 - tools/route_inventory.py and tools/route_coverage_matrix.py import the module-global app; retain that compatibility export throughout the migration.
@@ -273,9 +273,9 @@ The active study-streak and time-studied routes continue to use StudyActivityScr
 PR #68 (active XP Progress screen and shared study-time formatter) was squash-merged to main as 74dcebce5dd05ad08b5e3d77007cc5205f0b7bc0 after Frontend Build, student contracts, related admin/B2B/AI/E2EE/navigation/control checks, and full Release Browser/Cross-System Regression passed on tested code head cc665bce25bb570abe659d33e675b5f8acba690a. Later PR commits were documentation-only. This is another completed frontend slice, not completion of the repository-wide refactor.
 
 
-## 2026-11-05 backend shared-extension boundary — PR #69 in verification
+## 2026-11-05 backend shared-extension boundary — PR #70 in verification
 
-PR #69 introduces a module-global `db = SQLAlchemy()` in `extensions.py` and an explicit `init_extensions(app)` function. The function applies the existing PostgreSQL pool defaults before calling `db.init_app(app)`. `app.py` imports the same shared `db` object and initializes it after setting its existing configuration, preserving the legacy `from app import db` compatibility export used by models, route modules, Alembic, and scripts.
+PR #70 introduces a module-global `db = SQLAlchemy()` in `extensions.py` and an explicit `init_extensions(app)` function. The function applies the existing PostgreSQL pool defaults before calling `db.init_app(app)`. `app.py` imports the same shared `db` object and initializes it after setting its existing configuration, preserving the legacy `from app import db` compatibility export used by models, route modules, Alembic, and scripts.
 
 The constructor monkey-patch was removed from `db_runtime.py`. Existing PostgreSQL pool defaults, environment variable names, `setdefault` behavior, and SQLite/missing-URI bypass behavior are retained. No model, route, schema, migration, endpoint, or business logic is moved or changed in this slice.
 
