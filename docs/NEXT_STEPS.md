@@ -737,3 +737,6 @@ PR #68 was squash-merged to main as 74dcebce5dd05ad08b5e3d77007cc5205f0b7bc0 aft
 - [x] Apply existing PostgreSQL pool defaults explicitly before `db.init_app(app)`; remove the `SQLAlchemy.__init__` monkey-patch from `db_runtime.py`.
 - [x] Verify SQLite behavior, PostgreSQL pool option defaults/overrides, and extension initialization through focused contract tests and CI (6/6 passed; run 42010022947).
 - [x] Run the full release browser/cross-system regression (run 42010022682 passed). No model, route, schema, or business logic extraction is included in this PR.
+
+
+PR #70 was squash-merged to main as 907658079a63a61439b42ea7de33d46ca31d0658 after Backend Shared Extension Contract [42010022947] and Release Browser/Cross-System Regression [42010022682] passed on the application-code head. The dedicated contract passed all six tests. No separate post-merge workflow run is claimed.
