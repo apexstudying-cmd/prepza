@@ -267,6 +267,7 @@ def test_library_my_study_transform_supports_extracted_screen_module_and_is_idem
     root = tmp_path
     (root / "tools").mkdir()
     (root / "frontend" / "src" / "screens" / "study").mkdir(parents=True)
+    (root / "frontend" / "src" / "screens" / "library").mkdir(parents=True)
     shutil.copyfile(
         ROOT / "tools" / "apply_library_my_study_separation.py",
         root / "tools" / "apply_library_my_study_separation.py",
@@ -276,15 +277,22 @@ def test_library_my_study_transform_supports_extracted_screen_module_and_is_idem
         ROOT / "frontend" / "src" / "screens" / "study" / "StudyMaterialsScreen.tsx",
         root / "frontend" / "src" / "screens" / "study" / "StudyMaterialsScreen.tsx",
     )
+    shutil.copyfile(
+        ROOT / "frontend" / "src" / "screens" / "library" / "LibraryScreen.tsx",
+        root / "frontend" / "src" / "screens" / "library" / "LibraryScreen.tsx",
+    )
     subprocess.run([sys.executable, str(root / "tools" / "apply_library_my_study_separation.py")], check=True)
     transformed_app = (root / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+    library = (root / "frontend" / "src" / "screens" / "library" / "LibraryScreen.tsx").read_text(encoding="utf-8")
     module = (root / "frontend" / "src" / "screens" / "study" / "StudyMaterialsScreen.tsx").read_text(encoding="utf-8")
-    assert "useState<'Browse' | 'Published'>" in transformed_app
-    assert "activeTab === 'Saved'" not in transformed_app
-    assert "saveActionError" in transformed_app
+    assert "useState<'Browse' | 'Published'>" in library
+    assert "activeTab === 'Saved'" not in library
+    assert "saveActionError" in library
+    assert "function LibraryScreen(" not in transformed_app
     assert "Saved from Prepza Library" in module
     assert "function StudyMaterialsScreen(" not in transformed_app
     subprocess.run([sys.executable, str(root / "tools" / "apply_library_my_study_separation.py")], check=True)
+    assert library == (root / "frontend" / "src" / "screens" / "library" / "LibraryScreen.tsx").read_text(encoding="utf-8")
 
 
 def test_login_screen_is_owned_by_an_auth_feature_module():
