@@ -2176,3 +2176,7 @@ The original `list_universities` and `list_programs` function bodies are byte-fo
 The final release regression [run 42019950561](https://github.com/apexstudying-cmd/prepza/actions/runs/42019950561) passed the production image build, PostgreSQL/Redis startup, migrations and SQL ledger, app startup, responsive browser checks, B2B browser-to-ledger regression, 98/98 disposable PostgreSQL QA tests, online/offline generated-artifact journeys, screenshot upload, and service cleanup. Related student/admin/B2B/E2EE/AI/navigation/control API workflows passed. No model, schema, migration or app-factory changes were part of this extraction.
 
 At this source checkpoint, `app.py` is 10,191 lines with 149 inline route decorators and 59 model declarations. All 156 routes are still registered: 149 in `app.py`, five through `notification_routes.py`, and two through `academic_catalog_routes.py`. The number of module-owned routes is increasing, but the root Flask application remains global and the ORM models have not yet been extracted.
+
+### Post-merge status — PR #73
+
+The academic catalog route boundary is merged to `main` as `d57cfecde2c98b59eec867c70cca4270ed2b1e73`. It is a narrow extraction of two read-only endpoints, not a route rewrite. The root app still owns 59 inline model classes and 149 inline route decorators; five notification routes and two academic-catalog routes now have module-owned registration.
