@@ -100,3 +100,5 @@ python -m pytest -q \
 
 
 - src/screens/profile/StudentProfileScreen.tsx - another student's public profile, privacy-aware display, follow/unfollow and pending requests, direct-message creation, and profile statistics. Preserve /public-profile and /follow-summary requests, CSRF-protected follow and chat requests, private-profile behavior, and the existing chat-detail/chat-options/back destinations.
+
+- src/screens/gamification/StudyStreakScreen.tsx - streak calendar, monthly navigation, selected-day detail and milestones. Preserve the month-scoped /streak request, cancellation guard, current/longest streak values, study-duration shading thresholds, selected-day interaction, milestone filtering, and profile/share-sheet navigation.
