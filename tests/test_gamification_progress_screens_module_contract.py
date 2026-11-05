@@ -1,25 +1,25 @@
-"""Guard gamification progress, streak, and study-time screens during extraction."""
+"""Guard the active XP progress screen and shared study-time contract during extraction."""
 
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = (ROOT / "frontend/src/App.tsx").read_text(encoding="utf-8")
-SCREENS = ROOT / "frontend/src/screens/gamification/ProgressScreens.tsx"
+SCREEN = ROOT / "frontend/src/screens/gamification/ProgressScreens.tsx"
 TYPES = ROOT / "frontend/src/types/gamification.ts"
 FORMATTER = ROOT / "frontend/src/lib/studyTime.ts"
 
 
-def test_progress_screens_are_module_owned_and_routes_keep_the_same_props():
-    assert "import { XPProgressScreen, StudyStreakScreen, TimeStudiedScreen } from './screens/gamification/ProgressScreens'" in APP
-    for name in ("XPProgressScreen", "StudyStreakScreen", "TimeStudiedScreen"):
-        assert f"function {name}(" not in APP
-    assert "case 'xp-progress':" in APP
-    assert "case 'study-streak':" in APP
-    assert "case 'time-studied':" in APP
+def test_xp_progress_screen_is_module_owned_and_route_is_unchanged():
+    assert "import { XPProgressScreen } from './screens/gamification/ProgressScreens'" in APP
+    assert "function XPProgressScreen(" not in APP
+    assert "case 'xp-progress':       return <XPProgressScreen setScreen={setScreen} />" in APP
+    # These routes intentionally continue to use the existing StudyActivityScreen.
+    assert "case 'study-streak':      return <StudyActivityScreen setScreen={setScreen} />" in APP
+    assert "case 'time-studied':      return <StudyActivityScreen setScreen={setScreen} />" in APP
 
 
-def test_xp_progress_keeps_pagination_and_api_contract():
-    source = SCREENS.read_text(encoding="utf-8")
+def test_xp_progress_keeps_api_pagination_and_navigation_contracts():
+    source = SCREEN.read_text(encoding="utf-8")
     for contract in (
         "api<XpProgressResponse>('/xp/progress?page=1')",
         "`/xp/progress?page=${nextPage}`",
@@ -31,43 +31,17 @@ def test_xp_progress_keeps_pagination_and_api_contract():
         assert contract in source
 
 
-def test_streak_keeps_month_navigation_calendar_and_share_behavior():
-    source = SCREENS.read_text(encoding="utf-8")
-    for contract in (
-        "api<StreakResponse>('/streak' + (viewMonth ? `?month=${viewMonth}` : ''))",
-        "setViewMonth(res.calendar_month)",
-        "setSelectedDay",
-        "formatStudyDuration(d.study_seconds)",
-        "setScreen('share-sheet')",
-        "setScreen('profile')",
-    ):
-        assert contract in source
-
-
-def test_study_time_keeps_period_filter_api_and_share_behavior():
-    source = SCREENS.read_text(encoding="utf-8")
-    for contract in (
-        "useState<'day' | 'week' | 'month'>('week')",
-        "api<StudyTimeResponse>(`/study-time?period=${period}`)",
-        "formatStudyTime(data.total_seconds)",
-        "setScreen('share-sheet')",
-        "setScreen('profile')",
-    ):
-        assert contract in source
-
-
-def test_gamification_response_types_and_shared_time_formatter_are_preserved():
+def test_gamification_response_types_and_shared_study_time_formatter_are_preserved():
     types = TYPES.read_text(encoding="utf-8")
     formatter = FORMATTER.read_text(encoding="utf-8")
     for contract in (
         "export type XpHistoryItem =",
         "export type HowToEarnItem =",
         "export type XpProgressResponse =",
-        "export type StreakCalendarDay =",
-        "export type StreakMilestone =",
-        "export type StreakResponse =",
         "export type StudyTimeResponse =",
     ):
         assert contract in types
     assert "export function formatStudyTime(totalSeconds: number)" in formatter
     assert "type StudyTimeResponse =" not in APP
+    assert "function formatStudyTime(" not in APP
+    assert "formatStudyTime(profile.weekly_study_seconds)" in APP
