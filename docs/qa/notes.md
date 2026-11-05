@@ -2192,3 +2192,10 @@ The current tested source is 10,174 lines in `app.py`, with 57 ORM model classes
 ### Post-merge status — PR #74
 
 The academic catalog model ownership move is merged to `main` as `6b82aba7bd7d167488c4a0e9921be6deb50a7648`. The app compatibility exports remain in place; `academic_models.py` uses the single shared SQLAlchemy extension and keeps the same 59-model metadata. The current root entry point is 10,174 lines, with 57 inline model declarations and 149 inline route decorators.
+
+
+## 2026-11-05 — Morio AI Tutor screen extraction (PR #75)
+
+This extraction moves the active Morio tutor screen, its document picker/message types, and its session-scoped cache into one feature-owned module. The cache stays at module scope rather than component state so it still survives the tutor screen unmounting, just as it did when declared in App.tsx. The existing app-shell error display, delayed loading wrapper, and tutor skeleton remain shared and are supplied through typed props.
+
+An import-graph check found no prebuild transform that rewrites AITutorScreen. The original 183-line function body was directly compared against main and remained byte-for-byte identical after only the module export/signature normalization and explicit shell-component props. The new contract test covers route wiring, document selection, tutor API endpoints/payload, cache reuse, CSRF, heartbeat, and existing 429/503 feedback. Frontend Build and full release browser/cross-system regression passed on code head `f5f8afb34a8d74c742de4b4d33762ec882b05a81`, along with student, AI-generation, E2EE, B2B, admin, study-navigation and control API contracts. StudyHub Library Flow was skipped and is not counted as passing.

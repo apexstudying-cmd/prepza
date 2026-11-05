@@ -149,3 +149,18 @@ No model schema or migration changed. At this tested source head, `app.py` has 5
 ### Post-merge status — PR #74
 
 PR #74 was squash-merged to `main` as `6b82aba7bd7d167488c4a0e9921be6deb50a7648`. The code tested on head `f7c8ec327483f4d5170bfa0aa4ec60285d81574f` is the merged application source; the subsequent commits before merge changed documentation only. The focused 10-test backend extension/model contract and full release browser evidence above are from that tested source head. No separate post-merge workflow is claimed.
+
+
+## 2026-11-05 — Morio AI Tutor screen extraction (PR #75)
+
+The existing AITutorScreen is now owned by `frontend/src/screens/tutor/AITutorScreen.tsx`. The document picker and conversation UI, TutorMsg/PickableDoc contracts, and the module-scoped `AI_TUTOR_CACHE` moved together. The `ai-tutor` route and app-shell navigation callbacks remain unchanged. The shell-owned error and skeleton components are injected as typed props, so the screen does not import App.tsx or duplicate generic UI.
+
+The original 183-line component body was compared directly with the previous main source. It is byte-for-byte identical after normalizing the export declaration, narrowing the screen callback to its existing `home` and `upload` destinations, and adding only the three existing app-shell components as props. No tutor API URL/method, CSRF header, JSON body, heartbeat cadence, rate-limit/budget message, document filtering rule, UI markup or state transition was intentionally changed.
+
+Evidence on tested code head `f5f8afb34a8d74c742de4b4d33762ec882b05a81`:
+- Frontend Build [42022943650](https://github.com/apexstudying-cmd/prepza/actions/runs/42022943650) passed the source/module contracts, offline Library regression, functional wiring and ORM/schema audits, TypeScript, service-worker validation and production build.
+- Student Frontend [42022943640](https://github.com/apexstudying-cmd/prepza/actions/runs/42022943640), Student Contract [42022943669](https://github.com/apexstudying-cmd/prepza/actions/runs/42022943669), Admin Route [42022943910](https://github.com/apexstudying-cmd/prepza/actions/runs/42022943910), B2B [42022943975](https://github.com/apexstudying-cmd/prepza/actions/runs/42022943975), E2EE Security [42022943817](https://github.com/apexstudying-cmd/prepza/actions/runs/42022943817), E2EE Chat [42022943967](https://github.com/apexstudying-cmd/prepza/actions/runs/42022943967), AI Economics [42022943628](https://github.com/apexstudying-cmd/prepza/actions/runs/42022943628), AI Generation [42022943687](https://github.com/apexstudying-cmd/prepza/actions/runs/42022943687), Study Navigation [42022943704](https://github.com/apexstudying-cmd/prepza/actions/runs/42022943704), and Prepza Control API [42022943818](https://github.com/apexstudying-cmd/prepza/actions/runs/42022943818) passed.
+- Release Browser/Cross-System Regression [42022943630](https://github.com/apexstudying-cmd/prepza/actions/runs/42022943630) passed the production image, disposable database/migration ledger, responsive browser checks, B2B ledger regression, 98/98 PostgreSQL QA, online/offline and generated-artifact journeys, screenshot upload, and cleanup.
+- StudyHub Library Flow [42022943808](https://github.com/apexstudying-cmd/prepza/actions/runs/42022943808) was skipped by workflow conditions and is not counted as a pass.
+
+The verification is scoped to the tested PR head; subsequent PR changes are documentation-only. This extraction does not complete the remaining chat, document study/reader, admin or app-navigation boundaries.

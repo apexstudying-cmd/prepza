@@ -58,6 +58,7 @@ python -m pytest -q \
 - `src/ui/Pill.tsx` - shared status pill component.
 - `src/lib/pushNotifications.ts` - browser push subscription/unsubscription helpers using the shared application API client.
 - `src/screens/notifications/NotificationsScreen.tsx` and `src/types/notifications.ts` - notification loading, cached optimistic read/delete state, and navigation from podcast, group, and user notifications. The existing empty-state and delayed-loading UI are injected as props; preserve API paths, CSRF headers, notification cache, and route destinations.
+- `src/screens/tutor/AITutorScreen.tsx` - Morio document picker, cached tutor conversation, message submission, and study-time heartbeat. The screen owns its existing session cache and receives the app-shell error/skeleton components as props; preserve tutor endpoints, CSRF payloads, 20-second heartbeat cadence, and rate-limit/budget error handling.
 - `src/screens/<domain>/` - home for additional screen-level compositions, grouped by feature domain.
 - `src/admin/`, `src/crypto/`, `src/generation/`, `src/offline/`, `src/organisation/`, and `src/share/` - existing feature modules. Retain their boundaries unless a dependency map supports a safe move.
 
