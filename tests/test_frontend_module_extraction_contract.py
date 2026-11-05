@@ -471,3 +471,26 @@ def test_student_profile_module_preserves_follow_privacy_and_message_contracts()
         "documents_count",
     ):
         assert contract in source
+
+
+def test_time_studied_screen_is_owned_by_the_gamification_module():
+    assert "import TimeStudiedScreen from './screens/gamification/TimeStudiedScreen'" in APP
+    assert "case 'time-studied':" in APP
+    assert "function TimeStudiedScreen(" not in APP
+
+
+def test_time_studied_module_preserves_period_selection_and_loading_contract():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "gamification" / "TimeStudiedScreen.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "useState<'day' | 'week' | 'month'>('week')",
+        "`/study-time?period=${period}`",
+        "api<StudyTimeResponse>",
+        "if (!cancelled) setData(res)",
+        "if (!cancelled) setError",
+        "return () => { cancelled = true }",
+        "formatStudyTime(data.total_seconds)",
+        "setScreen('profile')",
+    ):
+        assert contract in source
