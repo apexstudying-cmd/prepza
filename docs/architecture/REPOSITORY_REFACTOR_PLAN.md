@@ -405,3 +405,8 @@ Frontend Build [42033518073] passed 80 source/module tests, 5 offline Library te
 ### Study Streak module — 2026-11-05
 
 StudyStreakScreen and its response types are now owned by frontend/src/screens/gamification/StudyStreakScreen.tsx. The screen body matches base main byte-for-byte after export and callback-type normalisation. The module preserves its existing month navigation, cancellation, tap-to-reveal calendar day, milestone, and share-sheet behavior. A prior typecheck caught and prompted correction of the existing share-sheet callback in TimeStudiedScreen; the corrected route union is now covered by a source contract. The latest Frontend Build [42034876037] passed 86 frontend source/module contracts, 5 offline Library tests, TypeScript, production build, architecture audits and launch-wiring verification. Full release regression [42034875673] remains pending.
+
+
+### Profile screen boundary — 2026-11-05
+
+ProfileScreen now lives in screens/profile/ProfileScreen.tsx. Its PROFILE_CACHE moved with it; ProfileMe and HomeDocument are shared in types/profile.ts, while GamificationSummary is in types/gamification.ts. App.tsx retains route dispatch, parent-owned state and the existing SkeletonProfile component (passed into the screen). The screen body was verified byte-for-byte against base main after export/prop/callback type normalisation. CI and release regression are pending on the new code head.
