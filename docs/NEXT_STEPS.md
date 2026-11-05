@@ -771,3 +771,15 @@ PR #73 was squash-merged to `main` as `d57cfecde2c98b59eec867c70cca4270ed2b1e73`
 - [ ] Continue bounded model extraction only after reviewing foreign-key consumers, relationships, Alembic metadata, and import compatibility. The current tested source has 57 inline ORM classes plus 2 academic models in academic_models.py; app.py remains a global Flask entry point.
 
 PR #74 was squash-merged to `main` as `6b82aba7bd7d167488c4a0e9921be6deb50a7648` after the 10/10 Backend Shared Extension Contract and full Release Browser/Cross-System Regression [42021795474] passed. Current backend snapshot: 10,174 lines in app.py, 57 inline model declarations, two academic models in academic_models.py, 149 inline route decorators, and 156 total route registrations across the app and route modules.
+
+
+## 2026-11-05 — Backend public shell and health routes (PR #76; verified)
+
+- [x] Move the existing `GET /`, `GET /sw.js`, and `GET /health` handlers into `public_shell_routes.py`; register them at their original initialization point with explicit app, database, limiter, and safe expiry-sweep dependencies.
+- [x] Preserve the original route paths, GET/HEAD/OPTIONS methods, Flask endpoint names, static-folder behavior, root-scoped service-worker JavaScript content type and no-cache header, health SQL probe, rate-limit exemption, expiry-sweep call, and success/error response bodies. The three handler bodies were compared against the original source; the only health-handler substitution is the explicitly injected sweep callback.
+- [x] Backend Public and Academic Route Contracts [run 42025424615](https://github.com/apexstudying-cmd/prepza/actions/runs/42025424615) passed Python compilation and the public-shell plus academic-route contract tests.
+- [x] Backend Shared Extension Contract [run 42025424857](https://github.com/apexstudying-cmd/prepza/actions/runs/42025424857) passed.
+- [x] Release Browser/Cross-System Regression [run 42025424651](https://github.com/apexstudying-cmd/prepza/actions/runs/42025424651) passed production image, disposable PostgreSQL/Redis, Alembic migrations and SQL ledger, app startup, responsive browser checks, B2B browser-to-ledger, full PostgreSQL QA, online/offline generated-artifact journeys, screenshot upload, and cleanup. StudyHub Library Flow [run 42025424617](https://github.com/apexstudying-cmd/prepza/actions/runs/42025424617) was skipped and is not counted as a pass.
+- [ ] Continue extracting route families only after mapping their model, authorization, helper, and import dependencies. The Flask global app and legacy imports remain in place; no app factory, model, middleware, schema, or migration change is included in PR #76.
+
+PR #76 application-code head tested: `1e5880012fa017dca085ea811fa3215d12f32177`. On that source, `app.py` has 146 inline route decorators; the three public routes now register through `public_shell_routes.py`. Together with five notification routes and two academic catalog routes, all 156 route registrations remain present. The app remains a global Flask entry point.
