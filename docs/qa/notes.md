@@ -2239,3 +2239,8 @@ Moved StudyStreakScreen plus its local response types into the gamification modu
 ## Profile screen extraction — PR #77
 
 Moved ProfileScreen and its PROFILE_CACHE into the profile module. Moved shared ProfileMe/HomeDocument contracts into types/profile.ts and GamificationSummary into types/gamification.ts. Kept route dispatch, app state and SkeletonProfile implementation in App.tsx. The screen body matches base main after only export/prop/callback type normalisation. Tests cover profile data APIs, cache, tabs, cancellation, university/program resolution and navigation. Frontend Build [42036291254] passed: 88 frontend source/module contracts, 5 offline Library tests, TypeScript, production build, architecture audits and launch-wiring verification. A typecheck caught the ProfileScreen's dynamic route casts; a local ProfileScreenRoute union now expresses the same existing destinations. Release Browser/Cross-System Regression [42036291297] and remaining workflows are queued on this code head.
+
+
+## Document Ready extraction — PR #77
+
+Moved DocReadyScreen into the study feature module and DocumentDetail into types/documents.ts. The existing TopBar is injected from App.tsx; route dispatch remains unchanged. Body comparison against base main passed after export/prop/route-type normalisation. Focused contracts protect document loading, metadata and all existing action destinations. Latest frontend build and full release regression are queued on code head 74b8fac.
