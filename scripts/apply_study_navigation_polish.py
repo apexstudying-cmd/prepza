@@ -213,6 +213,12 @@ def harden_extracted_splash_startup(app_text: str) -> str:
             "brandline: string; resumeOffline: () => boolean })",
             1,
         )
+    if "brandline, resumeOffline" not in module:
+        module = module.replace(
+            "{ setScreen, brandline }:",
+            "{ setScreen, brandline, resumeOffline }:",
+            1,
+        )
 
     marker = "    setState('checking')\n"
     offline_guard = """    setState('checking')
