@@ -236,3 +236,28 @@ The backend is partially modularized, not fully extracted. Existing modules incl
 
 
 PR #66 (auth-flow screens) is complete and merged. PR #67 (Chat Options, shared chat types, and shared Avi UI primitive) is complete and merged as 62cdf80f2652746593b58f131c939f95442b0446 after Frontend Build and full Release Browser/Cross-System Regression passed. The backend remains only partially modularized: existing service/integration modules are extracted, but the root Flask app still owns app setup, ORM models, and many route families. Backend work starts with extensions/app-factory/import compatibility rather than moving routes or models in one sweep.
+
+
+## 2026-11-05 backend current-state inventory
+
+The backend is **partially modularized, not extracted**. A source scan of the current app.py baseline found approximately 10,332 lines, 59 inline SQLAlchemy model classes, and 156 inline Flask route decorators. These are source-level counts, not a claim about the number of distinct live URL rules.
+
+Already-separated backend areas include AI economics/generation, usage and organisation billing, discovery/B2B finance, admin operations/monitoring, document processing/retrieval, E2EE chat routes, offline activity, Shop, and request observability. app.py still owns global application construction, many route handlers, and the ORM model declarations.
+
+### Concrete blockers to a conventional app factory
+
+- app.py constructs a module-global Flask app and binds db = SQLAlchemy(app) during import. It also binds Flask-Limiter and initializes Sentry at module scope.
+- db_runtime.py currently monkey-patches SQLAlchemy.__init__ so database pool options are applied before the engine is created. This is an initialization workaround, not a clean shared-extension boundary.
+- Several modules still import the global app or its models from app.py; examples include chat_interactions.py, chat_group_routes.py, and prepza_control.py. Other modules use deferred imports from app inside functions, including document and generation paths.
+- Existing register_* modules are not all pure registration functions: some perform schema/bootstrap work inside app.app_context() while they are registered during application import.
+- tools/route_inventory.py and tools/route_coverage_matrix.py import the module-global app; retain that compatibility export throughout the migration.
+
+### Safe backend migration order
+
+1. Add import-compatibility and initialization-order tests before changing extension ownership. Preserve from app import app, db, Model for existing runtime modules, scripts, migrations, and tests.
+2. Introduce a shared extensions.py boundary for the SQLAlchemy extension, then initialize it against the existing global Flask app after explicit database runtime configuration. Remove the constructor monkey-patch only after tests prove engine options, SQLite test behavior, session lifecycle, and PostgreSQL pool settings remain unchanged.
+3. Map each model's foreign keys, relationships, importers, and Alembic metadata before moving model classes. Move models by bounded domain groups only after the shared extension is stable.
+4. Convert route families to explicit blueprints/registration functions while preserving endpoint names, methods, auth/CSRF decorators, response bodies, status codes, and route order where observable.
+5. Add app_factory.py only when route registration no longer depends on importing a partially initialized global app module. Keep app.py as a WSGI and legacy-import compatibility entry point until all consumers have migrated.
+
+Do not combine extension extraction, model movement, route rewrites, and factory creation in one change. The first backend PR should be an initialization/extension-boundary change with import, configuration, migration, and route-inventory regression tests; it must not alter business logic or database schema.
