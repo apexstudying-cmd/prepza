@@ -177,3 +177,12 @@ Frontend Build [42030603950](https://github.com/apexstudying-cmd/prepza/actions/
 The full Release Browser/Cross-System Regression [42030603969](https://github.com/apexstudying-cmd/prepza/actions/runs/42030603969) passed: production app image; disposable PostgreSQL/Redis; all 43 migration files and controlled SQL ledger; app startup; mobile/tablet responsive browser checks; B2B browser-to-ledger metering; 98/98 disposable PostgreSQL QA tests; online/offline Study Hub and generated-artifact journeys; screenshot upload; and cleanup. StudyHub Library Flow was skipped by workflow conditions and is not counted as passing. Subsequent PR commits update documentation only; no application source changed after the tested code head.
 
 No API, authentication, authorization, database, product-rule, screen-design, or business-logic rewrite was included. The refactor remains incomplete: ChatDetail/Chats, DocumentStudy/Reader, AdminSection, generation flows, Podcast Player, Home/Explore and app-shell boundaries still require dependency mapping and behavior contracts.
+
+
+### New Chat extraction follow-up — PR #77
+
+NewChatScreen now lives in frontend/src/screens/chat/NewChatScreen.tsx (159 lines). App.tsx is 11,440 lines on this branch, down 413 lines from the original 11,853-line baseline. The moved component body was directly compared with base main and matched byte-for-byte after normalising only its module export and narrowed navigation callback type.
+
+The added contract protects the existing 300 ms debounced student search and cleanup, direct chat create/reuse, group-name/member validation and creation, CSRF headers, selected participant state, and chat-detail navigation. The latest Frontend Build [42031983870] passed 78 source/module tests, 5 offline Library tests, TypeScript, service-worker validation, production build, and architecture audits. Student Frontend, Student Contract, Admin Route, B2B, AI, control API, E2EE Chat, and E2EE Security workflows passed on the same code head.
+
+Full Release Browser/Cross-System Regression [42031984075](https://github.com/apexstudying-cmd/prepza/actions/runs/42031984075) was still running when this addendum was written. Its success is required before merge; the prior two-screen code head's passing release result does not substitute for the latest code head.
