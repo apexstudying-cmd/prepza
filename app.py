@@ -2904,7 +2904,7 @@ def track_last_active():
 
 
 from public_shell_routes import register_public_shell_routes
-register_public_shell_routes(app, db, limiter, _sweep_expired_opportunities_safe)
+register_public_shell_routes(app, db, limiter, lambda: _sweep_expired_opportunities_safe())
 
 # ---------- Auth routes ----------
 
