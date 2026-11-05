@@ -193,3 +193,12 @@ Full Release Browser/Cross-System Regression [42031984075](https://github.com/ap
 TimeStudiedScreen is now in frontend/src/screens/gamification/TimeStudiedScreen.tsx (61 lines), and ShareOppForm is now in frontend/src/screens/opportunities/ShareOppForm.tsx (45 lines). Together these remove 94 lines from App.tsx. Both component bodies were compared directly against base main and are byte-for-byte identical after normalising only module exports and narrowed navigation callback types.
 
 Focused contracts cover the existing day/week/month study-time selection, API loading and cancellation, formatted duration, profile navigation, opportunity form fields/category choices, controlled description, and existing back/post navigation. Frontend Build [42034151911](https://github.com/apexstudying-cmd/prepza/actions/runs/42034151911) and Release Browser/Cross-System Regression [42034151448](https://github.com/apexstudying-cmd/prepza/actions/runs/42034151448) are running against the latest code head; their results are pending.
+
+
+### Student Profile extraction follow-up — PR #77
+
+StudentProfileScreen and its PublicProfile/FollowSummary response types now live in frontend/src/screens/profile/StudentProfileScreen.tsx (164 lines). App.tsx is 11,286 lines on this branch, 567 fewer than the 11,853-line baseline. Direct comparison against base main confirms the component body is byte-for-byte identical after normalising only the module export and narrowed callback/back-screen types.
+
+The new contract protects public-profile and follow-summary requests, privacy handling, follow/unfollow and pending states, direct chat creation, chat-options navigation, and the XP/follower/document/study-time summary. The existing App back-screen state was narrowed to the only two values actually used: chat-detail and chats.
+
+Frontend Build [42033518073] passed 80 source/module tests, 5 offline Library tests, TypeScript, service-worker validation, production build, and architecture audits. Student Frontend, Student Contract, Admin Route, B2B, AI, Prepza Control API, and E2EE Chat workflows passed. Full Release Browser/Cross-System Regression [42033518119] and E2EE Security Regression [42033518226] were still running at the time of this note; their success is required before merge.
