@@ -28,6 +28,7 @@ import { podcastColor, podcastDuration, type PodcastItem } from './types/podcast
 import SettingsScreen from './screens/settings/SettingsScreen'
 import EditProfileScreen from './screens/profile/EditProfileScreen'
 import ProfileScreen from './screens/profile/ProfileScreen'
+// Profile data/cache live with the screen; route state and loading skeleton remain app-owned.
 import NotificationsScreen from './screens/notifications/NotificationsScreen'
 import GroupDetailScreen from './screens/groups/GroupDetailScreen'
 import { FollowListScreen, FollowRequestsScreen } from './screens/social/FollowScreens'
