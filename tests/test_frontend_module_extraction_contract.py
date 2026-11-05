@@ -377,3 +377,34 @@ def test_study_navigation_transform_supports_extracted_splash_and_is_idempotent(
     subprocess.run(command, cwd=root, check=True)
     assert (root / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8") == transformed_app
     assert module_path.read_text(encoding="utf-8") == transformed_module
+
+
+def test_edit_profile_screen_is_owned_by_a_profile_feature_module():
+    assert "import EditProfileScreen from './screens/profile/EditProfileScreen'" in APP
+    assert "case 'edit-profile':" in APP
+    assert "function EditProfileScreen(" not in APP
+
+
+def test_edit_profile_module_preserves_profile_and_avatar_contracts():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "profile" / "EditProfileScreen.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "api<EditProfileMe>('/me')",
+        "api<UniversityOption[]>('/universities')",
+        "api<ProgramOption[]>(",
+        "'/profile/avatar'",
+        "'/profile/avatar/confirm'",
+        "'X-CSRF-Token':csrfToken",
+        "createImageBitmap(file)",
+        "canvas.width = 512",
+        "canvas.height = 512",
+        "'image/webp', 0.82",
+        "blob.size > 512 * 1024",
+        "cacheAvatar(id, confirmed.avatar_url)",
+        "clearCachedAvatar(id)",
+        "method: 'PATCH'",
+        "prepza:academic-context-changed",
+        "setScreen('profile')",
+    ):
+        assert contract in source
