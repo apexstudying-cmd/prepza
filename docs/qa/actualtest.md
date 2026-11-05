@@ -145,3 +145,7 @@ On tested code head `f7c8ec327483f4d5170bfa0aa4ec60285d81574f`, Student Frontend
 Release Browser/Cross-System Regression [42021795474](https://github.com/apexstudying-cmd/prepza/actions/runs/42021795474) passed production image build, disposable PostgreSQL/Redis, Alembic migrations and controlled SQL ledger, app startup, mobile/tablet responsive checks, B2B browser-to-ledger metering, 98/98 PostgreSQL QA tests, online/offline Study Hub and generated-artifact browser journeys, screenshot upload, and cleanup. StudyHub Library Flow [42021795345](https://github.com/apexstudying-cmd/prepza/actions/runs/42021795345) was skipped by workflow conditions and is not represented as a pass.
 
 No model schema or migration changed. At this tested source head, `app.py` has 57 inline `db.Model` declarations and `academic_models.py` owns two; both still register on the same 59-model metadata. Route ownership and all 156 route registrations are unchanged by this model-only slice.
+
+### Post-merge status — PR #74
+
+PR #74 was squash-merged to `main` as `6b82aba7bd7d167488c4a0e9921be6deb50a7648`. The code tested on head `f7c8ec327483f4d5170bfa0aa4ec60285d81574f` is the merged application source; the subsequent commits before merge changed documentation only. The focused 10-test backend extension/model contract and full release browser evidence above are from that tested source head. No separate post-merge workflow is claimed.
