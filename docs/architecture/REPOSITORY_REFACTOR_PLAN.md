@@ -410,3 +410,8 @@ StudyStreakScreen and its response types are now owned by frontend/src/screens/g
 ### Profile screen boundary — 2026-11-05
 
 ProfileScreen now lives in screens/profile/ProfileScreen.tsx. Its PROFILE_CACHE moved with it; ProfileMe and HomeDocument are shared in types/profile.ts, while GamificationSummary is in types/gamification.ts. App.tsx retains route dispatch, parent-owned state and the existing SkeletonProfile component (passed into the screen). The screen body was verified byte-for-byte against base main after export/prop/callback type normalisation. The first typecheck identified dynamic profile-card destinations still typed against the App-local Screen alias; the extracted module now uses an equivalent local ProfileScreenRoute union. Frontend Build [42036291254] passed 88 frontend source/module contracts, 5 offline Library tests, TypeScript, production build, architecture audits and launch-wiring verification. Full release regression [42036291297] remains queued.
+
+
+### Document Ready module — 2026-11-05
+
+DocReadyScreen now resides in screens/study/DocReadyScreen.tsx; DocumentDetail is shared from types/documents.ts. Existing TopBar is injected by App.tsx, and the route dispatcher remains centralized. The original screen body was verified byte-for-byte after export/prop/local-route-type normalisation. CI is pending on the new code head.
