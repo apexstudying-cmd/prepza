@@ -247,7 +247,7 @@ Already-separated backend areas include AI economics/generation, usage and organ
 ### Concrete blockers to a conventional app factory
 
 - app.py still constructs a module-global Flask app, configures Flask-Limiter, and initializes Sentry at module scope. PR #70 introduces a shared SQLAlchemy extension in extensions.py and explicitly initializes it from app.py; the app remains a global-app entry point.
-- The former db_runtime.py constructor monkey-patch has been replaced on the backend refactor branch by explicit configure-before-init through extensions.py. PR #70 verification is pending; do not treat this as merged until CI passes.
+- The former db_runtime.py constructor monkey-patch has been replaced on the backend refactor branch by explicit configure-before-init through extensions.py. PR #70 passed its focused extension contract and full release browser/cross-system regression; merge status is recorded below.
 - Several modules still import the global app or its models from app.py; examples include chat_interactions.py, chat_group_routes.py, and prepza_control.py. Other modules use deferred imports from app inside functions, including document and generation paths.
 - Existing register_* modules are not all pure registration functions: some perform schema/bootstrap work inside app.app_context() while they are registered during application import.
 - tools/route_inventory.py and tools/route_coverage_matrix.py import the module-global app; retain that compatibility export throughout the migration.
@@ -297,3 +297,10 @@ The audited baseline contains 59 inline `db.Model` classes and 156 decorated Fla
 The 156 route decorators span the public shell/health, authentication, profile, document upload/read/study, AI generation, learning activity, library, subscription/payment, admin, ambassador, discovery/opportunities, social/community, and chat domains. The route extraction sequence should prioritize bounded route families already covered by standalone `register_*` modules, but only after import and extension ownership are stable. Preserve route paths, HTTP methods, endpoint names, decorator order, auth/CSRF behavior, response payloads, and registration timing.
 
 Do not move all 59 models into a single models.py. Extract by bounded domain only after a generated import/relationship graph and Alembic metadata tests show no duplicate tables, missing relationships, changed naming, or migration drift.
+
+
+### PR #70 verification and merge readiness
+
+Backend Shared Extension Contract [run 42010022947](https://github.com/apexstudying-cmd/prepza/actions/runs/42010022947) passed all six focused tests and Python compilation. Full Release Browser/Cross-System Regression [run 42010022682](https://github.com/apexstudying-cmd/prepza/actions/runs/42010022682) passed production image build, disposable PostgreSQL/Redis startup, Alembic migrations, SQL migration-ledger checks, app startup, mobile/tablet browser checks, B2B browser-to-ledger regression, full PostgreSQL QA, online/offline and generated-artifact browser journeys, screenshot upload, and cleanup. The separate StudyHub Library Flow workflow was skipped by its conditions and is not counted as a pass.
+
+The first focused workflow attempt failed only because the dedicated test environment omitted `psycopg2-binary`; the workflow was corrected to install the repository-pinned driver and the rerun passed. This is recorded as a test-environment correction, not an application-code failure.
