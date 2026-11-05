@@ -2234,3 +2234,8 @@ The profile module contract covers profile/follow-summary loading, private-profi
 ## Study Streak extraction — PR #77
 
 Moved StudyStreakScreen plus its local response types into the gamification module (214 lines), removing 205 lines from App.tsx. Its UI/logic body is unchanged from base main after export/type normalisation. New tests cover the streak request, cancellation, calendar interaction, month movement, milestones and existing navigation. The first CI pass caught a missing share-sheet destination in TimeStudiedScreen's narrowed callback type; this was corrected and explicitly covered. Frontend Build [42034876037] passed on the corrected code head (86 frontend source/module tests, 5 offline Library tests, TypeScript, production build, architecture audits and launch-wiring verification). Release Browser/Cross-System Regression [42034875673] remains queued/in progress and is still required.
+
+
+## Profile screen extraction — PR #77
+
+Moved ProfileScreen and its PROFILE_CACHE into the profile module. Moved shared ProfileMe/HomeDocument contracts into types/profile.ts and GamificationSummary into types/gamification.ts. Kept route dispatch, app state and SkeletonProfile implementation in App.tsx. The screen body matches base main after only export/prop/callback type normalisation. Tests cover profile data APIs, cache, tabs, cancellation, university/program resolution and navigation. Frontend Build [42035896916] and full Release Browser/Cross-System Regression [42035896997] are pending on this code head.
