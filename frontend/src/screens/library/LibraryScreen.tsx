@@ -1,3 +1,4 @@
+// Structural extraction only: behavior is covered by tests/test_library_screen_module_contract.py.
 import { useEffect, useState, type ComponentType } from 'react'
 
 import { api, ApiError } from '../../lib/appApi'
