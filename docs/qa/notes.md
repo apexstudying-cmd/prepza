@@ -2210,3 +2210,10 @@ A source-transform dependency surfaced during the SplashScreen move: the Study N
 The first PR-head attempts exposed the expected integration gaps: a stale source-count assertion and a missing callback parameter in the transformed screen. Both were fixed with focused regression assertions. The final Frontend Build [42030603950] passed 76 source/module tests, 5 offline Library tests, TypeScript, service-worker checks, production build and architecture audits. Student, Admin, B2B, AI, control API, and E2EE workflows passed on the tested head. Full Release Browser/Cross-System Regression [42030603969] also passed production image, disposable PostgreSQL/Redis, all 43 migration files and controlled ledger, app startup, mobile/tablet browser checks, B2B browser-to-ledger metering, 98/98 PostgreSQL QA, online/offline Study Hub and generated-artifact journeys, screenshot upload, and cleanup. Later commits on this PR are documentation-only.
 
 This PR keeps the two screen extractions and their transform/test updates together as one reviewable PR. No screen behavior or business logic was intentionally rewritten.
+
+
+## New Chat extraction follow-up — PR #77
+
+NewChatScreen was moved to frontend/src/screens/chat/NewChatScreen.tsx (159 lines); App.tsx is now 11,440 lines, 413 fewer than the initial 11,853-line baseline. Its component body was verified byte-for-byte against base main after normalising only module export and callback type. The test protects the existing debounced search, direct chat reuse/create, group validation/create, CSRF headers, and navigation behavior.
+
+Latest Frontend Build [42031983870] passed 78 source/module contract tests, 5 offline Library tests, TypeScript, service-worker validation, production build, and architecture audits. Student, Admin, B2B, AI, control API and E2EE workflows passed. Full Release Browser/Cross-System Regression [42031984075] was still running at note time; do not mark the latest code head release-verified until that run succeeds.
