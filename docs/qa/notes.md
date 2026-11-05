@@ -2146,3 +2146,8 @@ Verification update: the dedicated Backend Shared Extension Contract workflow in
 
 
 PR #70 passed the dedicated extension contract and full release regression. StudyHub Library Flow was skipped by workflow conditions and is not claimed as passing. No schema, route, model, or business logic extraction occurred in this slice.
+
+
+### PR #70 post-merge
+
+The shared SQLAlchemy extension boundary is merged to main as 907658079a63a61439b42ea7de33d46ca31d0658. Focused extension contracts and the full release regression passed on the tested application-code head. This does not complete backend extraction: the central app still owns 59 inline ORM model declarations and 156 route decorators.
