@@ -317,3 +317,65 @@ def test_login_screen_preserves_existing_auth_and_navigation_contracts():
         "aria-label=\"Continue with Google\"",
     ):
         assert contract in source
+
+
+def test_study_navigation_transform_supports_extracted_splash_and_is_idempotent(tmp_path):
+    import shutil
+    import subprocess
+    import sys
+
+    root = tmp_path
+    (root / "scripts").mkdir()
+    (root / "frontend" / "src" / "screens" / "onboarding").mkdir(parents=True)
+    shutil.copyfile(
+        ROOT / "scripts" / "apply_study_navigation_polish.py",
+        root / "scripts" / "apply_study_navigation_polish.py",
+    )
+    app = """import SplashScreen from './screens/onboarding/SplashScreen'
+    function readStoredNavigationState() { return null }
+    function App() {
+      const setScreen = (_screen: string) => {}
+      return <SplashScreen setScreen={setScreen} brandline={PREPZA_BRANDLINE} />
+    }
+    // prepza: study-navigation-polish-v2
+    """
+    splash = """export default function SplashScreen({ setScreen, brandline }: {
+      setScreen: (s: 'home' | 'complete-profile' | 'login') => void
+      brandline: string
+    }) {
+      const [state, setState] = useState<'checking' | 'retry'>('checking')
+      const checkSession = async (attempt = 0): Promise<void> => {
+        setState('checking')
+        try {
+          const me = await api('/me')
+          setScreen(me.university_id ? 'home' : 'complete-profile')
+        } catch (e) {
+          if (e instanceof ApiError && e.status === 401) {
+            setScreen('login')
+            return
+          }
+          if (attempt === 0) {
+            setTimeout(() => checkSession(1), 1200)
+          } else {
+            setState('retry')
+          }
+        }
+      }
+    }
+    """
+    (root / "frontend" / "src" / "App.tsx").write_text(app, encoding="utf-8")
+    module_path = root / "frontend" / "src" / "screens" / "onboarding" / "SplashScreen.tsx"
+    module_path.write_text(splash, encoding="utf-8")
+
+    command = [sys.executable, str(root / "scripts" / "apply_study_navigation_polish.py")]
+    subprocess.run(command, cwd=root, check=True)
+    transformed_app = (root / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+    transformed_module = module_path.read_text(encoding="utf-8")
+    assert "resumeOffline={() =>" in transformed_app
+    assert "const resumeable: Screen[]" in transformed_app
+    assert "resumeOffline()" in transformed_module
+    assert "typeof navigator !== 'undefined' && !navigator.onLine" in transformed_module
+
+    subprocess.run(command, cwd=root, check=True)
+    assert (root / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8") == transformed_app
+    assert module_path.read_text(encoding="utf-8") == transformed_module
