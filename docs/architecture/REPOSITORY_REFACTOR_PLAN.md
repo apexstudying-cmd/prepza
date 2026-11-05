@@ -70,11 +70,11 @@ The current `App.tsx` scan shows these large declarations still embedded in the 
 | `PodcastLibraryScreen` | Extracted | Podcast list now lives in `screens/podcast/PodcastLibraryScreen.tsx`; shared item metadata lives in `types/podcast.ts` |
 | `AmbassadorScreen` | Extracted | `screens/ambassador/AmbassadorScreen.tsx` owns the application, dashboard, referrals and payout-request UI |
 | `ChatsScreen` | 358 | High; extract after mapping realtime and encryption integration |
-| `ChatOptionsScreen` | 331 | Medium |
+| `ChatOptionsScreen` | Extracted in PR #67 (pending verification) | The original 331-line body is preserved after explicit injection of the existing file-extension helper and image-type list; shared chat types and the existing Avi primitive now have owned modules. |
 | `PodcastPlayerScreen` | 327 | Medium |
 | `DocumentStudyScreen` | 323 | High; protect reader progress/offline contracts |
 | `LibraryScreen` | 305 | Medium |
-| `SignupScreen` | 251 | Medium; keep auth, CSRF and navigation behavior unchanged |
+| `SignupScreen` | Extracted in PR #66 | Auth flow screens are owned by `screens/auth/AuthScreens.tsx`; route IDs and auth/CSRF behavior remain in the app shell. |
 
 Line counts are approximate source spans between top-level declarations, not exact executable statement counts. They are useful for prioritization, not a complexity score.
 
@@ -124,7 +124,7 @@ The architecture foundation (merged PR #56), Podcast Library extraction (merged 
 
 `App.tsx` imports these modules and retains the application-level navigation integration. The legacy `frontend/src/lib/api.ts` remains separate: it has a different chat-oriented API and CSRF state contract. These two clients must not be merged until their behavioral differences are understood and tested.
 
-The architecture foundation reduced `App.tsx` to 14,945 lines; Podcast Library reduced it to 14,887; Achievements brought it to 14,758; My Study reduced it to 14,573; and the Group Detail extraction on draft PR #62 reduces it to 14,129 lines (417 screen lines plus 27 type/comment lines moved). PR #62 code head `a342e822ca3a240257ecb5f8f84ad27d873985ac` passed Frontend Build run `41233691287` and Release Browser/Cross-System Regression run `41233691818`; post-merge run `41234848528` passed on merge commit `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`. The screen body was byte-for-byte compared against the pre-extraction `main` version after normalizing only the component signature and prop declaration. The exact tested branch is [PR #61](https://github.com/apexstudying-cmd/prepza/pull/61). These are incremental boundary improvements, not completion of the frontend or backend refactor.
+The architecture foundation reduced `App.tsx` to 14,945 lines; Podcast Library reduced it to 14,887; Achievements brought it to 14,758; My Study reduced it to 14,573; Group Detail reduced it to 14,129; social follow screens reduced it to 13,739; Login and remaining auth-flow extraction reduced it to 12,979 on main after PR #66. PR #67 reduces the branch version to 12,630 by extracting Chat Options and related shared contracts/primitives. PR #62 code head `a342e822ca3a240257ecb5f8f84ad27d873985ac` passed Frontend Build run `41233691287` and Release Browser/Cross-System Regression run `41233691818`; post-merge run `41234848528` passed on merge commit `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`. The screen body was byte-for-byte compared against the pre-extraction `main` version after normalizing only the component signature and prop declaration. The exact tested branch is [PR #61](https://github.com/apexstudying-cmd/prepza/pull/61). These are incremental boundary improvements, not completion of the frontend or backend refactor.
 
 ## 5. Known architectural risks to address
 
@@ -233,3 +233,6 @@ PR #66 is merged as 29b582b6ca9e47b8a0cd725673c6be76b71358a1. The five remaining
 PR #67 is the next cohesive extraction. It moves ChatOptionsScreen into frontend/src/screens/chat/ChatOptionsScreen.tsx, shared chat data contracts into frontend/src/types/chat.ts, and the existing shared avatar primitive into frontend/src/ui/Avi.tsx. The original screen body was byte-for-byte compared after only the documented signature/dependency-injection changes. CI first found the implicit app-shell Avi dependency; the exact visual component has now been extracted and reused. Latest-head CI is pending, so this PR is not considered complete.
 
 The backend is partially modularized, not fully extracted. Existing modules include AI provider/economics/generation, document pipeline/retrieval, billing, object storage, realtime delivery, and chat event delivery. The Flask entry module still contains application setup, SQLAlchemy model declarations, and many route families (approximately 10,332 lines at the audited baseline). Backend extraction remains a separate project: establish extensions and an application factory with import-compatibility tests first, then extract low-coupling route/service domains, and only then consider model movement. Do not describe the backend as extracted until the route/model ownership map and import graph show those responsibilities have actually moved.
+
+
+PR #66 (auth-flow screens) is complete and merged. PR #67 (Chat Options, shared chat types, and shared Avi UI primitive) is in verification; do not mark complete until the exact final head passes Frontend Build and full Release Browser/Cross-System Regression. The backend remains only partially modularized: existing service/integration modules are extracted, but the root Flask app still owns app setup, ORM models, and many route families. Backend work starts with extensions/app-factory/import compatibility rather than moving routes or models in one sweep.
