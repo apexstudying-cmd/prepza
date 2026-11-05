@@ -2180,3 +2180,11 @@ At this source checkpoint, `app.py` is 10,191 lines with 149 inline route decora
 ### Post-merge status — PR #73
 
 The academic catalog route boundary is merged to `main` as `d57cfecde2c98b59eec867c70cca4270ed2b1e73`. It is a narrow extraction of two read-only endpoints, not a route rewrite. The root app still owns 59 inline model classes and 149 inline route decorators; five notification routes and two academic-catalog routes now have module-owned registration.
+
+## 2026-11-05 — Academic catalog model extraction (PR #74)
+
+This follows the prior route extraction with a matching ownership move for the two academic catalog models. The classes were simple and had no ORM relationships or custom mapper logic; `Program.university_id` keeps the same string foreign-key target `university.id`. Their module imports the existing global `db` extension, rather than creating another SQLAlchemy instance. `app.py` imports the class names back at the same position so existing callers using `from app import University, Program` still see the same classes. The original 864-character model block compares byte-for-byte with the new declarations.
+
+Why the import position matters: `User` declares string foreign keys to the academic tables before these model classes are registered, while `ContentItem` and later declarations follow them. Keeping the moved classes at this location preserves model registration order and allows the shared metadata to resolve table references without duplicating tables. The new contract verifies shared metadata, table/column definitions, nullability, uniqueness/defaults, the Program FK, and the app compatibility import. Backend Shared Extension Contract [42021795293] passed 10/10 tests; full release regression [42021795474] and related contracts passed.
+
+The current tested source is 10,174 lines in `app.py`, with 57 ORM model classes inline and the two academic models in `academic_models.py`. There are still 59 model classes in the same metadata; this is an ownership relocation, not a schema/model redesign. No migrations were required or added.
