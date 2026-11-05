@@ -133,3 +133,15 @@ Release Browser/Cross-System Regression [42019950561](https://github.com/apexstu
 ### Post-merge status — PR #73
 
 PR #73 was squash-merged to `main` as `d57cfecde2c98b59eec867c70cca4270ed2b1e73`. The code tested on head `55fbf1ce588c6650b5171bd4c752e10055614df7` is the merged application code; the subsequent PR commits before merge only updated documentation. The focused contract and full release regression evidence above are from the tested code head. No separate post-merge workflow is claimed.
+
+## 2026-11-05 — Academic catalog ORM model extraction (PR #74)
+
+The existing `University` and `Program` SQLAlchemy class definitions were moved from `app.py` into `academic_models.py`. The module imports the shared `db` instance from `extensions.py`; `app.py` imports both names at the original declaration position after `User` and before `ContentItem`. This keeps the legacy `from app import University, Program` symbol exports while moving ownership. The original model class block (864 characters) was compared byte-for-byte against the extracted module definitions.
+
+Focused model tests protect the shared metadata object, exact table names, column types/lengths/nullability, uniqueness/defaults, the Program foreign-key target, and app compatibility/declaration order. Backend Shared Extension Contract [42021795293](https://github.com/apexstudying-cmd/prepza/actions/runs/42021795293) passed py_compile and 10/10 tests (the six prior extension tests plus four new model tests).
+
+On tested code head `f7c8ec327483f4d5170bfa0aa4ec60285d81574f`, Student Frontend [42021795416], Student Contract [42021795394], Admin Route [42021795332], B2B [42021795333], E2EE Security [42021795546], E2EE Chat [42021795286], Study Navigation [42021795308], Prepza Control API [42021795303], AI Economics [42021795374], AI Generation Architecture [42021795427], and Kokoro Python syntax [42021795321] passed.
+
+Release Browser/Cross-System Regression [42021795474](https://github.com/apexstudying-cmd/prepza/actions/runs/42021795474) passed production image build, disposable PostgreSQL/Redis, Alembic migrations and controlled SQL ledger, app startup, mobile/tablet responsive checks, B2B browser-to-ledger metering, 98/98 PostgreSQL QA tests, online/offline Study Hub and generated-artifact browser journeys, screenshot upload, and cleanup. StudyHub Library Flow [42021795345](https://github.com/apexstudying-cmd/prepza/actions/runs/42021795345) was skipped by workflow conditions and is not represented as a pass.
+
+No model schema or migration changed. At this tested source head, `app.py` has 57 inline `db.Model` declarations and `academic_models.py` owns two; both still register on the same 59-model metadata. Route ownership and all 156 route registrations are unchanged by this model-only slice.
