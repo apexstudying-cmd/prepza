@@ -103,6 +103,7 @@ def test_splash_screen_uses_the_canonical_192px_icon():
     auth_screens = source("frontend/src/screens/auth/AuthScreens.tsx")
     assert (
         app.count('src="/icon-192.png"')
+        + splash.count('src="/icon-192.png"')
         + profile_screen.count('src="/icon-192.png"')
         + login_screen.count('src="/icon-192.png"')
         + auth_screens.count('src="/icon-192.png"')
