@@ -494,3 +494,25 @@ def test_time_studied_module_preserves_period_selection_and_loading_contract():
         "setScreen('profile')",
     ):
         assert contract in source
+
+
+def test_share_opportunity_form_is_owned_by_the_opportunities_module():
+    assert "import ShareOppForm from './screens/opportunities/ShareOppForm'" in APP
+    assert "case 'share-opp-form':" in APP
+    assert "function ShareOppForm(" not in APP
+
+
+def test_share_opportunity_form_preserves_existing_local_form_fields_and_navigation():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "opportunities" / "ShareOppForm.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "title: '', org: '', type: 'Internship', deadline: '', location: '', reward: '', desc: '', link: ''",
+        "setScreen('create-modal')",
+        "setScreen('opportunities')",
+        "['Internship','Scholarship','Competition','Job','Event']",
+        "Describe the opportunity, requirements, and how to apply...",
+        "value={form.desc}",
+        "onChange={upd('desc')}",
+    ):
+        assert contract in source
