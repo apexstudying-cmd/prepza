@@ -731,7 +731,7 @@ Evidence is limited to the exact PR workflow runs linked above. These CI results
 PR #68 was squash-merged to main as 74dcebce5dd05ad08b5e3d77007cc5205f0b7bc0 after all required PR-head checks passed. The merge contains the tested application-code head cc665bce25bb570abe659d33e675b5f8acba690a plus documentation-only commits; no application source changed after verification.
 
 
-## 2026-11-05 — backend shared-extension boundary (PR #69; verification pending)
+## 2026-11-05 — backend shared-extension boundary (PR #70; verification pending)
 
 - [ ] Establish the shared Flask-SQLAlchemy extension in `extensions.py`; preserve `from app import db` for existing modules, Alembic, and scripts.
 - [ ] Apply existing PostgreSQL pool defaults explicitly before `db.init_app(app)`; remove the `SQLAlchemy.__init__` monkey-patch from `db_runtime.py`.
