@@ -186,3 +186,10 @@ NewChatScreen now lives in frontend/src/screens/chat/NewChatScreen.tsx (159 line
 The added contract protects the existing 300 ms debounced student search and cleanup, direct chat create/reuse, group-name/member validation and creation, CSRF headers, selected participant state, and chat-detail navigation. The latest Frontend Build [42031983870] passed 78 source/module tests, 5 offline Library tests, TypeScript, service-worker validation, production build, and architecture audits. Student Frontend, Student Contract, Admin Route, B2B, AI, control API, E2EE Chat, and E2EE Security workflows passed on the same code head.
 
 Full Release Browser/Cross-System Regression [42031984075](https://github.com/apexstudying-cmd/prepza/actions/runs/42031984075) passed on the New Chat code head: production app image, disposable PostgreSQL/Redis, all 43 migration files and controlled ledger, mobile/tablet browser checks, B2B browser-to-ledger metering, 98/98 disposable PostgreSQL QA tests, online/offline Study Hub lifecycle and generated-artifact journeys, screenshot upload, and cleanup. Subsequent PR commits update documentation only.
+
+
+### Time Studied and Share Opportunity extractions — PR #77
+
+TimeStudiedScreen is now in frontend/src/screens/gamification/TimeStudiedScreen.tsx (61 lines), and ShareOppForm is now in frontend/src/screens/opportunities/ShareOppForm.tsx (45 lines). Together these remove 94 lines from App.tsx. Both component bodies were compared directly against base main and are byte-for-byte identical after normalising only module exports and narrowed navigation callback types.
+
+Focused contracts cover the existing day/week/month study-time selection, API loading and cancellation, formatted duration, profile navigation, opportunity form fields/category choices, controlled description, and existing back/post navigation. Frontend Build [42034151911](https://github.com/apexstudying-cmd/prepza/actions/runs/42034151911) and Release Browser/Cross-System Regression [42034151448](https://github.com/apexstudying-cmd/prepza/actions/runs/42034151448) are running against the latest code head; their results are pending.
