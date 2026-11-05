@@ -2229,3 +2229,8 @@ Moved TimeStudiedScreen (61-line module) and ShareOppForm (45-line module) out o
 StudentProfileScreen and its PublicProfile/FollowSummary types were moved into frontend/src/screens/profile/StudentProfileScreen.tsx (164 lines). App.tsx is 11,286 lines, down 567 from its 11,853-line starting point. The component body matches base main byte-for-byte after normalising only the module export and narrowed callback/back-screen types. The state type was narrowed to the two actual back destinations without changing runtime behavior.
 
 The profile module contract covers profile/follow-summary loading, private-profile rendering, follow/unfollow and pending states, direct chat creation, chat-options routing, and profile statistics. Frontend Build [42033518073] passed 80 source/module tests, 5 offline Library tests, TypeScript, service-worker validation, production build and architecture audits. Student, Admin, B2B, AI, control API and E2EE Chat checks passed. Full Release Browser/Cross-System Regression [42033518119] and E2EE Security [42033518226] were still running at note time.
+
+
+## Study Streak extraction — PR #77
+
+Moved StudyStreakScreen plus its local response types into the gamification module (214 lines), removing 205 lines from App.tsx. Its UI/logic body is unchanged from base main after export/type normalisation. New tests cover the streak request, cancellation, calendar interaction, month movement, milestones and existing navigation. The first CI pass caught a missing share-sheet destination in TimeStudiedScreen's narrowed callback type; this was corrected and explicitly covered. Await Frontend Build [42034876037] and Release Browser/Cross-System Regression [42034875673] on the corrected code head.
