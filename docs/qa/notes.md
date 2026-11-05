@@ -2102,3 +2102,7 @@ Evidence:
 - StudyHub Library Flow was skipped by workflow conditions; no pass is claimed. Live third-party provider behavior is outside these CI checks.
 
 Learning: moving a screen to a feature-owned module is safe only when the dependency contract is explicit and existing behavior is protected by tests. A successful build alone is not enough; this change was also checked against student-specific contracts and the broader browser/cross-system regression. The PR remained draft in the recorded snapshot, so this note records verification, not a merge.
+
+### Post-merge status
+
+PR #65 was subsequently marked ready and squash-merged to `main` as `222b4011c40ddadaae3bdcf331022b79a78f5926`. The documentation-complete PR head's Frontend Build, Student Frontend Contract, security and contract workflows passed; Release Browser/Cross-System Regression [run 42000088464](https://github.com/apexstudying-cmd/prepza/actions/runs/42000088464) also passed production image, disposable database/migration, responsive, B2B, PostgreSQL, online/offline and generated-artifact journeys. This is pre-merge-head CI evidence; it does not claim a separate post-merge workflow ran or that the wider refactor is complete.
