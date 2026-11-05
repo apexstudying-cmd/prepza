@@ -105,3 +105,6 @@ python -m pytest -q \
 
 - src/screens/profile/ProfileScreen.tsx - signed-in student's own profile, including saved opportunities, study activity, study materials, follow-request count and achievement summary. Preserve PROFILE_CACHE behavior, existing API endpoints, tab fetch cancellation, university/program name resolution, profile-menu outside-click dismissal, and route callbacks. SkeletonProfile is injected by App.tsx so shared skeleton ownership stays explicit.
 - src/types/profile.ts - shared ProfileMe and HomeDocument response shapes. Keep these aligned with the existing /me and /documents payloads.
+
+- src/screens/study/DocReadyScreen.tsx - post-upload document-ready confirmation and next-action choices. Preserve the /documents/:id fetch, error handling, title/file/page/size metadata, seven existing action destinations, and injected TopBar. Keep the shared DocumentDetail response shape in types/documents.ts.
+- src/types/documents.ts - shared DocumentDetail API response contract. Keep fields aligned with the existing document detail endpoint.
