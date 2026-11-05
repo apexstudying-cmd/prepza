@@ -576,3 +576,33 @@ def test_profile_module_preserves_profile_data_tabs_cache_and_navigation_contrac
         "as ProfileScreenRoute",
     ):
         assert contract in source
+
+
+def test_document_ready_screen_is_owned_by_the_study_module():
+    assert "import DocReadyScreen from './screens/study/DocReadyScreen'" in APP
+    assert "case 'doc-ready':" in APP
+    assert "function DocReadyScreen(" not in APP
+
+
+def test_document_ready_module_preserves_document_metadata_and_action_destinations():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "study" / "DocReadyScreen.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "api<DocumentDetail>(`/documents/${activeDocumentId}`)",
+        "setScreen(a.dest)",
+        "Document Ready ✓",
+        "Processing Complete!",
+        "Your document is ready to study",
+        "Study with AI",
+        "Ask Questions",
+        "Summarize",
+        "Generate Quiz",
+        "Flashcards",
+        "Create Podcast",
+        "Save to Library",
+        "file_size_bytes",
+        "page_count",
+        "TopBar",
+    ):
+        assert contract in source
