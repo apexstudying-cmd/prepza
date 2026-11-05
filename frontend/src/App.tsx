@@ -16,6 +16,7 @@ import AchievementsScreen from './screens/gamification/AchievementsScreen'
 import AITutorScreen from './screens/tutor/AITutorScreen'
 import type { Achievement, AchievementsResponse } from './types/achievements'
 import { XPProgressScreen } from './screens/gamification/ProgressScreens'
+// Screen implementations are feature-owned; this file keeps the existing route dispatch and shared app state.
 import TimeStudiedScreen from './screens/gamification/TimeStudiedScreen'
 import type { StudyTimeResponse } from './types/gamification'
 import { formatStudyTime } from './lib/studyTime'
