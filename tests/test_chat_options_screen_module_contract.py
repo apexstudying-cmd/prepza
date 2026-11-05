@@ -38,7 +38,7 @@ def test_chat_options_preserves_search_media_and_navigation_behavior():
     for contract in (
         "}, 300)",
         "clearTimeout(t)",
-        "sharedMediaCategory(item)",
+        "sharedMediaCategory(item, getFileExtension, imageFileTypes)",
         "setScreen('chats')",
         "setScreen('student-profile')",
         "event.key === 'Escape'",
