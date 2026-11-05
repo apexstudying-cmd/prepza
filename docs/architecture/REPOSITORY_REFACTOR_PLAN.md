@@ -261,3 +261,10 @@ Already-separated backend areas include AI economics/generation, usage and organ
 5. Add app_factory.py only when route registration no longer depends on importing a partially initialized global app module. Keep app.py as a WSGI and legacy-import compatibility entry point until all consumers have migrated.
 
 Do not combine extension extraction, model movement, route rewrites, and factory creation in one change. The first backend PR should be an initialization/extension-boundary change with import, configuration, migration, and route-inventory regression tests; it must not alter business logic or database schema.
+
+
+## 2026-11-05 frontend extraction status — XP Progress
+
+PR #68 extracts the active XPProgressScreen into frontend/src/screens/gamification/ProgressScreens.tsx, its response types into frontend/src/types/gamification.ts, and the unchanged shared formatStudyTime helper into frontend/src/lib/studyTime.ts. The original screen body was byte-for-byte compared after export/signature normalization. Frontend Build, Student Frontend Contract, Student Contract, Admin Route Contract, B2B, AI economics/generation, E2EE Security/Chat, Study Navigation, Prepza Control API, and full Release Browser/Cross-System Regression passed on tested code head cc665bce25bb570abe659d33e675b5f8acba690a. StudyHub Library Flow was skipped by workflow conditions. The subsequent PR commits updated documentation only.
+
+The active study-streak and time-studied routes continue to use StudyActivityScreen; the older inline declarations remain untouched. Next frontend slices must continue to use live route composition and dependency maps rather than treating every old declaration as active UI.
