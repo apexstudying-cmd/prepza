@@ -19,7 +19,8 @@ import { XPProgressScreen } from './screens/gamification/ProgressScreens'
 // Screen implementations are feature-owned; this file keeps the existing route dispatch and shared app state.
 import TimeStudiedScreen from './screens/gamification/TimeStudiedScreen'
 import StudyStreakScreen from './screens/gamification/StudyStreakScreen'
-import type { StudyTimeResponse } from './types/gamification'
+import type { GamificationSummary, StudyTimeResponse } from './types/gamification'
+import type { HomeDocument } from './types/profile'
 import { formatStudyTime } from './lib/studyTime'
 import { LIBRARY_MATERIAL_TYPES, materialTypeLabel } from './lib/library'
 import LibraryScreen from './screens/library/LibraryScreen'
@@ -1546,17 +1547,7 @@ function SkeletonNotifications() {
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
 
 // ─── HOME ─────────────────────────────────────────────────────────────────────
-type HomeDocument = {
-  id: number
-  title: string
-  status: string
-  file_type: string | null
-  page_count: number | null
-  created_at: string | null
-  last_opened_at?: string | null
-  materials?: { id: number; type: string; status: string; parameters?: Record<string, unknown> }[]
-}
-type GamificationSummary = { xp_total: number; level: number; level_title: string; current_streak: number; longest_streak: number; documents_count: number; followers_count: number }
+
 
 // ─── Social (Chunk 12) ─────────────────────────────────────────────────────────
 // GET /users/:id/public-profile (added in the Chunk 12 close-out patch)
