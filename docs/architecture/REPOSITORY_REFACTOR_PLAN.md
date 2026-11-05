@@ -246,7 +246,7 @@ Already-separated backend areas include AI economics/generation, usage and organ
 
 ### Concrete blockers to a conventional app factory
 
-- app.py constructs a module-global Flask app and binds db = SQLAlchemy(app) during import. It also binds Flask-Limiter and initializes Sentry at module scope.
+- app.py still constructs a module-global Flask app, configures Flask-Limiter, and initializes Sentry at module scope. PR #70 introduces a shared SQLAlchemy extension in extensions.py and explicitly initializes it from app.py; the app remains a global-app entry point.
 - The former db_runtime.py constructor monkey-patch has been replaced on the backend refactor branch by explicit configure-before-init through extensions.py. PR #70 verification is pending; do not treat this as merged until CI passes.
 - Several modules still import the global app or its models from app.py; examples include chat_interactions.py, chat_group_routes.py, and prepza_control.py. Other modules use deferred imports from app inside functions, including document and generation paths.
 - Existing register_* modules are not all pure registration functions: some perform schema/bootstrap work inside app.app_context() while they are registered during application import.
