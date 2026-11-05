@@ -798,3 +798,12 @@ StudyHub Library Flow [42022943808](https://github.com/apexstudying-cmd/prepza/a
 - [ ] Continue with the high-risk ChatDetail/Chats, DocumentStudy/Reader, AdminSection/admin panels, generation flows, Podcast Player, Home/Explore, and app-shell boundaries only after dependency mapping and dedicated behavior contracts. Backend extraction remains a separate staged effort.
 
 PR #77 is intentionally one consolidated review rather than separate PRs for each screen. The frontend refactor remains incomplete.
+
+
+## 2026-11-05 follow-up — New Chat extraction (PR #77)
+
+- [x] Extract NewChatScreen to frontend/src/screens/chat/NewChatScreen.tsx (159 lines). App.tsx is now 11,440 lines on the PR branch, 413 lines fewer than the 11,853-line starting point.
+- [x] Directly compare the moved NewChatScreen body with base main; the body is byte-for-byte identical after normalising only the module export and narrowed callback type.
+- [x] Add source contracts for debounced student search, cancellation/timeout cleanup, direct chat create/reuse, group validation/creation, CSRF headers, selected participant handling, and chat-detail navigation.
+- [x] Latest Frontend Build [42031983870] passed 78 source/module contract tests, 5 offline Library regression tests, TypeScript, service-worker validation, production build, and architecture audits. Student Frontend [42031983952], Student Contract [42031983901], Admin Route [42031984066], B2B [42031983984], AI Economics [42031983713], AI Generation [42031983800], Prepza Control API [42031983813], E2EE Chat [42031983969], and E2EE Security [42031983859] passed.
+- [ ] Full Release Browser/Cross-System Regression [42031984075](https://github.com/apexstudying-cmd/prepza/actions/runs/42031984075) is running against the New Chat code head. The previous Splash + Edit Profile code head passed full release regression, but this latest head must pass before merge.
