@@ -2139,7 +2139,10 @@ PR #68 was squash-merged to main as 74dcebce5dd05ad08b5e3d77007cc5205f0b7bc0. Th
 
 The backend's first refactor slice isolates SQLAlchemy extension ownership without moving model classes or routes. The shared `db` instance is now defined in `extensions.py`, while `app.py` retains the legacy exported name by importing it. PostgreSQL engine defaults are configured before explicit `db.init_app(app)`, replacing the previous constructor monkey-patch.
 
-The focused tests are intended to prove SQLite initialization, PostgreSQL option defaults and overrides, and the preserved import surface. The dedicated CI workflow and full release regression must pass before merge. This is not an app-factory conversion and does not complete backend extraction.
+The focused tests are intended to prove SQLite initialization, PostgreSQL option defaults and overrides, and the preserved import surface. Backend Shared Extension Contract [42010022947] and full Release Browser/Cross-System Regression [42010022682] passed. The first focused attempt failed because the workflow omitted the PostgreSQL DBAPI dependency; installing the pinned driver resolved the test-environment issue, and the rerun passed all six tests. This is not an app-factory conversion and does not complete backend extraction.
 
 
 Verification update: the dedicated Backend Shared Extension Contract workflow initially failed because the test environment did not install `psycopg2-binary`, which SQLAlchemy needs when creating a PostgreSQL engine. The application requirements already pin this driver; the focused workflow was corrected to install the same version. Rerun 42010022947 passed compilation and all six tests. The full release browser/cross-system workflow 42010022682 remains in progress. Do not treat the backend boundary as merged or complete until that run passes.
+
+
+PR #70 passed the dedicated extension contract and full release regression. StudyHub Library Flow was skipped by workflow conditions and is not claimed as passing. No schema, route, model, or business logic extraction occurred in this slice.
