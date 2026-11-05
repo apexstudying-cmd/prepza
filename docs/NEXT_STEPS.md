@@ -816,3 +816,12 @@ PR #77 is intentionally one consolidated review rather than separate PRs for eac
 - [x] Directly compare both moved component bodies against base main: both are byte-for-byte identical after normalising only module exports and narrowed navigation callback types.
 - [x] Add focused source contracts for study period selection, /study-time loading/cancellation, duration formatting, and profile navigation; add form field, category, controlled description, and existing navigation contracts.
 - [ ] Latest Frontend Build [42034151911](https://github.com/apexstudying-cmd/prepza/actions/runs/42034151911) and full Release Browser/Cross-System Regression [42034151448](https://github.com/apexstudying-cmd/prepza/actions/runs/42034151448) are running on the latest code head. Do not mark these two extractions release-verified until the latest checks pass.
+
+
+## 2026-11-05 follow-up — Student Profile extraction (PR #77)
+
+- [x] Extract StudentProfileScreen and its PublicProfile/FollowSummary response types to frontend/src/screens/profile/StudentProfileScreen.tsx (164 lines). App.tsx is now 11,286 lines on the PR branch, 567 fewer than the original 11,853-line baseline.
+- [x] Compare the moved component body directly with base main. It is byte-for-byte identical after normalising only the module export and narrowed callback/back-screen types. The App back-screen state is narrowed to its two actual values ('chat-detail' and 'chats'); runtime behavior is unchanged.
+- [x] Protect public-profile/follow-summary fetches, private-profile handling, follow/unfollow and pending states, direct-message creation, chat-options navigation, and XP/follower/document/study-time statistics with module contracts.
+- [x] Frontend Build [42033518073] passed 80 source/module contract tests, 5 offline Library tests, TypeScript, service-worker validation, production build and architecture audits. Student Frontend, Student Contract, Admin Route, B2B, AI economics, AI generation, Prepza Control API, and E2EE Chat passed on the tested code head.
+- [ ] Full Release Browser/Cross-System Regression [42033518119](https://github.com/apexstudying-cmd/prepza/actions/runs/42033518119) and E2EE Security Regression [42033518226](https://github.com/apexstudying-cmd/prepza/actions/runs/42033518226) are still running against the Student Profile code head. Do not merge until the required latest-head checks pass.
