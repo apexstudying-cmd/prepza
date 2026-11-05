@@ -541,3 +541,36 @@ def test_study_streak_module_preserves_calendar_loading_navigation_and_milestone
         "formatStudyDuration(d.study_seconds)",
     ):
         assert contract in source
+
+
+def test_profile_screen_is_owned_by_the_profile_feature_module():
+    assert "import ProfileScreen from './screens/profile/ProfileScreen'" in APP
+    assert "case 'profile':" in APP
+    assert "function ProfileScreen(" not in APP
+
+
+def test_profile_module_preserves_profile_data_tabs_cache_and_navigation_contracts():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "profile" / "ProfileScreen.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "api<ProfileMe>('/me')",
+        "api<GamificationSummary>('/gamification/summary')",
+        "api<AchievementsResponse>('/achievements')",
+        "api<StudyTimeResponse>('/study-time?period=week')",
+        "api<{ requests: unknown[] }>('/follow-requests')",
+        "api<{ saved: any[] }>('/opportunities/saved')",
+        "api<any>('/study-time?period=week')",
+        "api<any>('/study-time?period=month')",
+        "api<{ documents: HomeDocument[] }>('/documents')",
+        "return () => { cancelled = true }",
+        "['saved','activity','materials']",
+        "setScreen('follow-requests')",
+        "setScreen('edit-profile')",
+        "setScreen('share-sheet')",
+        "setScreen('study-activity')",
+        "setScreen('document-study')",
+        "PROFILE_CACHE.me",
+        "data-prepza-profile-menu",
+    ):
+        assert contract in source
