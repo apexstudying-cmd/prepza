@@ -45,7 +45,7 @@ def test_notifications_preserve_optimistic_cache_updates_and_error_behavior():
         "list.map(x => x.id === n.id ? { ...x, is_read: true } : x)",
         "list.map(x => ({ ...x, is_read: true }))",
         "list.filter(x => x.id !== id)",
-        "catch { /* existing notification list remains usable */ }",
+        "catch {}",
         "Could not load notifications.",
     ):
         assert contract in source
