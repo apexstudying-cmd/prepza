@@ -161,6 +161,7 @@ def test_achievements_screen_preserves_load_share_and_navigation_contracts():
         "formatAchievementDate(a.unlocked_at)",
         "setScreen('profile')",
         "setScreen('share-sheet')",
+        "setScreen('share-sheet')",
         "Achievement Unlocked",
         "Join me on Prepza",
         "<Pill",
