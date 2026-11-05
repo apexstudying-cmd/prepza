@@ -606,3 +606,35 @@ def test_document_ready_module_preserves_document_metadata_and_action_destinatio
         "TopBar",
     ):
         assert contract in source
+
+
+def test_publish_library_screen_is_owned_by_the_library_module():
+    assert "import PublishLibraryScreen from './screens/library/PublishLibraryScreen'" in APP
+    assert "case 'publish-library':" in APP
+    assert "function PublishLibraryScreen(" not in APP
+
+
+def test_publish_library_module_preserves_document_eligibility_rights_and_submission_contract():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "library" / "PublishLibraryScreen.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "api<{ csrf_token: string }>('/me')",
+        "api<{ documents:",
+        "d.status === 'ready' || d.id === activeDocumentId",
+        "api<{ publication_id?: number; status?: string; duplicate?: boolean; published?: boolean; message?: string }>('/library/publish'",
+        "'X-CSRF-Token': csrfToken",
+        "document_id: selectedDocId",
+        "title: title.trim()",
+        "description: desc.trim() || undefined",
+        "material_type: matType",
+        "rightsChecked",
+        "setScreen('create-modal')",
+        "setScreen('upload')",
+        "setScreen('home')",
+        "setScreen('library')",
+        "type PublishableDoc",
+        "EmptyState",
+        "Pill",
+    ):
+        assert contract in source
