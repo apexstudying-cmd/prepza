@@ -1,7 +1,7 @@
 # Prepza — Persistent Engineering Execution Tracker
 
-Last updated: 2026-10-31
-Branch: `main`; PR #62 merged as `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`; PR #64 merged as `7b0e9301543beabc5dee02af2388983737bada5c`.
+Last updated: 2026-11-05
+Branch: `main`; PR #62 merged as `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`; PR #64 merged as `7b0e9301543beabc5dee02af2388983737bada5c`; PR #65 Login extraction verified in CI, with evidence updates on its draft branch.
 
 Status:
 - [x] completed/verified
@@ -693,3 +693,16 @@ Deployment note (27 October 2026): Render's `prepza` service has auto-deploy ena
 Learning note: developers do not memorise every command. They learn tool concepts, inspect `--help`/runbooks/history, understand target selection and side effects, rehearse destructive operations on disposable environments, and verify outcomes. The detailed command explanations and exact migration rehearsal command are in `docs/engineering/LOCAL_SUPABASE_DATA_MIGRATION_WALKTHROUGH.md`.
 
 - [x] Verify disposable-clone migration result: direct PostgreSQL query confirmed Alembic revision `20261030_shared_study_streak` and all three Shop tables plus both shared-streak tables exist. This is a partial rehearsal PASS; constraints, indexes, foreign keys and pre-existing data preservation still need inspection. Full evidence and commands: `docs/engineering/LOCAL_SUPABASE_DATA_MIGRATION_WALKTHROUGH.md`.
+
+
+## 2026-11-05 — Login screen extraction verification (PR #65)
+
+- [x] Extract the existing Login screen into `frontend/src/screens/auth/LoginScreen.tsx`; preserve the original component body, visual markup, local state, sign-in/resend endpoints, request payloads, Google OAuth URL, error handling, and existing navigation destinations. The only intended differences are the exported module boundary and narrower navigation callback type.
+- [x] Verify the focused frontend module/source-transform contracts, offline Library regression, functional wiring/schema audits, TypeScript check, service-worker validation, and production build: [Frontend Build run 41241016697](https://github.com/apexstudying-cmd/prepza/actions/runs/41241016697) passed.
+- [x] Verify the student-facing/Morio contracts: [Student Frontend Contract run 41241016700](https://github.com/apexstudying-cmd/prepza/actions/runs/41241016700) passed, including Morio identity/icon and student screen end-to-end contracts.
+- [x] Verify the release browser/cross-system suite: [Release Browser/Cross-System Regression run 41241016614](https://github.com/apexstudying-cmd/prepza/actions/runs/41241016614) passed, including production image, disposable PostgreSQL/Redis, migrations and controlled SQL ledger, mobile/tablet browser checks, B2B browser-to-ledger regression, full disposable PostgreSQL QA, and online/offline generated-artifact journeys.
+- [x] Confirm the PR-reported E2EE Security, Student Contract, Admin Route, B2B Contract, AI Economics, AI Generation Architecture, Study Navigation, and Prepza Control API workflows passed. StudyHub Library Flow was skipped by workflow conditions and is not counted as passing.
+- [ ] Integrate PR #65 into the coordinated remaining frontend refactor only after checking the final branch state and ensuring documentation/evidence is committed. Do not claim backend refactor or repository-wide completion from this screen-level extraction.
+- [ ] Continue the remaining frontend extractions and prebuild-transform retirement; then design backend app-factory/extensions boundaries and route/service extraction with contract tests.
+
+Evidence is limited to the exact PR workflow runs linked above. These CI results do not certify live Paystack, SES, OpenAI, R2, or GPU provider behavior and do not clear unrelated release gates.
