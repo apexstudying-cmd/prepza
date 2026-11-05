@@ -51,6 +51,7 @@ python -m pytest -q \
 - `src/screens/auth/LoginScreen.tsx` - existing sign-in screen, including resend-verification and Google OAuth entry points; the app shell retains the `login` route and injects its navigation callback and OAuth error.
 - `src/screens/auth/AuthScreens.tsx` - forgot-password OTP flow, emailed reset-token flow, email verification confirmation, signup wizard, and signup OTP handoff. The app shell retains the route IDs and injects navigation/referral props; preserve the existing API, password validation, OTP timing, and session-storage contracts.
 - `src/screens/gamification/AchievementsScreen.tsx` and `src/types/achievements.ts` - achievement list/progress UI and its typed response contract.
+- `src/screens/gamification/ProgressScreens.tsx`, `src/types/gamification.ts`, and `src/lib/studyTime.ts` - XP history/pagination, study-streak calendar/month selection, time-studied period filters, and the shared study-time formatter. Preserve the existing route IDs, API contracts, share destinations, and response shapes.
 - `src/screens/study/StudyMaterialsScreen.tsx` - My Study document/material lists, offline IndexedDB integration, saved Library items, and replay navigation. Its app-shell UI and last-study callback are explicit props; it must not import `App.tsx`.
 - `src/screens/podcast/PodcastLibraryScreen.tsx` - Podcast Library list, API loading, session cache, and navigation to the player.
 - `src/types/podcast.ts` - shared podcast item type and Home/Library presentation helpers.
