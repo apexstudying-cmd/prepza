@@ -96,3 +96,8 @@ Focused verification update: Backend Shared Extension Contract [run 42010022947]
 
 
 PR #70 verification is complete. The exact application source was tested by the focused extension workflow and full release regression; subsequent branch changes were documentation-only. The first focused attempt omitted the PostgreSQL DBAPI driver, which was added to the workflow before the passing rerun.
+
+
+### Post-merge status — PR #70
+
+PR #70 was squash-merged to main as 907658079a63a61439b42ea7de33d46ca31d0658. Backend Shared Extension Contract [42010022947] passed all six tests and compilation; Release Browser/Cross-System Regression [42010022682] passed production image, database/migrations, responsive browser, B2B metering, PostgreSQL QA, online/offline generated-artifact journeys, screenshot upload, and cleanup. StudyHub Library Flow was skipped by workflow conditions and is not counted as a pass. No separate post-merge workflow run is claimed.
