@@ -1,14 +1,17 @@
-from __future__ import annotations
-
-from pathlib import Path
-import re
-
 APP = Path(__file__).resolve().parents[1] / "frontend" / "src" / "App.tsx"
+LIBRARY_MODULE = APP.parent / "screens" / "library" / "LibraryScreen.tsx"
 text = APP.read_text(encoding="utf-8")
-
-# The current App architecture already contains the Library/My Study separation.
-# Keep this prebuild transform idempotent when older anchors are no longer present.
-if "const [activeTab, setActiveTab] = useState<'Browse' | 'Saved' | 'Published'>('Browse')" not in text:
+module_owned = LIBRARY_MODULE.exists() and "export default function LibraryScreen(" in LIBRARY_MODULE.read_text(encoding="utf-8")
+library_text = LIBRARY_MODULE.read_text(encoding="utf-8") if module_owned else text
+saved_tab_anchor = "const [activeTab, setActiveTab] = useState<'Browse' | 'Saved' | 'Published'>('Browse')"
+already_separated = (
+    "useState<'Browse' | 'Published'>" in library_text
+    and "saveActionError" in library_text
+    and "activeTab === 'Saved'" not in library_text
+)
+if saved_tab_anchor not in library_text and not already_separated:
+    if module_owned:
+        raise RuntimeError("Extracted LibraryScreen is missing the expected Saved-tab transform anchor")
     print("Library/My Study separation: current App architecture already applied; skipping safely.")
     raise SystemExit(0)
 
@@ -21,43 +24,48 @@ def replace_once(source: str, old: str, new: str, label: str) -> str:
     return source.replace(old, new, 1)
 
 
-text = replace_once(
-    text,
-    "const [activeTab, setActiveTab] = useState<'Browse' | 'Saved' | 'Published'>('Browse')",
-    "const [activeTab, setActiveTab] = useState<'Browse' | 'Published'>('Browse')",
-    "Library active tab type",
-)
-text = replace_once(
-    text,
-    "{(['Browse', 'Saved', 'Published'] as const).map(t => (",
-    "{(['Browse', 'Published'] as const).map(t => (",
-    "Library tab list",
-)
-
-saved_block = re.compile(r"\n        \{activeTab === 'Saved' && \([\s\S]*?\n        \)\}\n        \{activeTab === 'Published' && \(")
-text, count = saved_block.subn("\n        {activeTab === 'Published' && (", text, count=1)
-if count != 1:
-    raise RuntimeError("Library Saved tab content block anchor missing or ambiguous")
-
-text = replace_once(
-    text,
-    "const [savedIds, setSavedIds] = useState<Set<number>>(new Set())",
-    "const [savedIds, setSavedIds] = useState<Set<number>>(new Set())\n  const [saveActionError, setSaveActionError] = useState('')",
-    "Library save action error state",
-)
-text = replace_once(
-    text,
-    "    const isSaved = savedIds.has(pub.id)",
-    "    const isSaved = savedIds.has(pub.id)\n    setSaveActionError('')",
-    "Library save error reset",
-)
-
-text = replace_once(
-    text,
-    "    } catch {\n      setSavedIds(prev => { const next = new Set(prev); isSaved ? next.add(pub.id) : next.delete(pub.id); return next })",
-    "    } catch (error) {\n      setSavedIds(prev => { const next = new Set(prev); isSaved ? next.add(pub.id) : next.delete(pub.id); return next })\n      setSaveActionError(error instanceof ApiError ? error.message : 'Could not update this Library item.')",
-    "Library save error message",
-)
+if not already_separated:
+    library_text = replace_once(
+        library_text,
+        "const [activeTab, setActiveTab] = useState<'Browse' | 'Saved' | 'Published'>('Browse')",
+        "const [activeTab, setActiveTab] = useState<'Browse' | 'Published'>('Browse')",
+        "Library active tab type",
+    )
+    library_text = replace_once(
+        library_text,
+        "{(['Browse', 'Saved', 'Published'] as const).map(t => (",
+        "{(['Browse', 'Published'] as const).map(t => (",
+        "Library tab list",
+    )
+    
+    saved_block = re.compile(r"\n        \{activeTab === 'Saved' && \([\s\S]*?\n        \)\}\n        \{activeTab === 'Published' && \(")
+    library_text, count = saved_block.subn("\n        {activeTab === 'Published' && (", library_text, count=1)
+    if count != 1:
+        raise RuntimeError("Library Saved tab content block anchor missing or ambiguous")
+    
+    library_text = replace_once(
+        library_text,
+        "const [savedIds, setSavedIds] = useState<Set<number>>(new Set())",
+        "const [savedIds, setSavedIds] = useState<Set<number>>(new Set())\n  const [saveActionError, setSaveActionError] = useState('')",
+        "Library save action error state",
+    )
+    library_text = replace_once(
+        library_text,
+        "    const isSaved = savedIds.has(pub.id)",
+        "    const isSaved = savedIds.has(pub.id)\n    setSaveActionError('')",
+        "Library save error reset",
+    )
+    
+    library_text = replace_once(
+        library_text,
+        "    } catch {\n      setSavedIds(prev => { const next = new Set(prev); isSaved ? next.add(pub.id) : next.delete(pub.id); return next })",
+        "    } catch (error) {\n      setSavedIds(prev => { const next = new Set(prev); isSaved ? next.add(pub.id) : next.delete(pub.id); return next })\n      setSaveActionError(error instanceof ApiError ? error.message : 'Could not update this Library item.')",
+        "Library save error message",
+    )
+    
+    
+if not module_owned:
+    text = library_text
 
 if "import StudyMaterialsScreen from './screens/study/StudyMaterialsScreen'" not in text:
     text = replace_once(
@@ -114,12 +122,24 @@ else:
     if missing:
         raise RuntimeError("Extracted My Study module is missing Library integration: " + ", ".join(missing))
 
-text = replace_once(
-    text,
-    "        {activeTab === 'Browse' && (\n          browseLoading ? (",
-    "        {saveActionError && <div style={{marginBottom:12,padding:'10px 12px',borderRadius:12,background:'rgba(201,168,76,0.10)',border:`1px solid ${N.gold}55`,color:T.text,fontSize:12,fontWeight:700}}>{saveActionError}</div>}\n        {activeTab === 'Browse' && (\n          browseLoading ? (",
-    "Library save error banner",
-)
+if module_owned:
+    if "saveActionError && <div" not in library_text:
+        library_text = replace_once(
+            library_text,
+            "        {activeTab === 'Browse' && (\n          browseLoading ? (",
+            "        {saveActionError && <div style={{marginBottom:12,padding:'10px 12px',borderRadius:12,background:'rgba(201,168,76,0.10)',border:`1px solid ${N.gold}55`,color:T.text,fontSize:12,fontWeight:700}}>{saveActionError}</div>}\n        {activeTab === 'Browse' && (\n          browseLoading ? (",
+            "Library save error banner",
+        )
+else:
+    if "saveActionError && <div" not in text:
+        text = replace_once(
+            text,
+            "        {activeTab === 'Browse' && (\n          browseLoading ? (",
+            "        {saveActionError && <div style={{marginBottom:12,padding:'10px 12px',borderRadius:12,background:'rgba(201,168,76,0.10)',border:`1px solid ${N.gold}55`,color:T.text,fontSize:12,fontWeight:700}}>{saveActionError}</div>}\n        {activeTab === 'Browse' && (\n          browseLoading ? (",
+            "Library save error banner",
+        )
 
 APP.write_text(text, encoding="utf-8")
+if module_owned:
+    LIBRARY_MODULE.write_text(library_text, encoding="utf-8")
 print("Library/My Study separation and Study Hub removal controls applied")
