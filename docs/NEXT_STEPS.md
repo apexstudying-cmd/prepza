@@ -783,3 +783,77 @@ PR #74 was squash-merged to `main` as `6b82aba7bd7d167488c4a0e9921be6deb50a7648`
 - [ ] Continue with the high-risk ChatDetail/Chats, DocumentStudy/Reader, AdminSection, generation-flow and app-navigation boundaries only after dependency mapping and dedicated behavior contracts.
 
 StudyHub Library Flow [42022943808](https://github.com/apexstudying-cmd/prepza/actions/runs/42022943808) was skipped by workflow conditions and is not counted as passing. The tested application-code head was `f5f8afb34a8d74c742de4b4d33762ec882b05a81`; subsequent PR commits updated documentation only.
+
+
+## 2026-11-05 — Splash and Edit Profile extraction (PR #77; verification in progress)
+
+- [x] Extract the existing SplashScreen to frontend/src/screens/onboarding/SplashScreen.tsx and EditProfileScreen to frontend/src/screens/profile/EditProfileScreen.tsx in the same consolidated PR. App.tsx is reduced from 11,853 to 11,591 lines on the PR branch (262 fewer lines).
+- [x] Compare both component bodies directly against the base main source. Both are byte-for-byte identical after normalising only module exports, the explicit brandline prop, narrowed navigation callback types, and the extracted local EditProfileMe response type.
+- [x] Preserve Splash session restoration: 2.2-second display timing, /me request, full academic-profile check, confirmed-401 login routing, one retry for other failures, manual retry UI, and canonical /icon-192.png asset.
+- [x] Preserve Edit Profile behavior: /me, university/program loading, profile PATCH, academic-context event, image processing to 512×512 WebP at quality 0.82, 512 KB size limit, signed upload and confirmation endpoints, CSRF headers, offline avatar cache writes/removal, and return-to-profile navigation.
+- [x] Update apply_study_navigation_polish.py to handle the module-owned SplashScreen and pass offline resume behavior from the app shell. The transform now re-runs idempotently even when its historical marker already exists; it no longer silently skips the module patch. Update the production-build verifier and workflow anchors to check the new module boundary.
+- [x] Frontend Build [run 42030603950](https://github.com/apexstudying-cmd/prepza/actions/runs/42030603950) passed 76 source/module contract tests, 5 offline Library regression tests, TypeScript, service-worker validation, production build, and architecture audits.
+- [x] Student Frontend [42030604065], Student Contract [42030603908], Admin Route [42030604002], B2B [42030603900], AI Generation [42030604051], AI Economics [42030604139], Prepza Control API [42030603917], E2EE Security [42030603959], and E2EE Chat [42030604078] passed on the tested code head.
+- [x] Full Release Browser/Cross-System Regression [run 42030603969](https://github.com/apexstudying-cmd/prepza/actions/runs/42030603969) passed on the application-code head: production image, disposable PostgreSQL/Redis, all 43 migration files and controlled SQL ledger, app startup, mobile/tablet responsive browser checks, B2B browser-to-ledger metering, 98/98 PostgreSQL QA tests, online/offline Study Hub and generated-artifact browser journeys, screenshots, and service cleanup. The later PR commits are documentation-only.
+- [ ] Continue with the high-risk ChatDetail/Chats, DocumentStudy/Reader, AdminSection/admin panels, generation flows, Podcast Player, Home/Explore, and app-shell boundaries only after dependency mapping and dedicated behavior contracts. Backend extraction remains a separate staged effort.
+
+PR #77 is intentionally one consolidated review rather than separate PRs for each screen. The frontend refactor remains incomplete.
+
+
+## 2026-11-05 follow-up — New Chat extraction (PR #77)
+
+- [x] Extract NewChatScreen to frontend/src/screens/chat/NewChatScreen.tsx (159 lines). App.tsx is now 11,440 lines on the PR branch, 413 lines fewer than the 11,853-line starting point.
+- [x] Directly compare the moved NewChatScreen body with base main; the body is byte-for-byte identical after normalising only the module export and narrowed callback type.
+- [x] Add source contracts for debounced student search, cancellation/timeout cleanup, direct chat create/reuse, group validation/creation, CSRF headers, selected participant handling, and chat-detail navigation.
+- [x] Latest Frontend Build [42031983870] passed 78 source/module contract tests, 5 offline Library regression tests, TypeScript, service-worker validation, production build, and architecture audits. Student Frontend [42031983952], Student Contract [42031983901], Admin Route [42031984066], B2B [42031983984], AI Economics [42031983713], AI Generation [42031983800], Prepza Control API [42031983813], E2EE Chat [42031983969], and E2EE Security [42031983859] passed.
+- [x] Full Release Browser/Cross-System Regression [42031984075](https://github.com/apexstudying-cmd/prepza/actions/runs/42031984075) passed on the New Chat code head: production image, disposable PostgreSQL/Redis, 43 migration files and controlled ledger, app startup, mobile/tablet browser checks, B2B browser-to-ledger metering, 98/98 PostgreSQL QA, online/offline Study Hub and generated-artifact journeys, screenshot upload, and cleanup. The commits after this tested application-code head are documentation-only.
+
+
+## 2026-11-05 follow-up — Time Studied and Share Opportunity extractions (PR #77)
+
+- [x] Extract TimeStudiedScreen into frontend/src/screens/gamification/TimeStudiedScreen.tsx (61 lines); App.tsx reduced by 54 lines.
+- [x] Extract ShareOppForm into frontend/src/screens/opportunities/ShareOppForm.tsx (45 lines); App.tsx reduced by 40 lines.
+- [x] Directly compare both moved component bodies against base main: both are byte-for-byte identical after normalising only module exports and narrowed navigation callback types.
+- [x] Add focused source contracts for study period selection, /study-time loading/cancellation, duration formatting, and profile navigation; add form field, category, controlled description, and existing navigation contracts.
+- [ ] Latest Frontend Build [42034151911](https://github.com/apexstudying-cmd/prepza/actions/runs/42034151911) and full Release Browser/Cross-System Regression [42034151448](https://github.com/apexstudying-cmd/prepza/actions/runs/42034151448) are running on the latest code head. Do not mark these two extractions release-verified until the latest checks pass.
+
+
+## 2026-11-05 follow-up — Student Profile extraction (PR #77)
+
+- [x] Extract StudentProfileScreen and its PublicProfile/FollowSummary response types to frontend/src/screens/profile/StudentProfileScreen.tsx (164 lines). App.tsx is now 11,286 lines on the PR branch, 567 fewer than the original 11,853-line baseline.
+- [x] Compare the moved component body directly with base main. It is byte-for-byte identical after normalising only the module export and narrowed callback/back-screen types. The App back-screen state is narrowed to its two actual values ('chat-detail' and 'chats'); runtime behavior is unchanged.
+- [x] Protect public-profile/follow-summary fetches, private-profile handling, follow/unfollow and pending states, direct-message creation, chat-options navigation, and XP/follower/document/study-time statistics with module contracts.
+- [x] Frontend Build [42033518073] passed 80 source/module contract tests, 5 offline Library tests, TypeScript, service-worker validation, production build and architecture audits. Student Frontend, Student Contract, Admin Route, B2B, AI economics, AI generation, Prepza Control API, and E2EE Chat passed on the tested code head.
+- [x] Full Release Browser/Cross-System Regression [42033518119](https://github.com/apexstudying-cmd/prepza/actions/runs/42033518119) passed on the Student Profile code head: production image, PostgreSQL/Redis, 43 migration files and controlled ledger, app startup, mobile/tablet browser checks, B2B metering, 98/98 PostgreSQL QA, online/offline Study Hub and generated-artifact journeys, screenshots, and cleanup.
+- [ ] E2EE Security Regression [42033518226](https://github.com/apexstudying-cmd/prepza/actions/runs/42033518226) is still running at the checkout step; wait for its result before merge. Subsequent PR commits are documentation-only.
+
+
+## 2026-11-05 follow-up — Study Streak extraction (PR #77)
+
+- [x] Extract StudyStreakScreen and its local streak response types into frontend/src/screens/gamification/StudyStreakScreen.tsx (214 lines); App.tsx reduced by 205 lines.
+- [x] Compare the moved component body with base main; it is byte-for-byte identical after normalising only the module export and navigation callback type.
+- [x] Add contracts for month-scoped /streak loading, cancellation, selected-day interaction, month navigation, milestones, duration formatting, and profile/share-sheet navigation.
+- [x] The first typecheck identified the existing share-sheet navigation in TimeStudiedScreen; the module callback type and regression contract now include both profile and share-sheet routes. No UI or runtime logic was changed for this correction.
+- [x] Frontend Build [42034876037](https://github.com/apexstudying-cmd/prepza/actions/runs/42034876037) passed on the Study Streak code head: 86 frontend source/module contract tests, 5 offline Library regression tests, TypeScript, service-worker validation, production Vite build, architecture audits, and launch-wiring verification.
+- [ ] Full Release Browser/Cross-System Regression [42034875673](https://github.com/apexstudying-cmd/prepza/actions/runs/42034875673) remains queued/in progress on the same application-code head; do not mark the latest code head fully release-verified until it succeeds.
+
+
+## 2026-11-05 follow-up — Profile screen extraction (PR #77)
+
+- [x] Extract ProfileScreen into frontend/src/screens/profile/ProfileScreen.tsx (179 lines) and move its screen-owned PROFILE_CACHE with it.
+- [x] Move shared ProfileMe and HomeDocument contracts to frontend/src/types/profile.ts and GamificationSummary to frontend/src/types/gamification.ts; App.tsx imports those shared types.
+- [x] Keep the existing SkeletonProfile implementation in App.tsx and inject it as a component prop; route dispatch and app-level state ownership remain centralized.
+- [x] Directly compare the moved ProfileScreen component body with base main; it is byte-for-byte identical after normalising only the module export, explicit SkeletonProfile prop, and narrowed route callback type.
+- [x] Add source contracts for profile data requests, cached state, saved/activity/material tabs, cancellation, university/program loading, follow requests, achievements, and existing navigation destinations.
+- [x] Frontend Build [42036291254](https://github.com/apexstudying-cmd/prepza/actions/runs/42036291254) passed on the ProfileScreen code head: 88 frontend source/module contract tests, 5 offline Library regression tests, TypeScript, service-worker validation, production build, architecture audits and launch-wiring verification.
+- [ ] Full Release Browser/Cross-System Regression [42036291297](https://github.com/apexstudying-cmd/prepza/actions/runs/42036291297) and the remaining contract/security workflows are queued on the ProfileScreen code head. Await these before merge or declaring full release verification.
+
+
+## 2026-11-05 follow-up — Document Ready extraction (PR #77)
+
+- [x] Extract DocReadyScreen into frontend/src/screens/study/DocReadyScreen.tsx (73 lines); App.tsx reduced by 69 lines.
+- [x] Move the shared DocumentDetail contract into frontend/src/types/documents.ts and import it from App.tsx and DocReadyScreen.
+- [x] Preserve the DocReadyScreen body byte-for-byte against base main after normalising only the module export, injected TopBar component, and local DocReadyRoute type replacing the App-local Screen alias.
+- [x] Add source contracts for document detail loading/error handling, metadata labels, all seven existing action destinations, and the existing header.
+- [x] Frontend Build [42036938429](https://github.com/apexstudying-cmd/prepza/actions/runs/42036938429) passed on code head 74b8fac: 90 frontend source/module contract tests, 5 offline Library tests, TypeScript, service-worker validation, production build, architecture audits and launch-wiring verification.
+- [ ] Full Release Browser/Cross-System Regression [42036938563](https://github.com/apexstudying-cmd/prepza/actions/runs/42036938563) and remaining contract/security workflows are queued on this code head; wait for all before merge.

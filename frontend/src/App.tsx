@@ -6,30 +6,43 @@ import { N, useTheme, currentThemeMode, DARK_THEME } from './theme/theme'
 import { Ic } from './ui/icons'
 import Avi from './ui/Avi'
 import CompleteProfileScreen from './screens/onboarding/CompleteProfileScreen'
+import SplashScreen from './screens/onboarding/SplashScreen'
 import LoginScreen from './screens/auth/LoginScreen'
 import { ForgotPasswordScreen, ResetPasswordScreen, VerifyConfirmScreen, SignupScreen, CheckEmailScreen } from './screens/auth/AuthScreens'
 import AmbassadorScreen from './screens/ambassador/AmbassadorScreen'
 import PodcastLibraryScreen from './screens/podcast/PodcastLibraryScreen'
 import StudyMaterialsScreen from './screens/study/StudyMaterialsScreen'
+import DocReadyScreen from './screens/study/DocReadyScreen'
 import AchievementsScreen from './screens/gamification/AchievementsScreen'
 import AITutorScreen from './screens/tutor/AITutorScreen'
 import type { Achievement, AchievementsResponse } from './types/achievements'
 import { XPProgressScreen } from './screens/gamification/ProgressScreens'
-import type { StudyTimeResponse } from './types/gamification'
+// Screen implementations are feature-owned; this file keeps the existing route dispatch and shared app state.
+import TimeStudiedScreen from './screens/gamification/TimeStudiedScreen'
+import StudyStreakScreen from './screens/gamification/StudyStreakScreen'
+import type { GamificationSummary, StudyTimeResponse } from './types/gamification'
+import type { HomeDocument } from './types/profile'
+import type { DocumentDetail } from './types/documents'
 import { formatStudyTime } from './lib/studyTime'
 import { LIBRARY_MATERIAL_TYPES, materialTypeLabel } from './lib/library'
 import LibraryScreen from './screens/library/LibraryScreen'
 import { podcastColor, podcastDuration, type PodcastItem } from './types/podcast'
 import SettingsScreen from './screens/settings/SettingsScreen'
+import EditProfileScreen from './screens/profile/EditProfileScreen'
+import ProfileScreen from './screens/profile/ProfileScreen'
+// Profile data/cache live with the screen; route state and loading skeleton remain app-owned.
 import NotificationsScreen from './screens/notifications/NotificationsScreen'
 import GroupDetailScreen from './screens/groups/GroupDetailScreen'
 import { FollowListScreen, FollowRequestsScreen } from './screens/social/FollowScreens'
+import StudentProfileScreen from './screens/profile/StudentProfileScreen'
 import type { FollowRequestItem, MessageRequestItem } from './types/social'
 import ChatOptionsScreen from './screens/chat/ChatOptionsScreen'
+import NewChatScreen from './screens/chat/NewChatScreen'
 import type { ChatDetail, ChatMessageData } from './types/chat'
 import GroupCreateScreen from './screens/groups/GroupCreateScreen'
 import type { UserSearchResult } from './types/users'
 import type { GroupSummary } from './types/groups'
+import ShareOppForm from './screens/opportunities/ShareOppForm'
 import Pill from './ui/Pill'
 import { subscribeToPush, unsubscribeFromPush } from './lib/pushNotifications'
 import type { UniversityOption, ProgramOption } from './types/academic'
@@ -356,13 +369,7 @@ async function sha256Hex(file: File): Promise<string> {
   return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-type DocumentDetail = {
-  id: number; title: string; original_filename: string; status: string
-  content_hash?: string | null; last_opened_at?: string | null
-  file_type: string | null; file_size_bytes: number | null; page_count: number | null
-  error_message: string | null; view_url: string | null
-  materials: { id: number; type: string; status: string; parameters?: Record<string, unknown> }[]; created_at: string | null
-}
+
 
 // Payload shape inside `summary`/`quiz`/`flashcards`/`mindmap` below is
 // whatever ai_service.py produces - not pinned down here, so every
@@ -1534,80 +1541,10 @@ function SkeletonNotifications() {
 }
 
 // ─── SPLASH ───────────────────────────────────────────────────────────────────
-function SplashScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const { tokens: T } = useTheme()
-  // Restores an existing backend session (cookie lasts 7 days) instead of
-  // always dropping the user back to the login screen on every app open.
-  // Keeps the branded 2.2s splash beat either way.
-  //
-  // IMPORTANT: only a confirmed 401 from /me means "not logged in". Any
-  // other failure (network blip, the service worker's offline fallback,
-  // a timeout while the connection re-establishes - all common right
-  // after a PWA refresh on mobile) does NOT mean the session is gone;
-  // treating it as a logout was sending people back to the login screen
-  // while their cookie was still perfectly valid. So: retry once on a
-  // non-401 failure, and if it still fails, offer a manual retry instead
-  // of silently signing the user out.
-  const [state, setState] = useState<'checking' | 'retry'>('checking')
-
-  const checkSession = async (attempt = 0): Promise<void> => {
-    setState('checking')
-    try {
-      const me = await api<{ university_id: number | null; program_id: number | null; year: number | null; semester: number | null }>('/me')
-      setScreen(me.university_id && me.program_id && me.year && me.semester ? 'home' : 'complete-profile')
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 401) {
-        setScreen('login')
-        return
-      }
-      if (attempt === 0) {
-        setTimeout(() => checkSession(1), 1200)
-      } else {
-        setState('retry')
-      }
-    }
-  }
-
-  useEffect(() => {
-    let cancelled = false
-    const t = setTimeout(() => { if (!cancelled) checkSession(0) }, 2200)
-    return () => { cancelled = true; clearTimeout(t) }
-  }, [])
-
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(160deg, ${N.navy} 0%, ${N.navy2} 60%, ${N.navy3} 100%)` }}>
-      <div style={{ position: 'absolute', top: '18%', width: 220, height: 220, background: 'rgba(201,168,76,0.06)', borderRadius: '50%', filter: 'blur(50px)' }} />
-      <img src="/icon-192.png" alt="Prepza" width={192} height={192} style={{ width: 192, height: 192, borderRadius: 42, marginBottom: 24, boxShadow: '0 18px 60px rgba(201,168,76,0.3)' }} />
-      <div style={{ fontWeight: 800, fontSize: 30, color: '#fff', letterSpacing: '-1px' }}>{PREPZA_BRANDLINE}</div>
-      <div style={{ color: 'rgba(255,255,255,0.52)', fontSize: 11, fontWeight: 600, letterSpacing: .2, marginTop: 9 }}>Our vision</div>
-      {state === 'checking' ? (
-        <div style={{ marginTop: 60, display: 'flex', gap: 6 }}>
-          {[0,1,2].map(i => <div key={i} style={{ width: i === 0 ? 20 : 6, height: 6, background: i === 0 ? N.gold : 'rgba(255,255,255,0.2)', borderRadius: 99, transition: 'all 0.3s' }} />)}
-        </div>
-      ) : (
-        <div style={{ marginTop: 48, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-          <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13, textAlign: 'center', padding: '0 32px' }}>Couldn't reach Prepza. Check your connection.</div>
-          <button onClick={() => checkSession(0)} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 12, padding: '10px 22px', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Retry</button>
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
 
 // ─── HOME ─────────────────────────────────────────────────────────────────────
-type HomeDocument = {
-  id: number
-  title: string
-  status: string
-  file_type: string | null
-  page_count: number | null
-  created_at: string | null
-  last_opened_at?: string | null
-  materials?: { id: number; type: string; status: string; parameters?: Record<string, unknown> }[]
-}
-type GamificationSummary = { xp_total: number; level: number; level_title: string; current_streak: number; longest_streak: number; documents_count: number; followers_count: number }
+
 
 // ─── Social (Chunk 12) ─────────────────────────────────────────────────────────
 // GET /users/:id/public-profile (added in the Chunk 12 close-out patch)
@@ -1615,13 +1552,7 @@ type GamificationSummary = { xp_total: number; level: number; level_title: strin
 // VIEWING (not your own) - display_name is still carried along from wherever
 // navigation originated (a follow list row, a notification body, etc) as a
 // fallback while this loads, same as before.
-type FollowSummary = { user_id: number; followers_count: number; following_count: number; is_following: boolean; is_followed_by: boolean; is_pending?: boolean }
-type PublicProfile = {
-  user_id: number; display_name: string; bio: string | null; year: number | null
-  university_name: string | null; program_name: string | null
-  documents_count: number; xp_total: number; weekly_study_seconds: number
-  is_private?: boolean
-}
+
 
 // Stale-while-revalidate cache for the Home screen: on repeat visits within
 // the same session, render instantly from cache while a fresh fetch runs
@@ -2058,47 +1989,6 @@ function CreateModal({ setScreen }: { setScreen: (s: Screen) => void }) {
 }
 
 // ─── POST COMPOSER ────────────────────────────────────────────────────────────
-function ShareOppForm({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const { tokens: T } = useTheme()
-  const [form, setForm] = useState({ title: '', org: '', type: 'Internship', deadline: '', location: '', reward: '', desc: '', link: '' })
-  const upd = (k: string) => (e: React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement>) => setForm(f => ({ ...f, [k]: e.target.value }))
-  const inp = (placeholder: string, key: string, type?: string) => (
-    <input type={type ?? 'text'} placeholder={placeholder} value={(form as any)[key]} onChange={upd(key)} style={{ width: '100%', border: `1px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card, boxSizing: 'border-box' }} />
-  )
-  return (
-    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
-      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={() => setScreen('create-modal')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
-          <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Share Opportunity</span>
-          <button onClick={() => setScreen('opportunities')} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 13, border: 'none', borderRadius: 12, padding: '8px 18px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Post</button>
-        </div>
-      </div>
-      <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {[['Title', 'title'], ['Organisation', 'org'], ['Location', 'location'], ['Reward / Stipend (e.g. KES 35,000/mo)', 'reward'], ['Application Link', 'link']].map(([p, k]) => (
-          <div key={k}><div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>{p}</div>{inp(p as string, k as string)}</div>
-        ))}
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Category</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {['Internship','Scholarship','Competition','Job','Event'].map(c => (
-              <button key={c} onClick={() => setForm(f => ({ ...f, type: c }))} style={{ padding: '7px 14px', borderRadius: 20, background: form.type === c ? N.navy : '#F3F4F6', color: form.type === c ? N.gold : T.textMuted, fontWeight: 700, fontSize: 11, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>{c}</button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Deadline</div>
-          {inp('e.g. Sep 30, 2025', 'deadline')}
-        </div>
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Description</div>
-          <textarea value={form.desc} onChange={upd('desc')} placeholder="Describe the opportunity, requirements, and how to apply..." rows={4} style={{ width: '100%', border: `1px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 13, fontFamily: 'Plus Jakarta Sans', resize: 'none', outline: 'none', color: T.text, background: T.card, lineHeight: 1.7, boxSizing: 'border-box' }} />
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ─── EDU UPLOAD FORM ──────────────────────────────────────────────────────────
 function EduUploadForm({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [type, setType] = useState('Notes')
@@ -2383,71 +2273,6 @@ function ProcessingScreen({ setScreen, activeDocumentId }: { setScreen: (s: Scre
 }
 
 // ─── DOC READY ────────────────────────────────────────────────────────────────
-function DocReadyScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
-  const { tokens: T } = useTheme()
-  const [doc, setDoc] = useState<DocumentDetail | null>(null)
-  const [loadError, setLoadError] = useState('')
-
-  useEffect(() => {
-    if (activeDocumentId == null) return
-    api<DocumentDetail>(`/documents/${activeDocumentId}`)
-      .then(setDoc)
-      .catch(e => setLoadError(e instanceof ApiError ? e.message : 'Could not load document details.'))
-  }, [activeDocumentId])
-
-  const actions: { icon: string; label: string; sub: string; dest: Screen }[] = [
-    { icon: '🤖', label: 'Study with AI', sub: 'Ask questions about this doc', dest: 'document-study' },
-    { icon: '❓', label: 'Ask Questions', sub: 'AI answers from your notes', dest: 'ai-tutor' },
-    { icon: '📝', label: 'Summarize', sub: 'Condensed AI notes', dest: 'summary' },
-    { icon: '🧠', label: 'Generate Quiz', sub: 'AI-generated practice quiz', dest: 'quiz' },
-    { icon: '🃏', label: 'Flashcards', sub: 'AI-generated flashcard set', dest: 'flashcards' },
-    { icon: '🎙️', label: 'Create Podcast', sub: 'AI-generated audio episode', dest: 'podcast-player' },
-    { icon: '📚', label: 'Save to Library', sub: 'Access offline anytime', dest: 'library' },
-  ]
-
-  const fileTypeLabel = doc?.file_type ? doc.file_type.toUpperCase() : null
-  const pageLabel = doc?.page_count != null ? `${doc.page_count} pages` : null
-  const sizeLabel = doc?.file_size_bytes != null ? `${(doc.file_size_bytes / (1024 * 1024)).toFixed(1)} MB` : null
-  const metaParts = [fileTypeLabel, pageLabel, sizeLabel].filter(Boolean)
-
-  return (
-    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
-      <div style={{ background: N.navy, padding: '0 18px 20px' }}>
-        <TopBar title="Document Ready ✓" onBack={() => window.history.back()} />
-        <div style={{ background: 'rgba(76,201,123,0.12)', border: '1px solid rgba(76,201,123,0.3)', borderRadius: 14, padding: '12px 14px', display: 'flex', gap: 10, alignItems: 'center' }}>
-          <span style={{ fontSize: 24 }}>✅</span>
-          <div>
-            <div style={{ color: '#4CC97B', fontWeight: 700, fontSize: 13 }}>Processing Complete!</div>
-            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>Your document is ready to study</div>
-          </div>
-        </div>
-      </div>
-      <div style={{ padding: 18 }}>
-        {loadError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600, marginBottom: 14 }}>{loadError}</div>}
-        {/* Doc info */}
-        <div style={{ background: T.card, borderRadius: 16, padding: 16, marginBottom: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.06)', display: 'flex', gap: 14, alignItems: 'center' }}>
-          <div style={{ width: 52, height: 52, background: 'rgba(201,68,68,0.1)', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>📕</div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 800, fontSize: 14, color: T.text }} className="line-clamp-1">{doc?.title || 'Loading…'}</div>
-            <div style={{ fontSize: 12, color: T.textMuted, marginTop: 2 }}>{metaParts.length > 0 ? metaParts.join(' · ') : '—'}</div>
-          </div>
-        </div>
-        <div style={{ fontWeight: 800, fontSize: 15, color: T.text, marginBottom: 12 }}>What would you like to do?</div>
-        {actions.map((a, i) => (
-          <button key={i} onClick={() => setScreen(a.dest)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, background: T.card, border: '1px solid rgba(0,0,0,0.05)', borderRadius: 14, padding: '14px 16px', marginBottom: 8, cursor: 'pointer', textAlign: 'left', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
-            <div style={{ width: 44, height: 44, background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{a.icon}</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>{a.label}</div>
-              <div style={{ fontSize: 11, color: T.textMuted }}>{a.sub}</div>
-            </div>
-            <div style={{ color: T.textMuted }}>{Ic.chevR()}</div>
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 // ─── DOCUMENT STUDY ───────────────────────────────────────────────────────────
 // Stale-while-revalidate cache keyed by document ID: reopening a document
 // already viewed this session renders instantly while a fresh fetch runs
@@ -5016,324 +4841,8 @@ function ShareSheetScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 // endpoint alone has both halves. fallbackName is whatever display name the
 // calling screen already had on hand (a follow-list row, a notification,
 // etc) - used only until public-profile's own display_name arrives.
-function StudentProfileScreen({ setScreen, targetUserId, fallbackName, setActiveConversationId, activeConversationId, backScreen = 'chats' }: {
-  setScreen: (s: Screen) => void
-  targetUserId: number | null
-  fallbackName?: string | null
-  setActiveConversationId?: (id: number) => void
-  activeConversationId?: number | null
-  backScreen?: Screen
-}) {
-  const { tokens: T } = useTheme()
-  const [profile, setProfile] = useState<PublicProfile | null>(null)
-  const [summary, setSummary] = useState<FollowSummary | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [csrfToken, setCsrfToken] = useState('')
-  const [followBusy, setFollowBusy] = useState(false)
-  const [messageBusy, setMessageBusy] = useState(false)
-
-  useEffect(() => { api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {}) }, [])
-
-  useEffect(() => {
-    if (targetUserId == null) { setLoading(false); setError('No student selected.'); return }
-    setLoading(true)
-    setError('')
-    Promise.all([
-      api<PublicProfile>(`/users/${targetUserId}/public-profile`),
-      api<FollowSummary>(`/users/${targetUserId}/follow-summary`),
-    ])
-      .then(([profileRes, summaryRes]) => { setProfile(profileRes); setSummary(summaryRes) })
-      .catch(() => setError('Could not load this profile.'))
-      .finally(() => setLoading(false))
-  }, [targetUserId])
-
-  const toggleFollow = async () => {
-    if (targetUserId == null || !summary || followBusy) return
-    setFollowBusy(true)
-    const wasFollowing = summary.is_following
-    try {
-      if (wasFollowing) {
-        const res = await api<{ followers_count: number }>(`/users/${targetUserId}/follow`, { method: 'DELETE', headers: { 'X-CSRF-Token': csrfToken } })
-        setSummary(s => s ? { ...s, is_following: false, is_pending: false, followers_count: res.followers_count } : s)
-      } else {
-        const res = await api<{ followers_count?: number; status?: string }>(`/users/${targetUserId}/follow`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } })
-        const nowPending = res.status === 'pending'
-        setSummary(s => s ? { ...s, is_following: !nowPending, is_pending: nowPending, followers_count: res.followers_count ?? s.followers_count } : s)
-      }
-    } catch { /* leave state as-is on failure */ }
-    setFollowBusy(false)
-  }
-
-  // Reuses the Chunk 8 chat infra: starts (or reuses) a 1:1 conversation
-  // with this user, then hands off to ChatDetailScreen the same way
-  // NewChatScreen does.
-  const startMessage = async () => {
-    if (targetUserId == null || messageBusy) return
-    setMessageBusy(true)
-    try {
-      const res = await api<{ id: number; reused: boolean }>('/chats', {
-        method: 'POST',
-        headers: { 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify({ is_group: false, participant_ids: [targetUserId] }),
-      })
-      setActiveConversationId?.(res.id)
-      setScreen('chat-detail')
-    } catch { /* stay put on failure */ }
-    setMessageBusy(false)
-  }
-
-  const displayName = profile?.display_name || fallbackName || 'Student'
-  const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST'
-  const courseLine = profile && (profile.program_name || profile.year != null)
-    ? [profile.program_name, profile.year != null ? `Year ${profile.year}` : null].filter(Boolean).join(' · ')
-    : null
-
-  return (
-    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
-      <div style={{ background: `linear-gradient(180deg,${N.navy} 0%,${N.navy3} 100%)`, padding: '0 18px 24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <button type="button" onClick={() => setScreen(backScreen)} aria-label="Back" style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
-          <span style={{ fontWeight: 700, fontSize: 13, color: 'rgba(255,255,255,0.72)' }}>Contact info</span>
-        </div>
-        {loading ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0' }}>
-            <div style={{ width: 30, height: 30, border: '2.5px solid rgba(255,255,255,0.2)', borderTopColor: N.gold, borderRadius: '50%', animation: 'spin-slow 0.7s linear infinite' }} />
-          </div>
-        ) : error ? (
-          <div style={{ textAlign: 'center', padding: '20px 0' }}>
-            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>{error}</div>
-          </div>
-        ) : profile?.is_private ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-            <div style={{ marginBottom: 14 }}><Avi name={initials} size={72} /></div>
-            <div style={{ fontWeight: 800, fontSize: 20, color: '#fff', marginBottom: 4 }}>{displayName}</div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>This profile is private.</div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-            <div style={{ marginBottom: 14 }}><Avi name={initials} size={72} /></div>
-            <div style={{ fontWeight: 800, fontSize: 20, color: '#fff', marginBottom: 2 }}>{displayName}</div>
-            {courseLine && <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>{courseLine}</div>}
-            {profile?.university_name && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>{profile.university_name}</div>}
-            {profile?.bio && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 8, maxWidth: 260, lineHeight: 1.5 }}>{profile.bio}</div>}
-            <div style={{ marginBottom: 14 }} />
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={toggleFollow} disabled={followBusy || summary?.is_pending} style={{ background: (summary?.is_following || summary?.is_pending) ? 'rgba(201,168,76,0.2)' : `linear-gradient(135deg,${N.gold},${N.goldL})`, color: (summary?.is_following || summary?.is_pending) ? N.gold : N.navy, fontWeight: 800, fontSize: 13, border: (summary?.is_following || summary?.is_pending) ? `1px solid ${N.gold}44` : 'none', borderRadius: 12, padding: '10px 24px', cursor: summary?.is_pending ? 'default' : followBusy ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: followBusy ? 0.7 : 1 }}>{summary?.is_pending ? 'Requested' : summary?.is_following ? 'Following ✓' : 'Follow'}</button>
-              {activeConversationId == null && <button onClick={startMessage} disabled={messageBusy} style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', fontWeight: 700, fontSize: 13, border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, padding: '10px 20px', cursor: messageBusy ? 'wait' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: messageBusy ? 0.7 : 1 }}>{messageBusy ? 'Opening…' : 'Message'}</button>}
-            </div>
-          </div>
-        )}
-      </div>
-      {!loading && !error && summary && profile && !profile.is_private && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, padding: '16px 16px 0' }}>
-          <div style={{ background: T.card, borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
-            <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{profile.xp_total.toLocaleString()}</div>
-            <div style={{ fontSize: 11, color: T.textMuted }}>XP</div>
-          </div>
-          <div style={{ background: T.card, borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
-            <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{summary.followers_count}</div>
-            <div style={{ fontSize: 11, color: T.textMuted }}>Followers</div>
-          </div>
-          <div style={{ background: T.card, borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
-            <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{summary.following_count}</div>
-            <div style={{ fontSize: 11, color: T.textMuted }}>Following</div>
-          </div>
-          <div style={{ background: T.card, borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
-            <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{profile.documents_count}</div>
-            <div style={{ fontSize: 11, color: T.textMuted }}>Documents</div>
-          </div>
-          <div style={{ background: T.card, borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
-            <div style={{ fontWeight: 800, fontSize: 18, color: N.gold }}>{formatStudyTime(profile.weekly_study_seconds)}</div>
-            <div style={{ fontSize: 11, color: T.textMuted }}>Time</div>
-          </div>
-        </div>
-      )}
-      {activeConversationId != null && !loading && !error && profile && !profile.is_private && (
-        <div style={{ padding: '16px' }}>
-          <div style={{ background: T.card, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,.05)' }}>
-            <div style={{ padding: '14px 16px 8px', fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: 'uppercase', letterSpacing: .5 }}>Chat</div>
-            <button type="button" onClick={() => setScreen('chat-options')} style={{ width:'100%',display:'flex',alignItems:'center',gap:12,padding:'13px 16px',border:0,borderTop:'1px solid rgba(0,0,0,.05)',background:'transparent',cursor:'pointer',textAlign:'left' }}>
-              <div style={{ color:T.textMuted }}>{Ic.message('w-5 h-5')}</div><div style={{flex:1}}><div style={{fontWeight:750,fontSize:13,color:T.text}}>Chat info & settings</div><div style={{fontSize:11,color:T.textMuted,marginTop:2}}>Shared media, notifications and conversation settings</div></div>{Ic.chevR()}
-            </button>
-          </div>
-        </div>
-      )}
-      {/* Recent posts for another user still aren't exposed by any current
-          endpoint - not shown, rather than faked. */}
-    </div>
-  )
-}
-
 // ─── PROFILE ──────────────────────────────────────────────────────────────────
-type ProfileMe = { id: number; display_name: string | null; bio: string | null; university_id: number | null; program_id: number | null }
 
-const PROFILE_CACHE: { me?: ProfileMe; uniName?: string | null; programName?: string | null; summary?: GamificationSummary | null; achievementsList?: Achievement[]; weeklyStudySeconds?: number | null } = {}
-function ProfileScreen({ setScreen, setActiveProfileUserId, setActiveDocumentId, setActiveOpportunityId, onOpenOrgPortal }: { setScreen: (s: Screen) => void; setActiveProfileUserId?: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveOpportunityId: (id: number | null) => void; onOpenOrgPortal?: () => void }) {
-  const { tokens: T } = useTheme()
-  const [tab, setTab] = useState<'saved'|'activity'|'materials'>('activity')
-  const [showMenu, setShowMenu] = useState(false)
-
-  const [me, setMe] = useState<ProfileMe | null>(PROFILE_CACHE.me ?? null)
-  const [meLoading, setMeLoading] = useState(PROFILE_CACHE.me === undefined)
-  const [uniName, setUniName] = useState<string | null>(PROFILE_CACHE.uniName ?? null)
-  const [programName, setProgramName] = useState<string | null>(PROFILE_CACHE.programName ?? null)
-  const [summary, setSummary] = useState<GamificationSummary | null>(PROFILE_CACHE.summary ?? null)
-  const [achievementsList, setAchievementsList] = useState<Achievement[]>(PROFILE_CACHE.achievementsList ?? [])
-  const [weeklyStudySeconds, setWeeklyStudySeconds] = useState<number | null>(PROFILE_CACHE.weeklyStudySeconds ?? null)
-  const [pendingRequestCount, setPendingRequestCount] = useState(0)
-  const [profileTabLoading, setProfileTabLoading] = useState(false)
-  const [profileSaved, setProfileSaved] = useState<any[]>([])
-  const [profileActivity, setProfileActivity] = useState<any | null>(null)
-  const [profileMaterials, setProfileMaterials] = useState<HomeDocument[]>([])
-  const [profileTabError, setProfileTabError] = useState('')
-
-  useEffect(() => {
-    if (!showMenu) return
-    const close = (event: MouseEvent) => {
-      const target = event.target as HTMLElement | null
-      if (target && !target.closest('[data-prepza-profile-menu]')) setShowMenu(false)
-    }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [showMenu])
-
-  useEffect(() => {
-    api<ProfileMe>('/me').then(res => { setMe(res); PROFILE_CACHE.me = res }).catch(() => {}).finally(() => setMeLoading(false))
-    api<GamificationSummary>('/gamification/summary').then(res => { setSummary(res); PROFILE_CACHE.summary = res }).catch(() => {})
-    api<AchievementsResponse>('/achievements').then(res => { setAchievementsList(res.achievements); PROFILE_CACHE.achievementsList = res.achievements }).catch(() => {})
-    api<StudyTimeResponse>('/study-time?period=week').then(res => { setWeeklyStudySeconds(res.total_seconds); PROFILE_CACHE.weeklyStudySeconds = res.total_seconds }).catch(() => {})
-    api<{ requests: unknown[] }>('/follow-requests').then(res => setPendingRequestCount(res.requests.length)).catch(() => {})
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    setProfileTabLoading(true)
-    setProfileTabError('')
-    const load = async () => {
-      try {
-        if (tab === 'saved') {
-          const res = await api<{ saved: any[] }>('/opportunities/saved')
-          if (!cancelled) setProfileSaved(res.saved || [])
-        } else if (tab === 'activity') {
-          const [week, month] = await Promise.all([api<any>('/study-time?period=week'), api<any>('/study-time?period=month')])
-          if (!cancelled) setProfileActivity({ week_seconds: week.total_seconds || 0, month_seconds: month.total_seconds || 0 })
-        } else {
-          const res = await api<{ documents: HomeDocument[] }>('/documents')
-          if (!cancelled) setProfileMaterials(res.documents || [])
-        }
-      } catch (e) {
-        if (!cancelled) setProfileTabError(e instanceof ApiError ? e.message : 'Could not load this profile section.')
-      } finally {
-        if (!cancelled) setProfileTabLoading(false)
-      }
-    }
-    void load()
-    return () => { cancelled = true }
-  }, [tab])
-
-  useEffect(() => {
-    if (me?.university_id == null) return
-    api<UniversityOption[]>('/universities')
-      .then(list => { const name = list.find(u => u.id === me.university_id)?.name ?? null; setUniName(name); PROFILE_CACHE.uniName = name })
-      .catch(() => {})
-    if (me.program_id != null) {
-      api<ProgramOption[]>(`/universities/${me.university_id}/programs`)
-        .then(list => { const name = list.find(p => p.id === me.program_id)?.name ?? null; setProgramName(name); PROFILE_CACHE.programName = name })
-        .catch(() => {})
-    }
-  }, [me?.university_id, me?.program_id])
-
-  if (meLoading) return <SkeletonProfile />
-  const displayName = me?.display_name || 'Student'
-  const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST'
-  return (
-    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
-      <div style={{ background: `linear-gradient(180deg,${N.navy} 0%,${N.navy3} 100%)`, padding: '0 18px 24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-          <div style={{ position: 'relative' }} data-prepza-profile-menu>
-            <button type="button" onClick={() => setShowMenu(v => !v)} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.dots()}</div></button>
-            {showMenu && (
-              <div style={{ position: 'absolute', right: 0, top: 40, background: T.card, borderRadius: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', zIndex: 20, width: 170, overflow: 'hidden' }}>
-                {[['Edit Profile', () => { setShowMenu(false); setScreen('edit-profile') }], ['Ambassador Program', () => { setShowMenu(false); setScreen('ambassador') }], ['Organisation Portal', () => { setShowMenu(false); onOpenOrgPortal?.() }], ['Settings', () => { setShowMenu(false); setScreen('settings') }], ['Share Profile', () => { setShowMenu(false); setScreen('share-sheet') }]].map(([label, action]) => (
-                  <button key={label as string} onClick={action as () => void} style={{ display: 'block', width: '100%', padding: '13px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, fontFamily: 'Plus Jakarta Sans', fontWeight: 600, color: T.text, cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>{label as string}</button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-          <div style={{ position: 'relative', marginBottom: 14 }}>
-            <div style={{ width: 76, height: 76, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 28, color: N.navy, border: `3px solid rgba(201,168,76,0.4)` }}>{initials}</div>
-          </div>
-          <div style={{ fontWeight: 800, fontSize: 20, color: '#fff', marginBottom: 2 }}>{displayName}</div>
-          {programName && <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>{programName}</div>}
-          {uniName && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2, marginBottom: 14 }}>{uniName}</div>}
-          {!programName && !uniName && <div style={{ marginBottom: 14 }} />}
-        </div>
-      </div>
-
-      {pendingRequestCount > 0 && (
-        <button onClick={() => setScreen('follow-requests')} style={{ margin: '14px 14px 0', width: 'calc(100% - 28px)', background: T.card, borderRadius: 14, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
-          <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(201,168,76,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>👥</div>
-          <div style={{ flex: 1, textAlign: 'left', fontSize: 13, fontWeight: 700, color: T.text }}>Follow requests</div>
-          <Pill text={pendingRequestCount.toString()} color={N.gold} />
-        </button>
-      )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, padding: '14px 14px 0' }}>
-        {[
-          { label: 'Study', value: summary ? `${summary.current_streak}d` : '—', color: N.gold, dest: 'study-activity' as Screen },
-          { label: 'XP', value: summary ? summary.xp_total.toLocaleString() : '—', color: '#4CC97B', dest: 'xp-progress' as Screen },
-          { label: 'Docs', value: summary ? String(summary.documents_count) : '—', color: '#4C7BC9', dest: 'study-materials' as Screen },
-          { label: 'Followers', value: summary ? String(summary.followers_count) : '—', color: '#9B59B6', dest: 'followers' as Screen },
-        ].map(s => (
-          <button key={s.label} onClick={() => {
-            if (s.dest === 'followers' && me && setActiveProfileUserId) setActiveProfileUserId(me.id)
-            setScreen(s.dest)
-          }} style={{ background: T.card, borderRadius: 14, padding: '12px 8px', textAlign: 'center', boxShadow: '0 2px 6px rgba(0,0,0,0.05)', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
-            <div style={{ fontWeight: 800, fontSize: 15, color: s.color }}>{s.value}</div>
-            <div style={{ fontSize: 10, color: T.textMuted, fontWeight: 600 }}>{s.label}</div>
-          </button>
-        ))}
-      </div>
-
-      <div style={{ margin: '14px 14px 0', background: T.card, borderRadius: 16, padding: 14, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <div style={{ fontWeight: 800, fontSize: 13, color: T.text }}>Achievements</div>
-          <button onClick={() => setScreen('achievements')} style={{ fontSize: 11, fontWeight: 700, color: N.gold, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>See all</button>
-        </div>
-        <div style={{ display: 'flex', gap: 14, overflowX: 'auto' }} className="scrollbar-hide">
-          {achievementsList.filter(a => a.done).map(a => (
-            <button key={a.code} onClick={() => setScreen('achievements')} style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer' }}>
-              <div style={{ width: 46, height: 46, background: `${N.gold}18`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, border: `2px solid ${N.gold}33` }}>{a.icon}</div>
-              <div style={{ fontSize: 9, color: T.textMuted, textAlign: 'center', maxWidth: 50, lineHeight: 1.3 }}>{a.name}</div>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ margin: '14px 14px 0', background: T.card, borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }}>
-        <div style={{ display: 'flex', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
-          {(['saved','activity','materials'] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: '11px 0', background: 'none', border: 'none', fontWeight: tab === t ? 800 : 500, fontSize: 11, color: tab === t ? N.navy : '#9CA3AF', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', borderBottom: tab === t ? `2px solid ${N.gold}` : '2px solid transparent' }}>
-              {t === 'saved' ? 'Saved' : t === 'activity' ? 'Activity' : 'Materials'}
-            </button>
-          ))}
-        </div>
-        <div style={{ padding: 14 }}>
-          {profileTabLoading ? <div style={{ padding: '18px 0', textAlign: 'center', color: T.textMuted, fontSize: 12 }}>Loading…</div> : profileTabError ? <div style={{ padding: '18px 0', textAlign: 'center', color: '#B91C1C', fontSize: 12 }}>{profileTabError}</div> : (
-            <>
-              {tab === 'saved' && (profileSaved.length === 0 ? <div style={{ padding: '18px 0', textAlign:'center', color:T.textMuted, fontSize:12 }}>No saved opportunities yet.</div> : <div style={{display:'flex',flexDirection:'column',gap:8}}>{profileSaved.map((o:any)=><button key={o.id} onClick={()=>{setActiveOpportunityId(o.id);setScreen('opportunity-detail')}} style={{display:'flex',gap:10,alignItems:'center',width:'100%',background:'none',border:'none',padding:'8px 0',textAlign:'left',cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{width:34,height:34,borderRadius:10,background:`${N.gold}18`,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,color:N.gold}}>{(o.title||'O').slice(0,1).toUpperCase()}</div><div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:T.text}} className="line-clamp-1">{o.title}</div><div style={{fontSize:10,color:T.textMuted}}>{o.organisation?.name || 'Opportunity'}</div></div>{Ic.chevR('w-4 h-4')}</button>)}</div>)}
-              {tab === 'activity' && <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9}}><div style={{background:'#F8F9FC',borderRadius:12,padding:12}}><div style={{fontSize:9,color:T.textMuted}}>THIS WEEK</div><div style={{fontSize:20,fontWeight:800,color:N.navy,marginTop:5}}>{formatStudyTime(profileActivity?.week_seconds || 0)}</div></div><div style={{background:'#F8F9FC',borderRadius:12,padding:12}}><div style={{fontSize:9,color:T.textMuted}}>THIS MONTH</div><div style={{fontSize:20,fontWeight:800,color:N.navy,marginTop:5}}>{formatStudyTime(profileActivity?.month_seconds || 0)}</div></div><button onClick={()=>setScreen('study-activity')} style={{gridColumn:'1 / -1',marginTop:2,padding:11,border:`1px solid ${N.navy}18`,borderRadius:12,background:T.card,color:N.navy,fontWeight:800,fontSize:11,cursor:'pointer'}}>View full study activity</button></div>}
-              {tab === 'materials' && (profileMaterials.length === 0 ? <div style={{padding:'18px 0',textAlign:'center',color:T.textMuted,fontSize:12}}>No study materials yet.</div> : <div style={{display:'flex',flexDirection:'column',gap:8}}>{profileMaterials.slice(0,8).map(d=><button key={d.id} onClick={()=>{setActiveDocumentId(d.id);setScreen('document-study')}} style={{display:'flex',gap:10,alignItems:'center',width:'100%',background:'none',border:'none',padding:'7px 0',textAlign:'left',cursor:'pointer',fontFamily:'Plus Jakarta Sans'}}><div style={{width:34,height:34,borderRadius:10,background:'#F3F4F6',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:11,color:N.navy}}>{(d.file_type||'DOC').toUpperCase().slice(0,3)}</div><div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:T.text}} className="line-clamp-1">{d.title}</div><div style={{fontSize:10,color:T.textMuted}}>{d.status}</div></div>{Ic.chevR('w-4 h-4')}</button>)}</div>)}
-            </>
-          )}
-        </div>
-      </div>
-      <div style={{ height: 24 }} />
-    </div>
-  )
-}
 
 // ─── SETTINGS ─────────────────────────────────────────────────────────────────
 // ─── SIGNUP ───────────────────────────────────────────────────────────────────
@@ -5470,363 +4979,7 @@ function MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
 }
 
 // ─── NEW CHAT ─────────────────────────────────────────────────────────────────
-function NewChatScreen({ setScreen, setActiveConversationId }: { setScreen: (s: Screen) => void; setActiveConversationId: (id: number) => void }) {
-  const { tokens: T } = useTheme()
-  const [mode, setMode] = useState<'select'|'new-chat'|'new-group'>('select')
-  const [search, setSearch] = useState('')
-  const [results, setResults] = useState<UserSearchResult[]>([])
-  const [searching, setSearching] = useState(false)
-  const [searchError, setSearchError] = useState<string | null>(null)
-  const [csrfToken, setCsrfToken] = useState('')
-  const [selectedIds, setSelectedIds] = useState<number[]>([])
-  const [groupName, setGroupName] = useState('')
-  const [creating, setCreating] = useState(false)
-  const [createError, setCreateError] = useState<string | null>(null)
-
-  useEffect(() => {
-    api<{ csrf_token: string }>('/me').then(me => setCsrfToken(me.csrf_token)).catch(() => {})
-  }, [])
-
-  useEffect(() => {
-    if (mode === 'select') return
-    const q = search.trim()
-    if (!q) { setResults([]); setSearchError(null); return }
-    let cancelled = false
-    setSearching(true)
-    const t = setTimeout(() => {
-      api<{ users: UserSearchResult[] }>(`/users/search?q=${encodeURIComponent(q)}`)
-        .then(data => { if (!cancelled) { setResults(data.users); setSearchError(null) } })
-        .catch(e => { if (!cancelled) setSearchError(e instanceof Error ? e.message : 'Search failed') })
-        .finally(() => { if (!cancelled) setSearching(false) })
-    }, 300)
-    return () => { cancelled = true; clearTimeout(t) }
-  }, [search, mode])
-
-  const startDirectChat = async (userId: number) => {
-    if (creating) return
-    setCreating(true)
-    setCreateError(null)
-    try {
-      const res = await api<{ id: number; reused: boolean }>('/chats', {
-        method: 'POST',
-        headers: { 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify({ is_group: false, participant_ids: [userId] }),
-      })
-      setActiveConversationId(res.id)
-      setScreen('chat-detail')
-    } catch (e) {
-      setCreateError(e instanceof Error ? e.message : 'Could not start chat')
-    } finally {
-      setCreating(false)
-    }
-  }
-
-  const toggleSelected = (userId: number) => {
-    setSelectedIds(ids => ids.includes(userId) ? ids.filter(id => id !== userId) : [...ids, userId])
-  }
-
-  const createGroup = async () => {
-    if (creating) return
-    if (!groupName.trim()) { setCreateError('Group name is required'); return }
-    if (selectedIds.length === 0) { setCreateError('Select at least one member'); return }
-    setCreating(true)
-    setCreateError(null)
-    try {
-      const res = await api<{ id: number; reused: boolean }>('/chats', {
-        method: 'POST',
-        headers: { 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify({ is_group: true, name: groupName.trim(), participant_ids: selectedIds }),
-      })
-      setActiveConversationId(res.id)
-      setScreen('chat-detail')
-    } catch (e) {
-      setCreateError(e instanceof Error ? e.message : 'Could not create group')
-    } finally {
-      setCreating(false)
-    }
-  }
-
-  if (mode === 'select') return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
-      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
-          <span style={{ flex: 1, fontWeight: 800, fontSize: 18, color: '#fff' }}>New Conversation</span>
-        </div>
-      </div>
-      <div style={{ flex: 1, padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <button onClick={() => setMode('new-chat')} style={{ display: 'flex', alignItems: 'center', gap: 14, background: T.card, border: 'none', borderRadius: 16, padding: 16, cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', fontFamily: 'Plus Jakarta Sans' }}>
-          <div style={{ width: 48, height: 48, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>💬</div>
-          <div style={{ textAlign: 'left' }}><div style={{ fontWeight: 800, fontSize: 14, color: T.text }}>New Chat</div><div style={{ fontSize: 12, color: T.textMuted }}>Message a classmate directly</div></div>
-        </button>
-        <button onClick={() => setMode('new-group')} style={{ display: 'flex', alignItems: 'center', gap: 14, background: T.card, border: 'none', borderRadius: 16, padding: 16, cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', fontFamily: 'Plus Jakarta Sans' }}>
-          <div style={{ width: 48, height: 48, background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>👥</div>
-          <div style={{ textAlign: 'left' }}><div style={{ fontWeight: 800, fontSize: 14, color: T.text }}>New Group</div><div style={{ fontSize: 12, color: T.textMuted }}>Create a study group chat</div></div>
-        </button>
-      </div>
-    </div>
-  )
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.card }}>
-      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          <button onClick={() => setMode('select')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
-          <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>{mode === 'new-chat' ? 'Select Contact' : 'New Group'}</span>
-        </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', background: 'rgba(255,255,255,0.09)', borderRadius: 12, padding: '9px 12px' }}>
-          <div style={{ color: 'rgba(255,255,255,0.4)' }}>{Ic.search('w-4 h-4')}</div>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search students…" style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: '#fff', fontSize: 13, fontFamily: 'Plus Jakarta Sans' }} />
-        </div>
-        {mode === 'new-group' && (
-          <input value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="Group name…" style={{ marginTop: 10, width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.09)', border: 'none', borderRadius: 12, padding: '10px 12px', color: '#fff', fontSize: 13, fontFamily: 'Plus Jakarta Sans', outline: 'none' }} />
-        )}
-      </div>
-      <div style={{ flex: 1, overflowY: 'auto' }} className="scrollbar-hide">
-        {createError && <div style={{ padding: '10px 16px', color: '#C94C4C', fontSize: 12, fontFamily: 'Plus Jakarta Sans' }}>{createError}</div>}
-        {searchError && <div style={{ padding: '10px 16px', color: '#C94C4C', fontSize: 12, fontFamily: 'Plus Jakarta Sans' }}>{searchError}</div>}
-        {!search.trim() ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
-            <div style={{ fontSize: 44, marginBottom: 12 }}>🔍</div>
-            <div style={{ fontWeight: 700, fontSize: 16, color: T.text }}>Search for students</div>
-            <div style={{ fontSize: 13, color: T.textMuted, marginTop: 4 }}>Start typing a name to find classmates</div>
-          </div>
-        ) : searching ? (
-          <div style={{ padding: '20px 16px', textAlign: 'center', color: T.textMuted, fontSize: 13, fontFamily: 'Plus Jakarta Sans' }}>Searching…</div>
-        ) : results.length === 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', textAlign: 'center' }}>
-            <div style={{ fontSize: 44, marginBottom: 12 }}>🙁</div>
-            <div style={{ fontWeight: 700, fontSize: 16, color: T.text }}>No students found</div>
-          </div>
-        ) : results.map(c => {
-          const initials = (c.display_name || '??').slice(0, 2).toUpperCase()
-          const course = c.year != null && c.semester != null ? `Year ${c.year} · Semester ${c.semester}` : 'Prepza student'
-          const selected = selectedIds.includes(c.id)
-          return (
-            <div key={c.id} onClick={() => mode === 'new-chat' ? startDirectChat(c.id) : toggleSelected(c.id)} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '13px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.04)', opacity: creating ? 0.6 : 1 }}>
-              <Avi name={initials} size={44} />
-              <div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 14, color: T.text }}>{c.display_name}</div><div style={{ fontSize: 12, color: T.textMuted }}>{course}</div></div>
-              {mode === 'new-chat' && <div style={{ color: N.gold }}>{Ic.chevR()}</div>}
-              {mode === 'new-group' && (
-                <div style={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${selected ? N.gold : T.textMuted}`, background: selected ? N.gold : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: N.navy, fontWeight: 800, flexShrink: 0 }}>{selected ? '✓' : ''}</div>
-              )}
-            </div>
-          )
-        })}
-        {mode === 'new-group' && (
-          <div style={{ padding: '20px 16px' }}>
-            <button onClick={createGroup} disabled={creating} style={{ width: '100%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 14, border: 'none', borderRadius: 14, padding: '14px 0', cursor: creating ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: creating ? 0.7 : 1 }}>{creating ? 'Creating…' : `Create Group${selectedIds.length ? ` (${selectedIds.length})` : ''} →`}</button>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
 // Chat options UI is owned by screens/chat/ChatOptionsScreen.tsx.
-function EditProfileScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const { tokens: T } = useTheme()
-  const [csrfToken, setCsrfToken] = useState('')
-  const [loadingMe, setLoadingMe] = useState(true)
-  const [loadError, setLoadError] = useState('')
-
-  const [form, setForm] = useState({
-    display_name: '', bio: '',
-    university_id: null as number | null, program_id: null as number | null,
-    year: null as number | null, semester: null as number | null,
-  })
-
-  const [universities, setUniversities] = useState<UniversityOption[]>([])
-  const [programs, setPrograms] = useState<ProgramOption[]>([])
-
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState('')
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
-  const avatarGalleryRef = useRef<HTMLInputElement>(null)
-  const avatarCameraRef = useRef<HTMLInputElement>(null)
-  const [avatarBusy, setAvatarBusy] = useState(false)
-  const [saved, setSaved] = useState(false)
-
-  useEffect(() => {
-    api<EditProfileMe>('/me')
-      .then(me => {
-        setCsrfToken(me.csrf_token)
-        if (me.id) { setOfflineUserId(Number(me.id)); if (me.avatar_url) void cacheAvatar(Number(me.id), me.avatar_url) }
-        setAvatarUrl(me.avatar_url || null)
-        setForm({
-          display_name: me.display_name || '',
-          bio: me.bio || '',
-          university_id: me.university_id,
-          program_id: me.program_id,
-          year: me.year,
-          semester: me.semester,
-        })
-      })
-      .catch(async () => {
-        const id=Number(localStorage.getItem('prepza-offline-user-id')||0)
-        if (Number.isInteger(id) && id>0) { const cached=await getCachedAvatar(id); if (cached) setAvatarUrl(cached) }
-        setLoadError('Could not load your profile. Check your connection and try again.')
-      })
-      .finally(() => setLoadingMe(false))
-  }, [])
-
-  useEffect(() => {
-    api<UniversityOption[]>('/universities').then(setUniversities).catch(() => {})
-  }, [])
-
-  useEffect(() => {
-    if (form.university_id == null) { setPrograms([]); return }
-    api<ProgramOption[]>(`/universities/${form.university_id}/programs`).then(setPrograms).catch(() => {})
-  }, [form.university_id])
-
-  const handleAvatarFile = async (file: File) => {
-    if (!file.type.startsWith('image/')) { setSaveError('Please choose an image.'); return }
-    setAvatarBusy(true); setSaveError('')
-    try {
-      const bitmap = await createImageBitmap(file)
-      const side = Math.min(bitmap.width, bitmap.height)
-      const sx = (bitmap.width - side) / 2, sy = (bitmap.height - side) / 2
-      const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 512
-      const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('Image processing is unavailable.')
-      ctx.drawImage(bitmap, sx, sy, side, side, 0, 0, 512, 512)
-      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/webp', 0.82))
-      if (!blob || blob.size > 512 * 1024) throw new Error('The processed photo is too large. Please choose a smaller image.')
-      const prepared = await api<{upload_url:string;storage_path:string}>('/profile/avatar', {
-        method:'POST', headers:{'X-CSRF-Token':csrfToken},
-        body:JSON.stringify({filename:'avatar.webp',content_type:'image/webp',file_size_bytes:blob.size})
-      })
-      const upload = await fetch(prepared.upload_url,{method:'PUT',body:blob,headers:{'Content-Type':'image/webp'}})
-      if (!upload.ok) throw new Error('Could not upload the photo.')
-      const confirmed = await api<{avatar_url:string}>('/profile/avatar/confirm',{
-        method:'POST',headers:{'X-CSRF-Token':csrfToken},body:JSON.stringify({storage_path:prepared.storage_path})
-      })
-      setAvatarUrl(confirmed.avatar_url)
-      const id=Number(localStorage.getItem('prepza-offline-user-id')||0)
-      if (id>0) void cacheAvatar(id, confirmed.avatar_url)
-    } catch(e) { setSaveError(e instanceof ApiError ? e.message : (e instanceof Error ? e.message : 'Could not update photo.')) }
-    finally { setAvatarBusy(false) }
-  }
-
-  const removeAvatar = async () => {
-    setAvatarBusy(true); setSaveError('')
-    try { await api('/profile/avatar',{method:'DELETE',headers:{'X-CSRF-Token':csrfToken}}); const id=Number(localStorage.getItem('prepza-offline-user-id')||0); if(id>0) void clearCachedAvatar(id); setAvatarUrl(null) }
-    catch(e){setSaveError(e instanceof ApiError ? e.message : 'Could not remove photo.')}
-    finally{setAvatarBusy(false)}
-  }
-
-  const handleSave = async () => {
-    setSaving(true)
-    setSaveError('')
-    try {
-      await api('/profile', {
-        method: 'PATCH',
-        headers: { 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify({
-          display_name: form.display_name.trim() || null,
-          bio: form.bio.trim() || null,
-          university_id: form.university_id,
-          program_id: form.program_id,
-          year: form.year,
-          semester: form.semester,
-        }),
-      })
-      window.dispatchEvent(new CustomEvent('prepza:academic-context-changed', { detail: {
-        university_id: form.university_id, program_id: form.program_id, year: form.year, semester: form.semester
-      }}))
-      setSaved(true)
-      setTimeout(() => setScreen('profile'), 1000)
-    } catch (e) {
-      setSaveError(e instanceof ApiError ? e.message : 'Something went wrong. Please try again.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const inputStyle = { width: '100%', border: `1px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, fontFamily: 'Plus Jakarta Sans', outline: 'none', color: T.text, background: T.card, boxSizing: 'border-box' as const }
-  const initials = (form.display_name || 'ST').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
-
-  if (loadingMe) {
-    return (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: T.pageBg }}>
-        <div style={{ color: T.textMuted, fontSize: 14 }}>Loading your profile...</div>
-      </div>
-    )
-  }
-
-  return (
-    <div style={{ flex: 1, overflowY: 'auto', background: T.pageBg }} className="scrollbar-hide">
-      <div style={{ background: N.navy, padding: '0 18px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={() => window.history.back()} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
-          <span style={{ flex: 1, fontWeight: 800, fontSize: 16, color: '#fff' }}>Edit Profile</span>
-          <button onClick={handleSave} disabled={saving} style={{ background: saved ? '#4CC97B' : `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: 12, padding: '8px 16px', cursor: saving ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', fontWeight: 800, fontSize: 13, color: saved ? '#fff' : N.navy, opacity: saving ? 0.7 : 1 }}>{saved ? '✓ Saved' : saving ? 'Saving...' : 'Save'}</button>
-        </div>
-      </div>
-      {loadError && <div style={{ margin: '14px 20px 0', color: '#C94C4C', fontSize: 12, fontWeight: 600 }}>{loadError}</div>}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px 20px 12px' }}>
-        <div style={{ position: 'relative', marginBottom: 10 }}>
-          {avatarUrl ? <img src={avatarUrl} alt="" style={{ width:80,height:80,borderRadius:'50%',objectFit:'cover',display:'block' }} /> :
-            <div style={{ width:80,height:80,background:`linear-gradient(135deg,${N.gold},${N.goldL})`,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:28,color:N.navy }}>{initials}</div>}
-          <label style={{ position:'absolute',bottom:0,right:0,width:26,height:26,background:N.gold,borderRadius:'50%',border:'2px solid #fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',opacity:avatarBusy?.6:1 }}>
-            <input ref={avatarGalleryRef} type="file" accept="image/*" disabled={avatarBusy} onChange={e=>{const f=e.target.files?.[0];if(f)void handleAvatarFile(f);e.currentTarget.value=''}} style={{display:'none'}} />
-            <div style={{color:T.text}}>{Ic.edit('w-3 h-3')}</div>
-          </label>
-        </div>
-        <input ref={avatarCameraRef} type="file" accept="image/*" capture="environment" disabled={avatarBusy} onChange={e=>{const f=e.target.files?.[0];if(f)void handleAvatarFile(f);e.currentTarget.value=''}} style={{display:'none'}} />
-        <div style={{display:'flex',gap:8,alignItems:'center',justifyContent:'center',marginBottom:8}}>
-          <button type="button" disabled={avatarBusy} onClick={()=>avatarCameraRef.current?.click()} style={{display:'flex',alignItems:'center',gap:6,border:`1px solid ${T.border}`,background:T.card,color:T.text,padding:'7px 10px',borderRadius:10,cursor:'pointer',fontSize:10,fontWeight:750}}>{Ic.camera('w-4 h-4')} Camera</button>
-          <button type="button" disabled={avatarBusy} onClick={()=>avatarGalleryRef.current?.click()} style={{display:'flex',alignItems:'center',gap:6,border:`1px solid ${T.border}`,background:T.card,color:T.text,padding:'7px 10px',borderRadius:10,cursor:'pointer',fontSize:10,fontWeight:750}}>{Ic.gallery('w-4 h-4')} Gallery</button>
-        </div>
-        <div style={{display:'flex',gap:12,alignItems:'center'}}>
-          <div style={{fontSize:12,color:T.textMuted}}>{avatarBusy?'Updating photo…':'Photo is compressed on this device before upload.'}</div>
-          {avatarUrl&&<button type="button" onClick={()=>void removeAvatar()} disabled={avatarBusy} style={{border:'none',background:'transparent',color:'#C94C4C',fontWeight:700,fontSize:11}}>Remove</button>}
-        </div>
-      </div>
-      <div style={{ padding: '0 20px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Full Name</div>
-          <input value={form.display_name} onChange={e => setForm(f => ({ ...f, display_name: e.target.value }))} maxLength={50} style={inputStyle} />
-        </div>
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Bio</div>
-          <textarea value={form.bio} onChange={e => setForm(f => ({ ...f, bio: e.target.value }))} rows={3} maxLength={160} style={{ ...inputStyle, resize: 'none', lineHeight: 1.6 }} />
-        </div>
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>University</div>
-          <select value={form.university_id ?? ''} onChange={e => setForm(f => ({ ...f, university_id: e.target.value ? Number(e.target.value) : null, program_id: null }))} style={inputStyle}>
-            <option value="">Select university</option>
-            {universities.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
-        </div>
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Course</div>
-          <select value={form.program_id ?? ''} onChange={e => setForm(f => ({ ...f, program_id: e.target.value ? Number(e.target.value) : null }))} disabled={!form.university_id} style={{ ...inputStyle, opacity: form.university_id ? 1 : 0.5 }}>
-            <option value="">Select course</option>
-            {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-        </div>
-        <div style={{ display: 'flex', gap: 12 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Year</div>
-            <select value={form.year ?? ''} onChange={e => setForm(f => ({ ...f, year: e.target.value ? Number(e.target.value) : null }))} style={inputStyle}>
-              <option value="">—</option>
-              {[1, 2, 3, 4, 5].map(y => <option key={y} value={y}>Year {y}</option>)}
-            </select>
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: T.textMuted, marginBottom: 6 }}>Semester</div>
-            <select value={form.semester ?? ''} onChange={e => setForm(f => ({ ...f, semester: e.target.value ? Number(e.target.value) : null }))} style={inputStyle}>
-              <option value="">—</option>
-              {[1, 2, 3].map(s => <option key={s} value={s}>Semester {s}</option>)}
-            </select>
-          </div>
-        </div>
-        {saveError && <div style={{ color: '#C94C4C', fontSize: 12, fontWeight: 600 }}>{saveError}</div>}
-        <button onClick={handleSave} disabled={saving} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 14, border: 'none', borderRadius: 14, padding: '14px 0', cursor: saving ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans', opacity: saving ? 0.7 : 1 }}>{saving ? 'Saving...' : 'Save Changes'}</button>
-      </div>
-    </div>
-  )
-}
-
 // ─── PUBLISH TO LIBRARY ───────────────────────────────────────────────────────
 
 type PublishableDoc = { id: number; title: string; status: string; file_type: string | null; page_count: number | null }
@@ -6056,267 +5209,6 @@ function PublishLibraryScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
 
 
 // ─── STUDY STREAK ─────────────────────────────────────────────────────────────
-type StreakCalendarDay = { date: string; studied: boolean; is_future: boolean; study_seconds: number }
-type StreakMilestone = { days: number; label: string; xp: string; done: boolean }
-type StreakResponse = {
-  current_streak: number
-  longest_streak: number
-  calendar_month: string
-  calendar_start_weekday: number
-  earliest_month: string
-  calendar: StreakCalendarDay[]
-  milestones: StreakMilestone[]
-}
-
-function StudyStreakScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const { tokens: T } = useTheme()
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [data, setData] = useState<StreakResponse | null>(null)
-  const [viewMonth, setViewMonth] = useState<string | null>(null)
-  // Selected day for the tap-to-reveal detail line below the calendar -
-  // the `title` attribute on each tile only fires on desktop mouse hover
-  // and does nothing on touch devices, so this is the actual mechanism
-  // mobile users have for seeing a day's study duration.
-  const [selectedDay, setSelectedDay] = useState<StreakCalendarDay | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-    api<StreakResponse>('/streak' + (viewMonth ? `?month=${viewMonth}` : ''))
-      .then(res => {
-        if (cancelled) return
-        setData(res)
-        if (!viewMonth) setViewMonth(res.calendar_month)
-      })
-      .catch(err => { if (!cancelled) setError(err instanceof ApiError ? err.message : 'Failed to load streak') })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [viewMonth])
-
-  const current = data?.current_streak ?? 0
-  const longest = data?.longest_streak ?? 0
-  const days = data?.calendar ?? []
-  const milestones = data?.milestones ?? []
-  const unlockedMilestones = milestones.filter(m => m.done)
-  const calendarMonth = data?.calendar_month ?? viewMonth ?? ''
-  const startWeekday = data?.calendar_start_weekday ?? 0
-  const earliestMonth = data?.earliest_month ?? null
-
-  const realCurrentMonth = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}` })()
-  const atEarliest = !!earliestMonth && calendarMonth === earliestMonth
-  const atCurrent = calendarMonth === realCurrentMonth
-  const monthLabel = (() => {
-    if (!calendarMonth) return ''
-    const [y, m] = calendarMonth.split('-').map(Number)
-    return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-  })()
-  const shiftMonth = (dir: 1 | -1) => {
-    if (!calendarMonth) return
-    const [y, m] = calendarMonth.split('-').map(Number)
-    const d = new Date(y, m - 1 + dir, 1)
-    setSelectedDay(null)
-    setViewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
-  }
-
-  // GitHub-contributions-style shading: darker gold the longer the
-  // student studied that day, rather than a flat studied/not color.
-  const SHADE_LEVELS = [
-    { color: '#F3F4F6', border: '1px solid #E5E7EB' }, // no activity
-    { color: `${N.gold}35`, border: 'none' },           // < 15 min
-    { color: `${N.gold}70`, border: 'none' },           // 15-45 min
-    { color: `${N.gold}A8`, border: 'none' },           // 45-90 min
-    { color: N.gold, border: 'none' },                  // 90+ min
-  ]
-  const shadeForSeconds = (seconds: number) => {
-    if (!seconds || seconds <= 0) return SHADE_LEVELS[0]
-    if (seconds < 900) return SHADE_LEVELS[1]
-    if (seconds < 2700) return SHADE_LEVELS[2]
-    if (seconds < 5400) return SHADE_LEVELS[3]
-    return SHADE_LEVELS[4]
-  }
-  const formatStudyDuration = (seconds: number) => {
-    if (!seconds || seconds <= 0) return 'No study time logged'
-    const mins = Math.round(seconds / 60)
-    if (mins < 60) return `Studied ${mins} min`
-    const hrs = Math.floor(mins / 60)
-    const remMins = mins % 60
-    return remMins > 0 ? `Studied ${hrs}h ${remMins}m` : `Studied ${hrs}h`
-  }
-
-  if (loading) {
-    return (
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
-        <div style={{ background: N.navy, padding: '0 18px 24px', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-            <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
-            <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Study Streak</div>
-          </div>
-        </div>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: T.textMuted }}>Loading…</div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
-        <div style={{ background: N.navy, padding: '0 18px 24px', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-            <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
-            <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Study Streak</div>
-          </div>
-        </div>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#EF4444', padding: '0 24px', textAlign: 'center' }}>{error}</div>
-      </div>
-    )
-  }
-
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: T.pageBg }}>
-      <div style={{ background: N.navy, padding: '0 18px 24px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-          <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
-          <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Study Streak</div>
-        </div>
-        <div style={{ display: 'flex', gap: 14 }}>
-          <div style={{ flex: 1, background: 'rgba(255,255,255,0.08)', borderRadius: 14, padding: '14px 16px' }}>
-            <div style={{ fontSize: 38, fontWeight: 800, color: N.gold, lineHeight: 1 }}>{current}</div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 4 }}>day streak 🔥</div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>Current</div>
-          </div>
-          <div style={{ flex: 1, background: 'rgba(255,255,255,0.08)', borderRadius: 14, padding: '14px 16px' }}>
-            <div style={{ fontSize: 38, fontWeight: 800, color: 'rgba(255,255,255,0.9)', lineHeight: 1 }}>{longest}</div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 4 }}>days</div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>Personal best</div>
-          </div>
-        </div>
-      </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
-        <div style={{ background: T.card, borderRadius: 16, padding: '16px 16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <button onClick={() => shiftMonth(-1)} disabled={atEarliest} style={{ width: 28, height: 28, border: 'none', borderRadius: 8, background: '#F3F4F6', cursor: atEarliest ? 'default' : 'pointer', opacity: atEarliest ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: T.text }}>‹</button>
-            <div style={{ fontWeight: 700, fontSize: 13, color: T.text }}>{monthLabel}</div>
-            <button onClick={() => shiftMonth(1)} disabled={atCurrent} style={{ width: 28, height: 28, border: 'none', borderRadius: 8, background: '#F3F4F6', cursor: atCurrent ? 'default' : 'pointer', opacity: atCurrent ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: T.text }}>›</button>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 5 }}>
-            {['S','M','T','W','T','F','S'].map((d, i) => <div key={i} style={{ textAlign: 'center', fontSize: 10, color: T.textMuted, fontWeight: 600, marginBottom: 4 }}>{d}</div>)}
-            {Array.from({ length: startWeekday }).map((_, i) => <div key={`pad-${i}`} />)}
-            {days.map((d, i) => {
-              const shade = shadeForSeconds(d.study_seconds)
-              const dateLabel = new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-              const tooltip = `${dateLabel} — ${d.is_future ? 'Upcoming' : formatStudyDuration(d.study_seconds)}`
-              const isSelected = selectedDay?.date === d.date
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => setSelectedDay(isSelected ? null : d)}
-                  title={tooltip}
-                  style={{ aspectRatio: '1', borderRadius: 6, background: shade.color, border: isSelected ? `2px solid ${N.navy}` : shade.border, opacity: d.is_future ? 0.35 : 1, transition: 'background 0.2s, border 0.15s', padding: 0, margin: 0, appearance: 'none', font: 'inherit', cursor: 'pointer' }}
-                />
-              )
-            })}
-          </div>
-          {selectedDay && (
-            <div style={{ marginTop: 10, padding: '8px 12px', background: `${N.gold}15`, borderRadius: 10, fontSize: 12, fontWeight: 600, color: T.text, textAlign: 'center' }}>
-              {new Date(selectedDay.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} — {selectedDay.is_future ? 'Upcoming' : formatStudyDuration(selectedDay.study_seconds)}
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: 6, marginTop: 14, alignItems: 'center', justifyContent: 'flex-end' }}>
-            <span style={{ fontSize: 10, color: T.textMuted }}>Less</span>
-            {SHADE_LEVELS.map((lvl, i) => (
-              <div key={i} style={{ width: 12, height: 12, borderRadius: 3, background: lvl.color, border: lvl.border }} />
-            ))}
-            <span style={{ fontSize: 10, color: T.textMuted }}>More</span>
-          </div>
-        </div>
-        <div style={{ background: T.card, borderRadius: 16, padding: '14px 16px', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-          <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 12 }}>Streak milestones{unlockedMilestones.length > 0 ? ` (${unlockedMilestones.length})` : ''}</div>
-          {unlockedMilestones.length === 0 ? (
-            <div style={{ fontSize: 12, color: T.textMuted, padding: '4px 0 2px' }}>No milestones reached yet — keep your streak going to unlock your first one.</div>
-          ) : (
-            <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }} className="scrollbar-hide">
-              {unlockedMilestones.map((m, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 10, background: `${N.gold}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <span style={{ fontSize: 16 }}>🏆</span>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13, color: T.text }}>{m.days}-Day Streak</div>
-                    <div style={{ fontSize: 11, color: T.textMuted }}>{m.label}</div>
-                  </div>
-                  <Pill text={m.xp} color={N.gold} />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        <button onClick={() => setScreen('share-sheet')} style={{ width: '100%', background: 'transparent', border: `1.5px solid ${N.gold}`, color: N.gold, fontWeight: 700, fontSize: 14, borderRadius: 16, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
-          Share {current}-Day Streak
-        </button>
-        <div style={{ height: 'calc(96px + env(safe-area-inset-bottom, 0px))' }} />
-      </div>
-    </div>
-  )
-}
-
-// ─── TIME STUDIED ─────────────────────────────────────────────────────────────
-function TimeStudiedScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
-  const { tokens: T } = useTheme()
-  const [period, setPeriod] = useState<'day' | 'week' | 'month'>('week')
-  const [data, setData] = useState<StudyTimeResponse | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-    api<StudyTimeResponse>(`/study-time?period=${period}`)
-      .then(res => { if (!cancelled) setData(res) })
-      .catch(err => { if (!cancelled) setError(err instanceof ApiError ? err.message : 'Failed to load study time') })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [period])
-
-  const totalLabel = data ? formatStudyTime(data.total_seconds) : '—'
-  const periodLabel = period === 'day' ? 'today' : period === 'week' ? 'this week' : 'this month'
-
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: T.pageBg }}>
-      <div style={{ background: N.navy, padding: '0 18px 24px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-          <button onClick={() => setScreen('profile')} style={{ width: 34, height: 34, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#fff' }}>{Ic.back()}</div></button>
-          <div style={{ fontWeight: 800, fontSize: 18, color: '#fff' }}>Time Studied</div>
-        </div>
-        <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: 14, padding: '18px 16px', textAlign: 'center' }}>
-          <div style={{ fontSize: 42, fontWeight: 800, color: N.gold, lineHeight: 1 }}>{loading ? '…' : totalLabel}</div>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 6 }}>studied {periodLabel}</div>
-        </div>
-      </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 18px' }} className="scrollbar-hide">
-        {error && <div style={{ background: '#FEF2F2', color: '#B91C1C', borderRadius: 12, padding: '10px 14px', marginBottom: 14, fontSize: 12 }}>{error}</div>}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-          {(['day', 'week', 'month'] as const).map(p => (
-            <button key={p} onClick={() => setPeriod(p)} style={{ flex: 1, padding: '10px 0', borderRadius: 12, border: 'none', background: period === p ? N.gold : '#fff', color: period === p ? N.navy : T.textMuted, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'Plus Jakarta Sans', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
-            {p.charAt(0).toUpperCase() + p.slice(1)}
-            </button>
-          ))}
-        </div>
-        <button onClick={() => setScreen('share-sheet')} style={{ width: '100%', background: 'transparent', border: `1.5px solid ${N.gold}`, color: N.gold, fontWeight: 700, fontSize: 14, borderRadius: 16, padding: '13px 0', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>
-          Share {totalLabel} Studied 🔥
-        </button>
-        <div style={{ height: 100 }} />
-      </div>
-    </div>
-  )
-}
-
-// ─── FOLLOWERS / FOLLOWING ────────────────────────────────────────────────────
-// ─── EMPTY & ERROR STATES ─────────────────────────────────────────────────────
-
 
 function EmptyState({ icon, title, sub, action, onAction }: { icon: string; title: string; sub: string; action?: string; onAction?: () => void }) {
   return (
@@ -11552,7 +10444,7 @@ export default function App() {
   const [activeProfileName, setActiveProfileName] = useState<string | null>(null)
   // Tracks where a profile was opened from so the profile's Back action does not
   // fall into the legacy chat-detail screen when the new WhatsApp chat experience is active.
-  const [activeProfileBackScreen, setActiveProfileBackScreen] = useState<Screen>('chat-detail')
+  const [activeProfileBackScreen, setActiveProfileBackScreen] = useState<'chat-detail' | 'chats'>('chat-detail')
   const [activeOpportunityId, setActiveOpportunityId] = useState<number | null>(() => storedNavigation?.activeOpportunityId ?? null)
   // Set when the app loads at /signup?ref=CODE (an ambassador's share
   // link - see ambassador_dashboard()'s referral_link field). Carried as
@@ -11725,7 +10617,7 @@ export default function App() {
   const renderScreen = () => {
     switch (screen) {
       case 'ambassador': return <AmbassadorScreen setScreen={setScreen} />
-      case 'splash':            return <SplashScreen setScreen={setScreen} />
+      case 'splash':            return <SplashScreen setScreen={setScreen} brandline={PREPZA_BRANDLINE} />
       case 'login':             return <LoginScreen setScreen={setScreen} oauthError={oauthError} />
       case 'forgot-password':   return <ForgotPasswordScreen setScreen={setScreen} />
       case 'signup':            return <SignupScreen setScreen={setScreen} referralCode={referralCode} referralChannel={referralChannel} />
@@ -11741,7 +10633,7 @@ export default function App() {
       case 'upload':            return <UploadScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />
       case 'upload-share-choice': return <UploadShareChoiceScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'processing':        return <ProcessingScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
-      case 'doc-ready':         return <DocReadyScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
+      case 'doc-ready':         return <DocReadyScreen setScreen={setScreen} activeDocumentId={activeDocumentId} TopBar={TopBar} />
       case 'document-study': return <DocumentStudyHubScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'document-reader': return <DocumentReaderScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'ai-tutor':          return <AITutorScreen setScreen={setScreen} activeDocumentId={activeDocumentId} setActiveDocumentId={setActiveDocumentId} GenerationError={GenerationError} DelayedScreenSkeleton={DelayedScreenSkeleton} SkeletonAITutor={SkeletonAITutor} />
@@ -11756,7 +10648,7 @@ export default function App() {
       case 'opportunity-detail':return <OppDetailScreen setScreen={setScreen} opportunityId={activeOpportunityId} />
       case 'share-sheet':       return <ShareSheetScreen setScreen={setScreen} />
       case 'student-profile':   return <StudentProfileScreen setScreen={setScreen} targetUserId={activeProfileUserId} fallbackName={activeProfileName} setActiveConversationId={setActiveConversationId} activeConversationId={activeConversationId} backScreen={activeProfileBackScreen} />
-      case 'profile':           return <ProfileScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} setActiveDocumentId={setActiveDocumentId} setActiveOpportunityId={setActiveOpportunityId} onOpenOrgPortal={() => setOrgPortalMode(true)} />
+      case 'profile':           return <ProfileScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} setActiveDocumentId={setActiveDocumentId} setActiveOpportunityId={setActiveOpportunityId} onOpenOrgPortal={() => setOrgPortalMode(true)} SkeletonProfile={SkeletonProfile} />
       case 'settings':          return <SettingsScreen setScreen={setScreen} resetToAuth={() => resetNavigation('login')} />
       case 'notifications':     return <NotificationsScreen setScreen={setScreen} setActiveProfileUserId={setActiveProfileUserId} setActiveDocumentId={setActiveDocumentId} EmptyStateView={EmptyState} loadingView={<DelayedScreenSkeleton><SkeletonNotifications /></DelayedScreenSkeleton>} />
       case 'library':           return <LibraryScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} EmptyState={EmptyState} ErrorState={ErrorState} />

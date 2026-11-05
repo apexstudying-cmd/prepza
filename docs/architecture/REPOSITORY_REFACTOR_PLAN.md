@@ -13,7 +13,7 @@ The initial source scan found:
 | Area | Baseline size | Observation |
 |---|---:|---|
 | `app.py` | 10,332 lines; 318 top-level function/class declarations | Flask setup, SQLAlchemy models, shared helpers, and many HTTP routes coexist in one module. |
-| `frontend/src/App.tsx` | 16,032 lines at the initial scan; 14,945 after PR #56; 14,887 after PR #59; 14,758 after the Achievements extraction on `main`; 14,573 after the My Study extraction in PR #61 (tested head `48cae152`); 14,129 on PR #62, merged as `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b` after Group Detail was extracted; 13,739 on PR #64 after the two social follow screens were extracted; 12,979 after PR #66 merged the auth-flow screens; 12,622 on main after PR #67 merged Chat Options, shared chat types, and the Avi primitive. The `main` snapshot after PR #69 was 12,044 lines; after the Morio AI Tutor extraction, the tested PR #75 app shell is 11,853 lines. | Shared API/theme/icon/type definitions and several screens now live in focused modules. The app shell remains large and still needs staged extraction. |
+| `frontend/src/App.tsx` | 16,032 lines at the initial scan; 14,945 after PR #56; 14,887 after PR #59; 14,758 after the Achievements extraction on `main`; 14,573 after the My Study extraction in PR #61 (tested head `48cae152`); 14,129 on PR #62, merged as `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b` after Group Detail was extracted; 13,739 on PR #64 after the two social follow screens were extracted; 12,979 after PR #66 merged the auth-flow screens; 12,622 on main after PR #67 merged Chat Options, shared chat types, and the Avi primitive. The `main` snapshot after PR #69 was 12,044 lines; after the Morio AI Tutor extraction, the tested PR #75 app shell was 11,853 lines. The current consolidated PR #77 branch extracts Splash and Edit Profile and reduces App.tsx to 11,591 lines. | Shared API/theme/icon/type definitions and several screens now live in focused modules. The app shell remains large and still needs staged extraction. |
 | Frontend build | Long `prebuild` chain | Python scripts rewrite source files before TypeScript/Vite compilation. |
 | Local QA runner | 11 test files; 95 test functions; 98 collected cases | Latest disposable PostgreSQL CI run passed 98/98; the detailed numbered test descriptions in `actualtest.md` are explicitly retained as a historical 74-case snapshot. |
 
@@ -370,3 +370,48 @@ Verification on tested code head `f5f8afb34a8d74c742de4b4d33762ec882b05a81`:
 - StudyHub Library Flow [42022943808](https://github.com/apexstudying-cmd/prepza/actions/runs/42022943808) was skipped by workflow conditions and is not counted as passing.
 
 The tested PR #75 application-code head is `f5f8afb34a8d74c742de4b4d33762ec882b05a81`; subsequent commits on the PR branch update documentation only. The frontend refactor remains incomplete: ChatDetail/Chats, DocumentStudy/Reader, generation flows, Podcast Player, AdminSection/panels, and app-shell navigation remain to be mapped and extracted. Backend extraction remains a separate, staged effort.
+
+
+## 2026-11-05 — Splash and Edit Profile extraction (PR #77; current branch)
+
+The current PR #77 branch moves the existing SplashScreen into frontend/src/screens/onboarding/SplashScreen.tsx (63 lines) and EditProfileScreen into frontend/src/screens/profile/EditProfileScreen.tsx (224 lines). App.tsx is 11,591 lines on this branch, down from 11,853 before these two extractions. Both component bodies were compared directly with the base main declarations and are byte-for-byte identical after only the documented module signature, brandline prop, narrowed navigation callback, and local response-type adjustments.
+
+The SplashScreen move exposed a prebuild-transform ownership assumption. The Study Navigation patch previously expected the component's state marker inside App.tsx and returned early whenever the historical patch marker existed. It now supports both inline legacy and module-owned SplashScreen modes, passes the app-shell offline-resume callback into the module, and continues idempotent transforms even when the historical marker is already present. The production-build verifier and workflow anchors now assert the extracted module contract.
+
+Frontend Build [42030603950] passed 76 source/module tests, 5 offline Library regression tests, TypeScript, service-worker validation, production build and architecture audits. Student Frontend [42030604065], Student Contract [42030603908], Admin Route [42030604002], B2B [42030603900], AI Generation [42030604051], AI Economics [42030604139], Prepza Control API [42030603917], E2EE Security [42030603959], and E2EE Chat [42030604078] passed. Full Release Browser/Cross-System Regression [42030603969] passed production image, disposable PostgreSQL/Redis, 43 migration files and controlled SQL ledger, app startup, mobile/tablet browser checks, B2B metering, 98/98 PostgreSQL QA, online/offline Study Hub and generated-artifact journeys, screenshot upload, and cleanup. The tested application-code head is unchanged by subsequent documentation-only commits.
+
+The frontend refactor remains incremental, not complete. Remaining large or high-coupling boundaries include ChatsScreen/ChatDetailScreen (E2EE/realtime), DocumentStudyScreen/DocumentReaderScreen (offline/progress), AdminSection and admin panels (permissions/multi-domain state), generation flows, Podcast Player, Home/Explore, opportunity/profile flows, and app-shell navigation. Continue only with dependency mapping, explicit props, source-preservation comparisons, and behavior contracts. Do not redesign screens, change API contracts, or move high-risk logic without dedicated regression evidence.
+
+
+### New Chat extraction follow-up — PR #77
+
+NewChatScreen now resides in frontend/src/screens/chat/NewChatScreen.tsx (159 lines). The PR branch App.tsx is 11,440 lines, down 413 from the starting 11,853 lines. Its implementation was compared with base main and preserved byte-for-byte apart from the module export and narrowed callback type. The module contract protects debounced search and cleanup, direct chat create/reuse, group validation/creation, CSRF, participant selection, and route navigation.
+
+Frontend Build [42031983870] passed 78 source/module tests, 5 offline Library tests, TypeScript, service-worker checks, production build, and architecture audits. Student Frontend, Student Contract, Admin Route, B2B, AI, Prepza Control API, E2EE Chat and E2EE Security workflows passed. Full Release Browser/Cross-System Regression [42031984075] passed on the New Chat code head: production image, disposable PostgreSQL/Redis, 43 migration files and controlled ledger, mobile/tablet browser checks, B2B metering, 98/98 PostgreSQL QA, online/offline Study Hub and generated-artifact journeys, screenshot upload, and cleanup. Subsequent PR commits are documentation-only.
+
+
+### Additional small screen-boundary extractions — 2026-11-05
+
+TimeStudiedScreen now lives in frontend/src/screens/gamification/TimeStudiedScreen.tsx (61 lines), and ShareOppForm in frontend/src/screens/opportunities/ShareOppForm.tsx (45 lines). Their moved component bodies were directly compared with base main and are byte-for-byte identical after normalising only exports and narrowed callback types. Focused source contracts protect the original study-time loading/cancellation/period-selection behavior and the opportunity form's controlled fields, categories and navigation. Latest CI and full release regression are pending on the new head.
+
+
+### Student Profile extraction follow-up — PR #77
+
+StudentProfileScreen and its PublicProfile/FollowSummary types now live in frontend/src/screens/profile/StudentProfileScreen.tsx (164 lines). App.tsx is 11,286 lines on this branch, 567 lines below the 11,853-line starting point. The component body was compared directly to base main and preserved byte-for-byte after normalising only module export and narrowed callback/back-screen types. The app-shell back-screen state was narrowed to its actual two values.
+
+Frontend Build [42033518073] passed 80 source/module tests, 5 offline Library tests, TypeScript, service-worker validation, production build and architecture audits. Student Frontend, Student Contract, Admin Route, B2B, AI, control API, and E2EE Chat workflows passed. Full Release Browser/Cross-System Regression [42033518119] and E2EE Security Regression [42033518226] were still running at the time of this update and remain required before merge.
+
+
+### Study Streak module — 2026-11-05
+
+StudyStreakScreen and its response types are now owned by frontend/src/screens/gamification/StudyStreakScreen.tsx. The screen body matches base main byte-for-byte after export and callback-type normalisation. The module preserves its existing month navigation, cancellation, tap-to-reveal calendar day, milestone, and share-sheet behavior. A prior typecheck caught and prompted correction of the existing share-sheet callback in TimeStudiedScreen; the corrected route union is now covered by a source contract. The latest Frontend Build [42034876037] passed 86 frontend source/module contracts, 5 offline Library tests, TypeScript, production build, architecture audits and launch-wiring verification. Full release regression [42034875673] remains pending.
+
+
+### Profile screen boundary — 2026-11-05
+
+ProfileScreen now lives in screens/profile/ProfileScreen.tsx. Its PROFILE_CACHE moved with it; ProfileMe and HomeDocument are shared in types/profile.ts, while GamificationSummary is in types/gamification.ts. App.tsx retains route dispatch, parent-owned state and the existing SkeletonProfile component (passed into the screen). The screen body was verified byte-for-byte against base main after export/prop/callback type normalisation. The first typecheck identified dynamic profile-card destinations still typed against the App-local Screen alias; the extracted module now uses an equivalent local ProfileScreenRoute union. Frontend Build [42036291254] passed 88 frontend source/module contracts, 5 offline Library tests, TypeScript, production build, architecture audits and launch-wiring verification. Full release regression [42036291297] remains queued.
+
+
+### Document Ready module — 2026-11-05
+
+DocReadyScreen now resides in screens/study/DocReadyScreen.tsx; DocumentDetail is shared from types/documents.ts. Existing TopBar is injected by App.tsx, and the route dispatcher remains centralized. The original screen body was verified byte-for-byte after export/prop/local-route-type normalisation. Frontend Build [42036938429] passed 90 frontend source/module contracts, 5 offline Library tests, TypeScript, production build, architecture audits and launch-wiring verification. Full release regression [42036938563] remains queued.

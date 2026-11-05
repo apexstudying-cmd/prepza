@@ -86,3 +86,25 @@ python -m pytest -q \
 - src/screens/chat/ChatOptionsScreen.tsx (PR #67, merged as 62cdf80f2652746593b58f131c939f95442b0446) - chat metadata, member list, rename/leave/mute controls, message search, and shared-media UI. Keep the chat-options route and existing chat API/CSRF behavior unchanged. Its ChatDetail and ChatMessageData contracts are shared from src/types/chat.ts; its file-extension helper, image extension list, and navigation/profile callbacks are explicit props. Do not couple this module to App.tsx.
 - src/types/chat.ts - shared chat detail, message, and attachment response types. Preserve the existing API response field names and optionality.
 - src/ui/Avi.tsx - shared Prepza avatar visual primitive, reused by the app shell and extracted chat screen. Preserve its existing visual output.
+
+
+- src/screens/onboarding/SplashScreen.tsx - branded startup, existing-session restoration, confirmed-401 routing, transient-failure retry, and manual retry UI. The app shell injects the existing brandline and offline-resume callback. Keep the 2.2-second splash timing, /me response checks, route targets, and canonical /icon-192.png asset unchanged.
+- src/screens/profile/EditProfileScreen.tsx - profile editing, academic catalogue selection, profile PATCH, avatar processing/upload/confirmation, and offline avatar cache maintenance. Preserve the CSRF headers, 512×512 WebP processing, 512 KB post-processing limit, existing profile endpoints, academic-context event, and return-to-profile behavior.
+
+
+- src/screens/chat/NewChatScreen.tsx - direct chat and group chat creation UI. Preserve the 300 ms debounced student search and cancellation cleanup, CSRF-protected /chats POST payloads, direct-chat reuse, group name/member validation, selected participant state, and chat-detail navigation. Keep encryption/realtime behavior owned by the existing chat-detail and crypto modules.
+
+
+- src/screens/gamification/TimeStudiedScreen.tsx - day/week/month study-time view. Preserve the default week selection, /study-time?period= request, cancellation guard on state updates, formatStudyTime output, and return navigation to Profile.
+- src/screens/opportunities/ShareOppForm.tsx - local Share Opportunity form. Preserve its existing title, organisation, type, deadline, location, reward, description and link fields; category options; controlled description input; and current back/post navigation. Do not imply that this form itself submits a backend opportunity unless that behavior is separately implemented.
+
+
+- src/screens/profile/StudentProfileScreen.tsx - another student's public profile, privacy-aware display, follow/unfollow and pending requests, direct-message creation, and profile statistics. Preserve /public-profile and /follow-summary requests, CSRF-protected follow and chat requests, private-profile behavior, and the existing chat-detail/chat-options/back destinations.
+
+- src/screens/gamification/StudyStreakScreen.tsx - streak calendar, monthly navigation, selected-day detail and milestones. Preserve the month-scoped /streak request, cancellation guard, current/longest streak values, study-duration shading thresholds, selected-day interaction, milestone filtering, and profile/share-sheet navigation.
+
+- src/screens/profile/ProfileScreen.tsx - signed-in student's own profile, including saved opportunities, study activity, study materials, follow-request count and achievement summary. Preserve PROFILE_CACHE behavior, existing API endpoints, tab fetch cancellation, university/program name resolution, profile-menu outside-click dismissal, and route callbacks. SkeletonProfile is injected by App.tsx so shared skeleton ownership stays explicit.
+- src/types/profile.ts - shared ProfileMe and HomeDocument response shapes. Keep these aligned with the existing /me and /documents payloads.
+
+- src/screens/study/DocReadyScreen.tsx - post-upload document-ready confirmation and next-action choices. Preserve the /documents/:id fetch, error handling, title/file/page/size metadata, seven existing action destinations, and injected TopBar. Keep the shared DocumentDetail response shape in types/documents.ts.
+- src/types/documents.ts - shared DocumentDetail API response contract. Keep fields aligned with the existing document detail endpoint.

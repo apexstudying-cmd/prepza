@@ -175,6 +175,79 @@ def harden_offline_startup(text: str) -> str:
     return text
 
 
+
+def harden_extracted_splash_startup(app_text: str) -> str:
+    """Keep offline resume when SplashScreen is owned by its feature module."""
+    splash_path = Path('frontend/src/screens/onboarding/SplashScreen.tsx')
+    if not splash_path.exists():
+        return app_text
+
+    app_call = "<SplashScreen setScreen={setScreen} brandline={PREPZA_BRANDLINE} />"
+    app_call_with_resume = """<SplashScreen
+        setScreen={setScreen}
+        brandline={PREPZA_BRANDLINE}
+        resumeOffline={() => {
+          const stored = readStoredNavigationState()
+          const resumeable: Screen[] = [
+            'home', 'explore', 'chats', 'profile', 'library', 'document-study',
+            'document-reader', 'ai-tutor', 'study-materials', 'podcast-player',
+            'podcast-library', 'flashcards', 'quiz', 'summary', 'mind-map',
+            'opportunities', 'opportunity-detail', 'notifications', 'student-profile',
+            'chat-detail', 'new-chat', 'chat-options', 'settings', 'edit-profile',
+          ]
+          const target = [...(stored?.stack || [])].reverse().find(s => resumeable.includes(s))
+          if (target) {
+            setScreen(target)
+            return true
+          }
+          return false
+        }}
+      />"""
+    if app_call in app_text:
+        app_text = app_text.replace(app_call, app_call_with_resume, 1)
+
+    module = splash_path.read_text(encoding='utf-8')
+    if "resumeOffline: () => boolean" not in module:
+        module = module.replace(
+            "brandline: string })",
+            "brandline: string; resumeOffline: () => boolean })",
+            1,
+        )
+    if "brandline, resumeOffline" not in module:
+        module = module.replace(
+            "{ setScreen, brandline }:",
+            "{ setScreen, brandline, resumeOffline }:",
+            1,
+        )
+
+    marker = "    setState('checking')\n"
+    offline_guard = """    setState('checking')
+    if (typeof navigator !== 'undefined' && !navigator.onLine && resumeOffline()) return
+"""
+    if offline_guard not in module and marker in module:
+        module = module.replace(marker, offline_guard, 1)
+
+    old_error = """      if (attempt === 0) {
+        setTimeout(() => checkSession(1), 1200)
+      } else {
+        setState('retry')
+      }
+"""
+    new_error = """      if (attempt === 0) {
+        if (typeof navigator !== 'undefined' && !navigator.onLine && resumeOffline()) return
+        setTimeout(() => checkSession(1), 1200)
+      } else {
+        if (resumeOffline()) return
+        setState('retry')
+      }
+"""
+    if old_error in module:
+        module = module.replace(old_error, new_error, 1)
+
+    splash_path.write_text(module, encoding='utf-8')
+    return app_text
+
+
 def persist_navigation_across_restarts(text: str) -> str:
     """Navigation state must survive a fully closed PWA process.
 
@@ -198,18 +271,16 @@ PATCH_MARKER = "// prepza: study-navigation-polish-v2"
 
 def main():
     text = APP.read_text(encoding='utf-8')
-    if PATCH_MARKER in text:
-        print('study navigation polish already applied')
-        return
     text = replace_mind_map(text)
     text = harden_document_navigation(text)
     text = remove_document_opening_interstitials(text)
     text = harden_offline_startup(text)
+    text = harden_extracted_splash_startup(text)
     text = persist_navigation_across_restarts(text)
-    text = text.rstrip() + "\n" + PATCH_MARKER + "\n"
+    if PATCH_MARKER not in text:
+        text = text.rstrip() + "\n" + PATCH_MARKER + "\n"
     APP.write_text(text, encoding='utf-8')
     print('study navigation polish applied')
-
 
 if __name__ == '__main__':
     main()

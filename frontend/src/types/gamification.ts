@@ -13,3 +13,5 @@ export type XpProgressResponse = {
 }
 
 export type StudyTimeResponse = { period: string; total_seconds: number; by_feature: Record<string, number> }
+
+export type GamificationSummary = { xp_total: number; level: number; level_title: string; current_streak: number; longest_streak: number; documents_count: number; followers_count: number }
