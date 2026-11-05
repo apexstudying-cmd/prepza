@@ -2188,3 +2188,7 @@ This follows the prior route extraction with a matching ownership move for the t
 Why the import position matters: `User` declares string foreign keys to the academic tables before these model classes are registered, while `ContentItem` and later declarations follow them. Keeping the moved classes at this location preserves model registration order and allows the shared metadata to resolve table references without duplicating tables. The new contract verifies shared metadata, table/column definitions, nullability, uniqueness/defaults, the Program FK, and the app compatibility import. Backend Shared Extension Contract [42021795293] passed 10/10 tests; full release regression [42021795474] and related contracts passed.
 
 The current tested source is 10,174 lines in `app.py`, with 57 ORM model classes inline and the two academic models in `academic_models.py`. There are still 59 model classes in the same metadata; this is an ownership relocation, not a schema/model redesign. No migrations were required or added.
+
+### Post-merge status — PR #74
+
+The academic catalog model ownership move is merged to `main` as `6b82aba7bd7d167488c4a0e9921be6deb50a7648`. The app compatibility exports remain in place; `academic_models.py` uses the single shared SQLAlchemy extension and keeps the same 59-model metadata. The current root entry point is 10,174 lines, with 57 inline model declarations and 149 inline route decorators.
