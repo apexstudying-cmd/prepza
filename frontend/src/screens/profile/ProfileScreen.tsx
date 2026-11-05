@@ -9,9 +9,11 @@ import type { GamificationSummary, StudyTimeResponse } from '../../types/gamific
 import type { HomeDocument, ProfileMe } from '../../types/profile'
 import type { UniversityOption, ProgramOption } from '../../types/academic'
 
+type ProfileScreenRoute = 'edit-profile' | 'ambassador' | 'settings' | 'share-sheet' | 'follow-requests' | 'achievements' | 'opportunity-detail' | 'study-activity' | 'document-study' | 'xp-progress' | 'study-materials' | 'followers'
+
 const PROFILE_CACHE: { me?: ProfileMe; uniName?: string | null; programName?: string | null; summary?: GamificationSummary | null; achievementsList?: Achievement[]; weeklyStudySeconds?: number | null } = {}
 
-export default function ProfileScreen({ setScreen, setActiveProfileUserId, setActiveDocumentId, setActiveOpportunityId, onOpenOrgPortal, SkeletonProfile }: { setScreen: (s: 'edit-profile' | 'ambassador' | 'settings' | 'share-sheet' | 'follow-requests' | 'achievements' | 'opportunity-detail' | 'study-activity' | 'document-study' | 'xp-progress' | 'study-materials' | 'followers') => void; setActiveProfileUserId?: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveOpportunityId: (id: number | null) => void; onOpenOrgPortal?: () => void; SkeletonProfile: ComponentType }) {
+export default function ProfileScreen({ setScreen, setActiveProfileUserId, setActiveDocumentId, setActiveOpportunityId, onOpenOrgPortal, SkeletonProfile }: { setScreen: (s: ProfileScreenRoute) => void; setActiveProfileUserId?: (id: number) => void; setActiveDocumentId: (id: number | null) => void; setActiveOpportunityId: (id: number | null) => void; onOpenOrgPortal?: () => void; SkeletonProfile: ComponentType }) {
   const { tokens: T } = useTheme()
   const [tab, setTab] = useState<'saved'|'activity'|'materials'>('activity')
   const [showMenu, setShowMenu] = useState(false)
@@ -124,10 +126,10 @@ export default function ProfileScreen({ setScreen, setActiveProfileUserId, setAc
       )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, padding: '14px 14px 0' }}>
         {[
-          { label: 'Study', value: summary ? `${summary.current_streak}d` : '—', color: N.gold, dest: 'study-activity' as Screen },
-          { label: 'XP', value: summary ? summary.xp_total.toLocaleString() : '—', color: '#4CC97B', dest: 'xp-progress' as Screen },
-          { label: 'Docs', value: summary ? String(summary.documents_count) : '—', color: '#4C7BC9', dest: 'study-materials' as Screen },
-          { label: 'Followers', value: summary ? String(summary.followers_count) : '—', color: '#9B59B6', dest: 'followers' as Screen },
+          { label: 'Study', value: summary ? `${summary.current_streak}d` : '—', color: N.gold, dest: 'study-activity' as ProfileScreenRoute },
+          { label: 'XP', value: summary ? summary.xp_total.toLocaleString() : '—', color: '#4CC97B', dest: 'xp-progress' as ProfileScreenRoute },
+          { label: 'Docs', value: summary ? String(summary.documents_count) : '—', color: '#4C7BC9', dest: 'study-materials' as ProfileScreenRoute },
+          { label: 'Followers', value: summary ? String(summary.followers_count) : '—', color: '#9B59B6', dest: 'followers' as ProfileScreenRoute },
         ].map(s => (
           <button key={s.label} onClick={() => {
             if (s.dest === 'followers' && me && setActiveProfileUserId) setActiveProfileUserId(me.id)
