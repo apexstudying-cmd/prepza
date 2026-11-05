@@ -393,3 +393,10 @@ Frontend Build [42031983870] passed 78 source/module tests, 5 offline Library te
 ### Additional small screen-boundary extractions — 2026-11-05
 
 TimeStudiedScreen now lives in frontend/src/screens/gamification/TimeStudiedScreen.tsx (61 lines), and ShareOppForm in frontend/src/screens/opportunities/ShareOppForm.tsx (45 lines). Their moved component bodies were directly compared with base main and are byte-for-byte identical after normalising only exports and narrowed callback types. Focused source contracts protect the original study-time loading/cancellation/period-selection behavior and the opportunity form's controlled fields, categories and navigation. Latest CI and full release regression are pending on the new head.
+
+
+### Student Profile extraction follow-up — PR #77
+
+StudentProfileScreen and its PublicProfile/FollowSummary types now live in frontend/src/screens/profile/StudentProfileScreen.tsx (164 lines). App.tsx is 11,286 lines on this branch, 567 lines below the 11,853-line starting point. The component body was compared directly to base main and preserved byte-for-byte after normalising only module export and narrowed callback/back-screen types. The app-shell back-screen state was narrowed to its actual two values.
+
+Frontend Build [42033518073] passed 80 source/module tests, 5 offline Library tests, TypeScript, service-worker validation, production build and architecture audits. Student Frontend, Student Contract, Admin Route, B2B, AI, control API, and E2EE Chat workflows passed. Full Release Browser/Cross-System Regression [42033518119] and E2EE Security Regression [42033518226] were still running at the time of this update and remain required before merge.
