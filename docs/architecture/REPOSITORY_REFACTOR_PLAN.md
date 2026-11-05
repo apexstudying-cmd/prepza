@@ -309,3 +309,9 @@ The first focused workflow attempt failed only because the dedicated test enviro
 ### PR #70 post-merge status
 
 PR #70 was squash-merged to main as 907658079a63a61439b42ea7de33d46ca31d0658. Backend Shared Extension Contract [42010022947] passed all six focused tests and compilation; Release Browser/Cross-System Regression [42010022682] passed all release gates. The shared extension boundary is now on main. The app remains a module-global Flask entry point; 59 model declarations and 156 route decorators remain to be extracted in bounded, separately verified slices. No separate post-merge workflow run is claimed.
+
+## 2026-11-05 — Notifications backend route boundary (PR #69; final verification pending)
+
+The existing five notification HTTP handlers and serializer are extracted into `notification_routes.py` and registered with `register_notification_routes(app, db, Notification, require_csrf)` from app.py at the same route-registration position. The new module does not import the partially initialized app module. The serializer and 110-line route block were directly compared against the previous app.py source; contents are identical after indentation under the registration function. Route names, paths, methods, decorator placement, login and per-user authorization checks, announcement pin ordering, response shapes, and commits remain unchanged. `get_or_create_notification_prefs` and `should_notify` stay in app.py because they're used elsewhere.
+
+After this extraction, app.py no longer owns the five notification route decorators (151 remain inline at the pre-merge snapshot); the five routes are registered by the new module. All 59 inline ORM model classes remain unchanged. PR #70's shared SQLAlchemy extension and `from app import db` compatibility work is preserved by rebasing this feature branch onto current main before final CI. The PR remains draft pending verification of the combined final head.

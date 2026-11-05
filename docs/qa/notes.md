@@ -2151,3 +2151,9 @@ PR #70 passed the dedicated extension contract and full release regression. Stud
 ### PR #70 post-merge
 
 The shared SQLAlchemy extension boundary is merged to main as 907658079a63a61439b42ea7de33d46ca31d0658. Focused extension contracts and the full release regression passed on the tested application-code head. This does not complete backend extraction: the central app still owns 59 inline ORM model declarations and 156 route decorators.
+
+## 2026-11-05 — Notifications end-to-end module boundary (PR #69; pending final verification)
+
+This extraction keeps the frontend and backend ownership boundary coherent. The UI component still receives the same app-shell navigation callbacks and now receives the existing generic empty/loading view as props. The existing module-level notification cache remains attached to the component's module and receives the same optimistic updates. The backend registration function receives app/db/Notification/require_csrf explicitly, so it does not import from app.py during module initialization. Existing notification preference helpers remain in app.py where other producers use them.
+
+The new route module is a structural move, not a route rewrite: same HTTP URLs, handler names, methods, CSRF decorators, authentication and ownership checks, 24-hour announcement pinning, JSON fields/statuses, and commit behavior. The 110-line original handler block was compared byte-for-byte after indentation into the registrar. A focused source contract was added to guard route ownership, method/CSRF mapping, response fields, order, and compatibility helpers. Because this server-side change was added after the first front-end pass, do not reuse old CI evidence as proof for the expanded head.
