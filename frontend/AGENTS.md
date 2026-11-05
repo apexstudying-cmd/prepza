@@ -80,6 +80,6 @@ python -m pytest -q \
 - `src/screens/social/FollowScreens.tsx` and `src/types/social.ts` - follower/following lists, follow-request actions, and their shared response contracts. Keep the route IDs and CSRF-protected API requests unchanged.
 
 
-- src/screens/chat/ChatOptionsScreen.tsx (PR #67, pending verification) - chat metadata, member list, rename/leave/mute controls, message search, and shared-media UI. Keep the chat-options route and existing chat API/CSRF behavior unchanged. Its ChatDetail and ChatMessageData contracts are shared from src/types/chat.ts; its file-extension helper, image extension list, and navigation/profile callbacks are explicit props. Do not couple this module to App.tsx.
+- src/screens/chat/ChatOptionsScreen.tsx (PR #67, verified on its tested code head) - chat metadata, member list, rename/leave/mute controls, message search, and shared-media UI. Keep the chat-options route and existing chat API/CSRF behavior unchanged. Its ChatDetail and ChatMessageData contracts are shared from src/types/chat.ts; its file-extension helper, image extension list, and navigation/profile callbacks are explicit props. Do not couple this module to App.tsx.
 - src/types/chat.ts - shared chat detail, message, and attachment response types. Preserve the existing API response field names and optionality.
 - src/ui/Avi.tsx - shared Prepza avatar visual primitive, reused by the app shell and extracted chat screen. Preserve its existing visual output.
