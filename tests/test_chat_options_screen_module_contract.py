@@ -56,3 +56,18 @@ def test_chat_domain_types_are_shared_without_changing_their_shapes():
     ):
         assert contract in types
     assert "type ChatDetail =" not in APP
+
+
+def test_shared_avatar_primitive_is_owned_by_ui_and_reused_by_app_and_chat_options():
+    ui = (ROOT / "frontend/src/ui/Avi.tsx").read_text(encoding="utf-8")
+    screen = SCREEN_PATH.read_text(encoding="utf-8")
+    assert "import Avi from './ui/Avi'" in APP
+    assert "import Avi from '../../ui/Avi'" in screen
+    assert "function Avi(" not in APP
+    assert "export default function Avi(" in ui
+    for contract in (
+        "background: `linear-gradient(135deg,${N.navy2},${N.navy3})`",
+        "emoji ?? name",
+        "fontSize: emoji ? size * 0.45 : size * 0.33",
+    ):
+        assert contract in ui
