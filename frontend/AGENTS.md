@@ -49,6 +49,7 @@ python -m pytest -q \
 - `src/screens/ambassador/AmbassadorScreen.tsx` - ambassador application, dashboard, referral, and payout-request UI.
 - `src/screens/settings/SettingsScreen.tsx` - account settings, privacy, notification preferences, appearance, security, logout, and account deletion.
 - `src/screens/auth/LoginScreen.tsx` - existing sign-in screen, including resend-verification and Google OAuth entry points; the app shell retains the `login` route and injects its navigation callback and OAuth error.
+- `src/screens/auth/AuthScreens.tsx` - forgot-password OTP flow, emailed reset-token flow, email verification confirmation, signup wizard, and signup OTP handoff. The app shell retains the route IDs and injects navigation/referral props; preserve the existing API, password validation, OTP timing, and session-storage contracts.
 - `src/screens/gamification/AchievementsScreen.tsx` and `src/types/achievements.ts` - achievement list/progress UI and its typed response contract.
 - `src/screens/study/StudyMaterialsScreen.tsx` - My Study document/material lists, offline IndexedDB integration, saved Library items, and replay navigation. Its app-shell UI and last-study callback are explicit props; it must not import `App.tsx`.
 - `src/screens/podcast/PodcastLibraryScreen.tsx` - Podcast Library list, API loading, session cache, and navigation to the player.

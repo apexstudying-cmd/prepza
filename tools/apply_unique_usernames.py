@@ -21,18 +21,22 @@ replace_once(
 )
 
 frontend = ROOT / "frontend/src/App.tsx"
+auth_screens = ROOT / "frontend/src/screens/auth/AuthScreens.tsx"
+signup_source = frontend
+if auth_screens.exists() and "export function SignupScreen(" in auth_screens.read_text(encoding="utf-8"):
+    signup_source = auth_screens
 replace_once(
-    frontend,
+    signup_source,
     "  const steps = ['Name', 'Email', 'Password', 'University', 'Course', 'Year', 'Semester']\n",
     "  const steps = ['Username', 'Email', 'Password', 'University', 'Course', 'Year', 'Semester']\n",
 )
 replace_once(
-    frontend,
+    signup_source,
     'placeholder="e.g. Arnold Gichuru" maxLength={50}',
     'placeholder="Choose a unique username" maxLength={50}',
 )
 replace_once(
-    frontend,
+    signup_source,
     "if (step === 0 && !data.display_name.trim()) { setError('Please enter your name.'); return }",
     "if (step === 0 && !data.display_name.trim()) { setError('Please enter a username.'); return }",
 )
