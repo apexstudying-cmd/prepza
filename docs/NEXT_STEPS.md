@@ -855,4 +855,5 @@ PR #77 is intentionally one consolidated review rather than separate PRs for eac
 - [x] Move the shared DocumentDetail contract into frontend/src/types/documents.ts and import it from App.tsx and DocReadyScreen.
 - [x] Preserve the DocReadyScreen body byte-for-byte against base main after normalising only the module export, injected TopBar component, and local DocReadyRoute type replacing the App-local Screen alias.
 - [x] Add source contracts for document detail loading/error handling, metadata labels, all seven existing action destinations, and the existing header.
-- [ ] Latest Frontend Build and full Release Browser/Cross-System Regression are queued on code head 74b8fac; wait for all checks before calling this extraction verified.
+- [x] Frontend Build [42036938429](https://github.com/apexstudying-cmd/prepza/actions/runs/42036938429) passed on code head 74b8fac: 90 frontend source/module contract tests, 5 offline Library tests, TypeScript, service-worker validation, production build, architecture audits and launch-wiring verification.
+- [ ] Full Release Browser/Cross-System Regression [42036938563](https://github.com/apexstudying-cmd/prepza/actions/runs/42036938563) and remaining contract/security workflows are queued on this code head; wait for all before merge.
