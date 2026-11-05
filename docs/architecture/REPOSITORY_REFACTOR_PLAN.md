@@ -3,7 +3,7 @@
 **Purpose:** make the repository easier to navigate and maintain without changing user-visible behavior, API contracts, authorization, persistence, billing, or product rules.
 
 **Baseline source checkpoint:** `f747b0d95a6b81cb2868843093546a97e3d09fb5` (2026-10-31).
-**Working branch:** `main`; PR #61, #62, #64, #65, #66, and #67 are merged (PR #62 merge `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`; PR #64 merge `7b0e9301543beabc5dee02af2388983737bada5c`; PR #65 merge `222b4011c40ddadaae3bdcf331022b79a78f5926`; PR #66 merge `29b582b6ca9e47b8a0cd725673c6be76b71358a1`). PR #56, #59, and the consolidated My Study integration PR #61 are also merged; the Achievements module is present on `main`. PR #67 was squash-merged to main as 62cdf80f2652746593b58f131c939f95442b0446. PR #68 (XP Progress), #69 (Library + Notifications), and #70 (shared SQLAlchemy extension) are also merged. PR #73 (public academic-catalog routes) was squash-merged as `d57cfecde2c98b59eec867c70cca4270ed2b1e73`.
+**Working branch:** `main`; PR #61, #62, #64, #65, #66, and #67 are merged (PR #62 merge `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`; PR #64 merge `7b0e9301543beabc5dee02af2388983737bada5c`; PR #65 merge `222b4011c40ddadaae3bdcf331022b79a78f5926`; PR #66 merge `29b582b6ca9e47b8a0cd725673c6be76b71358a1`). PR #56, #59, and the consolidated My Study integration PR #61 are also merged; the Achievements module is present on `main`. PR #67 was squash-merged to main as 62cdf80f2652746593b58f131c939f95442b0446. PR #68 (XP Progress), #69 (Library + Notifications), and #70 (shared SQLAlchemy extension) are also merged. PR #73 (public academic-catalog routes) was squash-merged as `d57cfecde2c98b59eec867c70cca4270ed2b1e73`. PR #74 contains the verified extraction of the University and Program ORM models and is awaiting final merge.
 **Status:** incremental refactor in progress. This document distinguishes current implementation from target structure.
 
 ## 1. Verified baseline
@@ -53,7 +53,7 @@ The ORM classes are also grouped in the same `app.py` file. This inventory is ba
 | Organisation and ambassador | `Organisation`, `OrganisationMember`, `Opportunity`, `Ambassador`, `Referral`, `AmbassadorPayout` |
 | Audit, delivery and key material | `AuditLog`, `PushSubscription`, `UserKey` |
 
-The first migration should be model extraction with no route movement: create a shared extension module, move one model domain at a time, keep model table names/constraints/relationships identical, and add metadata/table-creation and import-compatibility tests. Avoid importing `app.py` from model modules; that would create a circular dependency.
+The shared extension boundary now exists in `extensions.py`. Continue model extraction one bounded domain at a time, keep model table names/constraints/relationships identical, and add metadata/table-creation and import-compatibility tests before each move. Avoid importing `app.py` from model modules; that would create a circular dependency.
 
 ### Frontend largest remaining screen areas
 
@@ -240,7 +240,7 @@ PR #66 (auth-flow screens) is complete and merged. PR #67 (Chat Options, shared 
 
 ## 2026-11-05 backend current-state inventory
 
-The backend is **partially modularized, not extracted**. A source scan of the current app.py baseline found approximately 10,332 lines, 59 inline SQLAlchemy model classes, and 156 inline Flask route decorators. These are source-level counts, not a claim about the number of distinct live URL rules.
+The backend is **partially modularized, not fully extracted**. The historical source baseline was approximately 10,332 lines with 59 inline SQLAlchemy model classes and 156 inline Flask route decorators. The current ownership counts after PR #74 are tracked at the end of this document. These are source-level counts, not a claim about the number of distinct live URL rules.
 
 Already-separated backend areas include AI economics/generation, usage and organisation billing, discovery/B2B finance, admin operations/monitoring, document processing/retrieval, E2EE chat routes, offline activity, Shop, and request observability. app.py still owns global application construction, many route handlers, and the ORM model declarations.
 
@@ -284,19 +284,19 @@ Focused tests cover shared extension initialization with SQLite, PostgreSQL pool
 
 ## Backend ownership map — audited app.py baseline
 
-The audited baseline contains 59 inline `db.Model` classes and 156 decorated Flask route handlers. These are declaration counts, not a claim that each route decorator maps to a unique URL or that every model has no equivalent dynamically declared table in another module. Use this list as a starting map and confirm each model's relationships, importers, Alembic metadata, and runtime registration before moving it.
+The historical audited baseline contained 59 inline `db.Model` classes and 156 decorated Flask route handlers. Current source counts after PR #74 are recorded in the latest model-extraction section below. These are declaration counts, not a claim that each route decorator maps to a unique URL or that every model has no equivalent dynamically declared table in another module. Use this list as a starting map and confirm each model's relationships, importers, Alembic metadata, and runtime registration before moving it.
 
 | Domain candidate | Inline model declarations to map | Main extraction cautions |
 |---|---|---|
 | Identity and platform | `User`, `SystemSetting`, `UserKey`, `AuditLog`, `RequestObservabilityEvent`, `PushSubscription`, `Notification`, `NotificationPreference`, `Announcement`, `ContentReport`, `UserWarning` | Session/auth decorators, admin permissions, request lifecycle hooks, notification producers, and observability scrubbing |
-| Academic catalog | `University`, `Program`, `ContentItem` | Seed/import scripts, public catalogue route contracts, and foreign-key consumers |
+| Academic catalog | `ContentItem` (`University` and `Program` moved to `academic_models.py` in PR #74) | Seed/import scripts, public catalogue route contracts, and foreign-key consumers; preserve legacy `from app import University, Program` exports |
 | Billing and organisations | `Payment`, `Organisation`, `OrganisationMember`, `Opportunity`, `Ambassador`, `Referral`, `AmbassadorPayout` | Paystack/webhook idempotency, B2B ledger integrity, entitlement writes, and dynamically registered billing models |
 | Documents and learning | `DocumentContent`, `DocumentPageText`, `Document`, `DocumentReadingProgress`, `GeneratedMaterial`, `AiJob`, `TutorConversation`, `TutorMessage`, `StudentLearningProfile`, `LearningConcept`, `LearningEvent`, `StudentConceptMastery`, `ConceptPrerequisite`, `LibraryPublication`, `SavedLibraryMaterial`, `LibraryReport`, `XpEvent`, `StudyStreak`, `StudyActivityLog`, `StudyTimeLog`, `QuizAttempt`, `FlashcardSession`, `UserAchievement`, `AiUsageLog` | Retrieval permissions, document ownership, generated-material invalidation, offline sync, XP/streak time boundaries, and AI usage accounting |
 | Chat and community | `Conversation`, `ConversationParticipant`, `Message`, `MessageAttachment`, `Group`, `GroupMember`, `GroupPost`, `GroupPostComment`, `GroupPostLike`, `GroupQuestionVote`, `GroupFile`, `Follow`, `FollowRequest` | E2EE key material, realtime event ordering, message idempotency, attachment authorization, and social notification side effects |
 
 The 156 route decorators span the public shell/health, authentication, profile, document upload/read/study, AI generation, learning activity, library, subscription/payment, admin, ambassador, discovery/opportunities, social/community, and chat domains. The route extraction sequence should prioritize bounded route families already covered by standalone `register_*` modules, but only after import and extension ownership are stable. Preserve route paths, HTTP methods, endpoint names, decorator order, auth/CSRF behavior, response payloads, and registration timing.
 
-Do not move all 59 models into a single models.py. Extract by bounded domain only after a generated import/relationship graph and Alembic metadata tests show no duplicate tables, missing relationships, changed naming, or migration drift.
+Do not move all remaining models into a single models.py. Extract by bounded domain only after a generated import/relationship graph and Alembic metadata tests show no duplicate tables, missing relationships, changed naming, or migration drift.
 
 
 ### PR #70 verification and merge readiness
@@ -308,7 +308,7 @@ The first focused workflow attempt failed only because the dedicated test enviro
 
 ### PR #70 post-merge status
 
-PR #70 was squash-merged to main as 907658079a63a61439b42ea7de33d46ca31d0658. Backend Shared Extension Contract [42010022947] passed all six focused tests and compilation; Release Browser/Cross-System Regression [42010022682] passed all release gates. The shared extension boundary is now on main. The app remains a module-global Flask entry point; 59 model declarations and 156 route decorators remain to be extracted in bounded, separately verified slices. No separate post-merge workflow run is claimed.
+PR #70 was squash-merged to main as 907658079a63a61439b42ea7de33d46ca31d0658. Backend Shared Extension Contract [42010022947] passed all six focused tests and compilation; Release Browser/Cross-System Regression [42010022682] passed all release gates. The shared extension boundary is now on main. The app remains a module-global Flask entry point; at the PR #70 code checkpoint, 59 models and 156 route decorators remained inline. Later PRs #73 and #74 reduce those inline counts while preserving all registered routes and table metadata. No separate post-merge workflow run is claimed.
 
 ## 2026-11-05 — Notifications backend route boundary (verified in merged PR #69)
 
@@ -338,3 +338,13 @@ The application source at this tested head is 10,191 lines with 149 inline `@app
 ### PR #73 post-merge status
 
 PR #73 was squash-merged to `main` as `d57cfecde2c98b59eec867c70cca4270ed2b1e73`. The focused Backend Academic Catalog Route Contract [42019950835] passed all five tests and Python compilation; full Release Browser/Cross-System Regression [42019950561] passed responsive, B2B, 98/98 PostgreSQL QA, online/offline generated-artifact journeys, screenshot upload, and cleanup. The tested source remains 10,191 lines in `app.py`, with 149 inline route decorators and 59 inline ORM classes. No separate post-merge workflow run is claimed.
+
+## 2026-11-05 — Academic catalog ORM model extraction (PR #74; verified)
+
+The existing `University` and `Program` model class bodies have moved from `app.py` to `academic_models.py` and continue to use the single shared `extensions.db` object. `app.py` imports both names at the original declaration point after `User` and before `ContentItem`, preserving the legacy `from app import University, Program` exports used by seed scripts, browser tests, admin runtime modules, and other consumers. The original 864-character class block was compared with the moved block and is byte-for-byte identical.
+
+Four new model contracts verify shared SQLAlchemy metadata, table names, column lengths/nullability, uniqueness, defaults, the `program.university_id → university.id` foreign key, and the app-level compatibility export/import order. The existing six shared-extension tests also remain active. Backend Shared Extension Contract [42021795293](https://github.com/apexstudying-cmd/prepza/actions/runs/42021795293) passed compilation and all 10 tests.
+
+On tested code head `f7c8ec327483f4d5170bfa0aa4ec60285d81574f`, Student Frontend [42021795416], Student Contract [42021795394], Admin Route [42021795332], B2B [42021795333], E2EE Security [42021795546], E2EE Chat [42021795286], Study Navigation [42021795308], Prepza Control API [42021795303], AI Economics [42021795374], AI Generation Architecture [42021795427], and Kokoro syntax [42021795321] passed. Release Browser/Cross-System Regression [42021795474] passed production image, disposable PostgreSQL/Redis, Alembic migrations and SQL ledger, app startup, responsive mobile/tablet checks, B2B browser-to-ledger regression, 98/98 PostgreSQL QA tests, online/offline Study Hub and generated-artifact journeys, screenshot upload, and service cleanup. StudyHub Library Flow [42021795345] was skipped by workflow conditions and is not counted as a pass.
+
+At this tested head, `app.py` is 10,174 lines with 57 inline ORM model classes and 149 inline Flask route decorators. `academic_models.py` owns the two moved models, so the same 59 model classes remain registered in the same SQLAlchemy metadata. Across route modules, all 156 route registrations remain available: 149 inline in `app.py`, five in `notification_routes.py`, and two in `academic_catalog_routes.py`. No schema, migration, table name, column, constraint, foreign key, or app-factory behavior changed.
