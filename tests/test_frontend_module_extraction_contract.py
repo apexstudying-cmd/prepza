@@ -572,5 +572,7 @@ def test_profile_module_preserves_profile_data_tabs_cache_and_navigation_contrac
         "setScreen('document-study')",
         "PROFILE_CACHE.me",
         "data-prepza-profile-menu",
+        "type ProfileScreenRoute =",
+        "as ProfileScreenRoute",
     ):
         assert contract in source
