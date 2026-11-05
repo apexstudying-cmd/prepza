@@ -222,3 +222,5 @@ A passing compile is necessary but not sufficient. A passing test suite is evide
 - [ ] Design and implement backend app-factory/extensions boundaries with compatibility tests.
 - [ ] Extract backend route/service domains incrementally.
 - [ ] Reduce and eventually retire build-time source mutation after every transform has a committed source equivalent.
+
+- [x] Extract the existing Login screen into `frontend/src/screens/auth/LoginScreen.tsx` in PR #65; the original 86-line component body is preserved byte-for-byte after normalizing the export declaration and narrowing the navigation callback type. Sign-in, resend-verification, Google OAuth, error handling, UI markup, and the existing `home` / `forgot-password` / `signup` destinations remain unchanged. Frontend Build, Student Frontend Contract, and Release Browser/Cross-System Regression passed (runs [41241016697](https://github.com/apexstudying-cmd/prepza/actions/runs/41241016697), [41241016700](https://github.com/apexstudying-cmd/prepza/actions/runs/41241016700), and [41241016614](https://github.com/apexstudying-cmd/prepza/actions/runs/41241016614)).
