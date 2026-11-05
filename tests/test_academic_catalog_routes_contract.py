@@ -148,16 +148,21 @@ def test_program_lookup_returns_only_active_programs_sorted_by_name_with_existin
     ]
 
 
-def test_app_registers_the_extracted_routes_after_models_and_before_signup():
+def test_app_registers_the_extracted_routes_after_model_compatibility_import_and_before_signup():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1]
     app_source = (root / "app.py").read_text(encoding="utf-8")
+    academic_import = "from academic_models import University, Program"
     registrar = "register_academic_catalog_routes(app, University, Program)"
+    import_at = app_source.index(academic_import)
     register_at = app_source.index(registrar)
 
-    assert register_at > app_source.index("class University(db.Model):")
-    assert register_at > app_source.index("class Program(db.Model):")
+    # University and Program are imported at the same point where their old
+    # inline declarations lived, after User and before the next model class.
+    assert import_at > app_source.index("class User(db.Model):")
+    assert import_at < app_source.index("class ContentItem(db.Model):")
+    assert register_at > import_at
     assert register_at < app_source.index('@app.route("/signup", methods=["POST"])')
     assert '@app.route("/universities")' not in app_source
     assert '@app.route("/universities/<int:university_id>/programs")' not in app_source
