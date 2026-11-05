@@ -90,7 +90,9 @@ def test_home_quick_actions_are_the_approved_five_in_order():
 
 def test_splash_screen_uses_the_canonical_192px_icon():
     app = source("frontend/src/App.tsx")
-    splash = app.split("function SplashScreen", 1)[1].split("// ─── LOGIN", 1)[0]
+    splash = source("frontend/src/screens/onboarding/SplashScreen.tsx")
+    assert "from './screens/onboarding/SplashScreen'" in app
+    assert "function SplashScreen" not in app
     assert '<img src="/icon-192.png" alt="Prepza" width={192} height={192}' in splash
     assert "src={logoImg}" not in splash
     # All React app-shell brand marks use the canonical public PNG, not the SVG import.
