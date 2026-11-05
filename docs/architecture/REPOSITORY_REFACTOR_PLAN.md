@@ -400,3 +400,8 @@ TimeStudiedScreen now lives in frontend/src/screens/gamification/TimeStudiedScre
 StudentProfileScreen and its PublicProfile/FollowSummary types now live in frontend/src/screens/profile/StudentProfileScreen.tsx (164 lines). App.tsx is 11,286 lines on this branch, 567 lines below the 11,853-line starting point. The component body was compared directly to base main and preserved byte-for-byte after normalising only module export and narrowed callback/back-screen types. The app-shell back-screen state was narrowed to its actual two values.
 
 Frontend Build [42033518073] passed 80 source/module tests, 5 offline Library tests, TypeScript, service-worker validation, production build and architecture audits. Student Frontend, Student Contract, Admin Route, B2B, AI, control API, and E2EE Chat workflows passed. Full Release Browser/Cross-System Regression [42033518119] and E2EE Security Regression [42033518226] were still running at the time of this update and remain required before merge.
+
+
+### Study Streak module — 2026-11-05
+
+StudyStreakScreen and its response types are now owned by frontend/src/screens/gamification/StudyStreakScreen.tsx. The screen body matches base main byte-for-byte after export and callback-type normalisation. The module preserves its existing month navigation, cancellation, tap-to-reveal calendar day, milestone, and share-sheet behavior. A prior typecheck also caught and prompted correction of the existing share-sheet callback in TimeStudiedScreen; the corrected route union is now covered by a source contract.
