@@ -102,3 +102,6 @@ python -m pytest -q \
 - src/screens/profile/StudentProfileScreen.tsx - another student's public profile, privacy-aware display, follow/unfollow and pending requests, direct-message creation, and profile statistics. Preserve /public-profile and /follow-summary requests, CSRF-protected follow and chat requests, private-profile behavior, and the existing chat-detail/chat-options/back destinations.
 
 - src/screens/gamification/StudyStreakScreen.tsx - streak calendar, monthly navigation, selected-day detail and milestones. Preserve the month-scoped /streak request, cancellation guard, current/longest streak values, study-duration shading thresholds, selected-day interaction, milestone filtering, and profile/share-sheet navigation.
+
+- src/screens/profile/ProfileScreen.tsx - signed-in student's own profile, including saved opportunities, study activity, study materials, follow-request count and achievement summary. Preserve PROFILE_CACHE behavior, existing API endpoints, tab fetch cancellation, university/program name resolution, profile-menu outside-click dismissal, and route callbacks. SkeletonProfile is injected by App.tsx so shared skeleton ownership stays explicit.
+- src/types/profile.ts - shared ProfileMe and HomeDocument response shapes. Keep these aligned with the existing /me and /documents payloads.
