@@ -6,6 +6,8 @@ on:
       - 'app.py'
       - 'db_runtime.py'
       - 'extensions.py'
+      - 'academic_models.py'
+      - 'tests/test_academic_models_contract.py'
       - 'tests/test_backend_extensions_contract.py'
       - '.github/workflows/backend-extension-contract.yml'
   push:
@@ -37,4 +39,4 @@ jobs:
       - name: Run shared extension contract tests
         env:
           PYTHONPATH: .
-        run: python -m pytest -q tests/test_backend_extensions_contract.py
+        run: python -m pytest -q tests/test_backend_extensions_contract.py tests/test_academic_models_contract.py
