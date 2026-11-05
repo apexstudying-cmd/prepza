@@ -2961,42 +2961,10 @@ def health():
 
 # ---------- Auth routes ----------
 
-@app.route("/universities")
-def list_universities():
-    """
-    Public, unauthenticated - the signup wizard needs this before a
-    session exists. Only returns active universities so a
-    deactivated one can't be selected by new signups.
-    """
-    universities = University.query.filter_by(is_active=True).order_by(University.name).all()
-    return jsonify([
-        {"id": u.id, "name": u.name, "short_code": u.short_code, "country": u.country}
-        for u in universities
-    ])
-
-
-@app.route("/universities/<int:university_id>/programs")
-def list_programs(university_id):
-    """
-    Public, unauthenticated - same reasoning as /universities above.
-    404s on an unknown or inactive university instead of silently
-    returning an empty list, so the frontend can tell 'no programs
-    yet' apart from 'that university id doesn't exist'.
-    """
-    university = University.query.filter_by(id=university_id, is_active=True).first()
-    if not university:
-        return jsonify({"error": "University not found"}), 404
-
-    programs = Program.query.filter_by(university_id=university_id, is_active=True).order_by(Program.name).all()
-    return jsonify([
-        {
-            "id": p.id,
-            "name": p.name,
-            "degree_level": p.degree_level,
-            "discipline_category": p.discipline_category,
-        }
-        for p in programs
-    ])
+# Keep the public academic catalog routes at their original registration
+# position, after the University/Program model declarations and health route.
+from academic_catalog_routes import register_academic_catalog_routes
+register_academic_catalog_routes(app, University, Program)
 
 
 @app.route("/signup", methods=["POST"])
