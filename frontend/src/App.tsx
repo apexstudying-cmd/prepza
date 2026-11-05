@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, type ChangeEvent } from 'react'
 import { api, ApiError } from './lib/appApi'
 import { N, useTheme, currentThemeMode, DARK_THEME } from './theme/theme'
 import { Ic } from './ui/icons'
+import Avi from './ui/Avi'
 import CompleteProfileScreen from './screens/onboarding/CompleteProfileScreen'
 import LoginScreen from './screens/auth/LoginScreen'
 import { ForgotPasswordScreen, ResetPasswordScreen, VerifyConfirmScreen, SignupScreen, CheckEmailScreen } from './screens/auth/AuthScreens'
@@ -780,15 +781,6 @@ function Btn({ label, onClick, variant = 'primary', small }: { label: string; on
     <button onClick={onClick} style={{ ...styles[variant], fontFamily: 'Plus Jakarta Sans', fontWeight: 700, fontSize: small ? 12 : 14, borderRadius: 14, padding: small ? '8px 16px' : '13px 24px', cursor: 'pointer', letterSpacing: 0.2 }}>{label}</button>
   )
 }
-
-function Avi({ name, size = 38, emoji }: { name: string; size?: number; emoji?: string }) {
-  return (
-    <div style={{ width: size, height: size, background: `linear-gradient(135deg,${N.navy2},${N.navy3})`, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: emoji ? size * 0.45 : size * 0.33, fontWeight: 800, color: N.gold, flexShrink: 0, fontFamily: 'Plus Jakarta Sans' }}>
-      {emoji ?? name}
-    </div>
-  )
-}
-
 function Bar({ pct, color = N.gold }: { pct: number; color?: string }) {
   return <div style={{ background: '#E5E7EB', borderRadius: 99, height: 5 }}><div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 99, transition: 'width 0.6s ease' }} /></div>
 }
