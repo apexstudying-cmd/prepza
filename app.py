@@ -13,7 +13,6 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from functools import wraps
 from flask import Flask, request, jsonify, session, Response, send_from_directory, redirect
-from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func, or_, and_, text
 from threading import Lock, Thread
 from sqlalchemy.exc import IntegrityError
@@ -28,7 +27,7 @@ import podcast_audio
 import kokoro_control
 from pywebpush import webpush, WebPushException
 from urllib.parse import urlencode
-from db_runtime import configure_sqlalchemy_runtime
+from extensions import db, init_extensions
 from auth_otp import register_email_otp
 
 load_dotenv()
@@ -68,7 +67,7 @@ app.config["SESSION_COOKIE_SECURE"] = True
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
-db = SQLAlchemy(app)
+init_extensions(app)
 kokoro_control.register(app)
 from usage_billing import register_usage_billing
 register_usage_billing(app, db)
