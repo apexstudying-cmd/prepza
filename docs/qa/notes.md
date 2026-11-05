@@ -2217,3 +2217,8 @@ This PR keeps the two screen extractions and their transform/test updates togeth
 NewChatScreen was moved to frontend/src/screens/chat/NewChatScreen.tsx (159 lines); App.tsx is now 11,440 lines, 413 fewer than the initial 11,853-line baseline. Its component body was verified byte-for-byte against base main after normalising only module export and callback type. The test protects the existing debounced search, direct chat reuse/create, group validation/create, CSRF headers, and navigation behavior.
 
 Latest Frontend Build [42031983870] passed 78 source/module contract tests, 5 offline Library tests, TypeScript, service-worker validation, production build, and architecture audits. Student, Admin, B2B, AI, control API and E2EE workflows passed. Full Release Browser/Cross-System Regression [42031984075] passed on the New Chat code head: production image, 43 migration files and controlled ledger, responsive browser checks, B2B metering, 98/98 PostgreSQL QA, online/offline Study Hub and generated-artifact journeys, screenshot upload, and cleanup. Subsequent PR commits are documentation-only.
+
+
+## Time Studied and Share Opportunity extractions — PR #77
+
+Moved TimeStudiedScreen (61-line module) and ShareOppForm (45-line module) out of App.tsx. The component bodies were byte-for-byte matched to base main after normalising only module exports and narrowed callback types. New source contracts protect study-time period selection, fetch/cancel/format/navigation behavior and opportunity form fields, categories, controlled description, and navigation. Latest Frontend Build [42034151911] and Release Browser/Cross-System Regression [42034151448] were still running when this note was written; await both before claiming verification.
