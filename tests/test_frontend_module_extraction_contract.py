@@ -426,7 +426,7 @@ def test_new_chat_module_preserves_search_direct_chat_and_group_creation_contrac
         "/users/search?q=",
         "}, 300)",
         "clearTimeout(t)",
-        "api<{ id: number; reused: boolean }>('/chats')",
+        "api<{ id: number; reused: boolean }>('/chats', {",
         "is_group: false",
         "participant_ids: [userId]",
         "is_group: true",
