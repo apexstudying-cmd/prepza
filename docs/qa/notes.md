@@ -2151,3 +2151,11 @@ PR #70 passed the dedicated extension contract and full release regression. Stud
 ### PR #70 post-merge
 
 The shared SQLAlchemy extension boundary is merged to main as 907658079a63a61439b42ea7de33d46ca31d0658. Focused extension contracts and the full release regression passed on the tested application-code head. This does not complete backend extraction: the central app still owns 59 inline ORM model declarations and 156 route decorators.
+
+## 2026-11-05 — Library screen extraction (PR #71)
+
+The existing Library screen is moved to `frontend/src/screens/library/LibraryScreen.tsx`. Its original 300-line function body matches the previous main source byte-for-byte after normalizing only the export/signature. The app shell still owns the route and passes the same document/navigation callbacks. Its existing EmptyState and ErrorState components are now injected as typed props instead of imported indirectly from App.tsx. Library data shapes are in `types/library.ts`; the shared material-type list/label helper is in `lib/library.ts`, because the inline publish/admin screens also consume them.
+
+This move exposed prebuild coupling that the normal route/component contracts did not reveal. The My Study/Library separation transform used to remove the Saved tab by rewriting App.tsx; it has been updated to apply that same transformation to LibraryScreen.tsx when the screen is extracted, while keeping the legacy inline path. The library-material-type restriction transform also now targets the extracted helper module, with a fallback to App.tsx for older ownership layouts. Both changes preserve the existing transformed build behavior instead of letting the moved source bypass it.
+
+The first CI build failed because the old transform contract test still expected the Library state inside App.tsx. Its fixture now includes the new screen module and checks the transformed module and idempotence. A subsequent build passed focused source contracts, offline Library tests, functional wiring/ORM audits, TypeScript and service-worker checks, but production prebuild then caught the material-type transform assumption. That transform has now been corrected and has dedicated tests for module and legacy ownership; final production-build and full release-browser evidence is still pending. Do not call PR #71 complete until those checks pass.
