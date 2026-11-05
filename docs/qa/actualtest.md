@@ -202,3 +202,10 @@ StudentProfileScreen and its PublicProfile/FollowSummary response types now live
 The new contract protects public-profile and follow-summary requests, privacy handling, follow/unfollow and pending states, direct chat creation, chat-options navigation, and the XP/follower/document/study-time summary. The existing App back-screen state was narrowed to the only two values actually used: chat-detail and chats.
 
 Frontend Build [42033518073] passed 80 source/module tests, 5 offline Library tests, TypeScript, service-worker validation, production build, and architecture audits. Student Frontend, Student Contract, Admin Route, B2B, AI, Prepza Control API, and E2EE Chat workflows passed. Full Release Browser/Cross-System Regression [42033518119] and E2EE Security Regression [42033518226] were still running at the time of this note; their success is required before merge.
+
+
+### Study Streak extraction — PR #77
+
+StudyStreakScreen and its local streak response types are now in frontend/src/screens/gamification/StudyStreakScreen.tsx (214 lines), removing 205 lines from App.tsx. The moved component body was compared with base main and matched byte-for-byte after normalising only the module export and callback type. Focused contracts protect month-scoped /streak requests, cancellation, day selection, month navigation, milestone display, duration formatting, and both existing back/share destinations.
+
+The previous CI pass exposed one missing callback destination in the earlier TimeStudiedScreen extraction: the existing share-sheet action had not been included in the narrowed callback type. That type and its test were corrected without changing the component body. Latest Frontend Build [42034876037](https://github.com/apexstudying-cmd/prepza/actions/runs/42034876037) and Release Browser/Cross-System Regression [42034875673](https://github.com/apexstudying-cmd/prepza/actions/runs/42034875673) are queued against the corrected code head.
