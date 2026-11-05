@@ -17,9 +17,12 @@ text = APP.read_text(encoding='utf-8')
 required = [
     "localStorage.getItem('prepza-navigation-state')",
     "localStorage.setItem('prepza-navigation-state'",
-    'const resumeOffline = () =>',
+    'resumeOffline={() => {',
 ]
+splash = (ROOT / 'frontend' / 'src' / 'screens' / 'onboarding' / 'SplashScreen.tsx').read_text(encoding='utf-8')
 missing = [marker for marker in required if marker not in text]
+if 'resumeOffline()' not in splash:
+    missing.append('resumeOffline() in extracted SplashScreen module')
 if missing:
     raise SystemExit('Study navigation polish verification failed: ' + ', '.join(missing))
 
