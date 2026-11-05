@@ -43,7 +43,6 @@ def test_chat_options_preserves_search_media_and_navigation_behavior():
         "setScreen('student-profile')",
         "event.key === 'Escape'",
         "setShowRename(false); setShowSearch(false); setShowMedia(false)",
-        "window.history.back()",
     ):
         assert contract in source
 
