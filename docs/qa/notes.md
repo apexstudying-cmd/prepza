@@ -2263,3 +2263,13 @@ Release Browser and Cross-System Regression [run 42581515451](https://github.com
 At this exact PR head, `frontend/src/App.tsx` is 10,745 lines and `app.py` is 10,139 lines. This is a structural refactor, not completion of all repository modularization: both root files remain substantial and further bounded extraction can continue later. No production deployment, live provider verification, or production-database migration is implied by these CI results.
 
 PR #77 remains open and unmerged. These checks verify the integration branch only; `main` does not contain these changes until the PR is merged. Do not merge without the user's explicit approval.
+
+## 2026-11-09 — Admin feature boundary and CI evidence
+
+Admin frontend code has been moved out of `App.tsx` into `admin/AdminPlatform.tsx`, `AdminSection.tsx`, `AdminPanels.tsx`, and `AdminShared.tsx`. The app shell now imports the admin platform. Admin section IDs and route dispatch remain unchanged; shared admin types/primitives and independent domain panels have explicit owners. The central AdminSection remains a stateful 1,921-line component; further per-tab extraction must preserve lifecycle, permission, API and CSRF contracts.
+
+The prebuild control-settings transformer now resolves the extracted AdminSection file first (falling back to the older inline App location on branches that have not adopted the module). The transformer test verifies current canonical Library academic-context code and idempotency. Morio icon-count and admin module-boundary contracts were updated to follow the feature modules.
+
+Exact code head `49e2782b911e154fc649f50d4d0356944fe72d1c` passed Frontend Build, Student Frontend, student contracts, E2EE, Admin Route, Prepza Control API, B2B, AI, Study Navigation, backend extension/catalog contracts, Kokoro, and the complete Release Browser/Cross-System Regression (run 42593752604). Release regression included disposable DB migrations, mobile/tablet, B2B metering, full PostgreSQL QA, online/offline generated-artifact journeys, screenshots, and cleanup. StudyHub Library Flow was skipped by conditions; it is not counted as a pass. See the exact workflow links in `docs/qa/actualtest.md`.
+
+Next: the user reported that Shop's visual design and end-to-end experience do not match expectations. Reopen the Shop UX gate and audit it against `docs/ux/SHOP_UX_UI_STANDARD.md` and `docs/qa/SHOP_USER_FLOW.md`. Initial code inspection found keyboard accessibility, touch-target, filter/empty-state, loading and design-token consistency issues to validate on phone/tablet before changes.
