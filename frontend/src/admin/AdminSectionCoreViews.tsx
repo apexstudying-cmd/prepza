@@ -1,5 +1,6 @@
 import { N } from '../theme/theme'
 import { AdminBadge, AdminBarChart, AdminLineChart, AdminKPI, AdminTable, AdminCard } from './AdminShared'
+import type { AdminPayment } from './AdminShared'
 import { materialTypeLabel } from '../lib/library'
 import type { AdminSectionController } from './useAdminSectionController'
 
