@@ -2251,3 +2251,5 @@ Moved DocReadyScreen into the study feature module and DocumentDetail into types
 The previously separate public-shell route change is now carried by the main frontend integration branch so the refactor can be reviewed as one coherent PR. Three existing handlers moved to `public_shell_routes.py`; explicit dependencies avoid an import of partially initialized `app.py`. The original endpoint names, paths, GET/HEAD/OPTIONS behavior, service-worker headers, `/health` limiter exemption, database probe, safe expiry sweep, and success/error JSON responses are covered by focused tests. The workflow now compiles the new module and runs both public-shell and academic-catalog route contract suites on relevant pull requests and main pushes.
 
 This is implementation documentation only until the combined PR head finishes CI. Do not claim route extraction verification, release readiness, or completion based solely on earlier PR #76 checks; rerun evidence on the exact consolidated head.
+
+PR #76 is now closed as superseded, not merged. Its implementation is represented in consolidated PR #77; all verification claims must refer to the final combined PR #77 head.
