@@ -80,3 +80,16 @@ def test_listing_grids_expand_single_results_instead_of_leaving_empty_columns():
     assert source.count("repeat(auto-fit,minmax(155px,1fr))") == 4
     assert "repeat(auto-fill,minmax(155px,1fr))" not in source
 
+def test_mobile_browse_keeps_search_visible_and_collapses_secondary_filters():
+    source = SHOP_SCREEN.read_text(encoding="utf-8")
+    stylesheet = (ROOT / "frontend" / "src" / "shop" / "ShopScreen.css").read_text(encoding="utf-8")
+
+    search = source.index('<Field label="Search products"')
+    filters = source.index('id="shop-additional-filters"')
+    assert search < filters
+    assert 'className="shop-filter-toggle"' in source
+    assert "aria-expanded={filtersExpanded}" in source
+    assert 'aria-controls="shop-additional-filters"' in source
+    assert ".shop-filter-grid { display: none; }" in stylesheet
+    assert ".shop-filter-grid.is-expanded { display: grid; }" in stylesheet
+    assert "@media (min-width: 640px)" in stylesheet
