@@ -62,7 +62,7 @@ async function shopApi<T = any>(path: string, options: RequestInit = {}): Promis
   return body as T
 }
 function ShopButton({ children, onClick, disabled, secondary = false }: { children: ReactNode; onClick: () => void; disabled?: boolean; secondary?: boolean }) {
-  return <button type="button" disabled={disabled} onClick={onClick} style={{ ...ui.button, ...(secondary ? ui.secondary : ui.primary), opacity: disabled ? .55 : 1, cursor: disabled ? 'not-allowed' : 'pointer' }}>{children}</button>
+  return <button type="button" disabled={disabled} onClick={onClick} style={{ ...ui.button, ...(secondary ? ui.secondary : ui.primary), minHeight: 44, opacity: disabled ? .55 : 1, cursor: disabled ? 'not-allowed' : 'pointer' }}>{children}</button>
 }
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label style={{ display: 'block', minWidth: 0 }}><span style={{ display: 'block', fontSize: 11, fontWeight: 800, marginBottom: 5, color: 'var(--prepza-generation-muted, #596579)' }}>{label}</span>{children}</label>
@@ -322,7 +322,7 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
   const nav: { id: Page; label: string }[] = [{ id: 'browse', label: 'Browse' }, { id: 'mine', label: 'My listings' }, { id: 'saved', label: 'Saved' }, ...(isAdmin ? [{ id: 'admin' as Page, label: 'Moderation' }] : [])]
   const hasActiveFilters = Boolean(query.trim() || category || condition || location.trim())
   const clearFilters = () => { setQuery(''); setCategory(''); setCondition(''); setLocation('') }
-  const card = (item: Listing, owned = false) => <button type="button" key={item.id} aria-label={`Open listing: ${item.title}`} onClick={() => openDetail(item)} style={{ ...ui.panel, display: 'block', width: '100%', padding: 0, overflow: 'hidden', minWidth: 0, textAlign: 'left', color: 'inherit', fontFamily: 'inherit', cursor: 'pointer' }}>
+  const card = (item: Listing, owned = false) => <button type="button" key={item.id} aria-label={`Open listing: ${item.title}`} onClick={() => openDetail(item)} style={{ ...ui.panel, display: 'block', width: '100%', minHeight: 44, padding: 0, overflow: 'hidden', minWidth: 0, textAlign: 'left', color: 'inherit', fontFamily: 'inherit', cursor: 'pointer' }}>
     {imageFor(item) ? <img src={imageFor(item)!} alt={item.title} loading="lazy" style={{ width: '100%', height: 148, objectFit: 'cover', display: 'block', background: 'var(--prepza-generation-border, #E1E5ED)' }} /> : <div style={{ height: 148, display: 'grid', placeItems: 'center', background: 'var(--prepza-generation-page, #F8F9FC)', color: 'var(--prepza-generation-muted, #596579)', fontSize: 12 }}>Photo unavailable</div>}
     <div style={{ padding: 12 }}><div style={{ fontSize: 15, fontWeight: 900, marginBottom: 5 }}>{money(item.price_kes)}</div><div style={{ fontSize: 12, fontWeight: 800, lineHeight: 1.4, minHeight: 32 }}>{item.title}</div><div style={{ color: 'var(--prepza-generation-muted, #596579)', fontSize: 10, marginTop: 7 }}>{conditionLabel(item.condition)} · {item.category}</div><div style={{ color: 'var(--prepza-generation-muted, #596579)', fontSize: 10, marginTop: 5 }}>{item.location_area}</div>{owned && <div style={{ display: 'inline-block', marginTop: 9, background: 'var(--prepza-generation-border, #E1E5ED)', borderRadius: 8, padding: '5px 7px', fontSize: 10, fontWeight: 800 }}>{item.status === 'active' && !periodCurrent(item) ? 'Renewal due' : statusLabel(item.status)}</div>}</div>
   </button>
