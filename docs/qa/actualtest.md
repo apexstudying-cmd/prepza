@@ -280,3 +280,7 @@ The full Release Browser/Cross-System Regression [run 42595814104](https://githu
 ### Responsive browser result — code head `91ae94195bd21be3142a9216a44bebcea78bc18e`
 
 In Release Browser run `42595814104`, the mobile/tablet responsive browser step completed successfully after the Shop header locator updates. This confirms the test reached the refreshed Shop route and completed the existing phone-small, phone-standard and tablet-portrait responsive journey without the earlier stale-copy timeout. The run then advanced to B2B browser-to-ledger metering; full PostgreSQL QA and online/offline generated-artifact journeys were still pending. Final release status remains open until the entire run completes.
+
+### Full disposable PostgreSQL QA result — code head `91ae94195bd21be3142a9216a44bebcea78bc18e`
+
+The full disposable PostgreSQL QA suite in Release Browser run `42595814104` completed successfully after the phone/tablet browser and B2B browser-to-ledger steps passed. The final online/offline and generated-artifact browser journeys were still in progress at this update, followed by screenshot upload and service cleanup. Do not call the overall release regression passed until those remaining steps complete.
