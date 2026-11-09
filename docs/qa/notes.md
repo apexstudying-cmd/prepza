@@ -2244,3 +2244,10 @@ Moved ProfileScreen and its PROFILE_CACHE into the profile module. Moved shared 
 ## Document Ready extraction — PR #77
 
 Moved DocReadyScreen into the study feature module and DocumentDetail into types/documents.ts. The existing TopBar is injected from App.tsx; route dispatch remains unchanged. Body comparison against base main passed after export/prop/route-type normalisation. Focused contracts protect document loading, metadata and all existing action destinations. Frontend Build [42036938429] passed on code head 74b8fac: 90 frontend source/module contracts, 5 offline Library tests, TypeScript, production build, architecture audits and launch-wiring verification. Full Release Browser/Cross-System Regression [42036938563] and remaining workflows are queued.
+
+
+## 2026-11-09 — Public-shell route extraction consolidated into PR #77
+
+The previously separate public-shell route change is now carried by the main frontend integration branch so the refactor can be reviewed as one coherent PR. Three existing handlers moved to `public_shell_routes.py`; explicit dependencies avoid an import of partially initialized `app.py`. The original endpoint names, paths, GET/HEAD/OPTIONS behavior, service-worker headers, `/health` limiter exemption, database probe, safe expiry sweep, and success/error JSON responses are covered by focused tests. The workflow now compiles the new module and runs both public-shell and academic-catalog route contract suites on relevant pull requests and main pushes.
+
+This is implementation documentation only until the combined PR head finishes CI. Do not claim route extraction verification, release readiness, or completion based solely on earlier PR #76 checks; rerun evidence on the exact consolidated head.
