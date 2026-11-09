@@ -70,7 +70,7 @@ base_style = "colorScheme: 'var(--prepza-generation-color-scheme, light)', flex:
 text = text.replace(base_style, scroll_style)
 
 replacements = [
-    ('// ─── PODCAST PLAYER', '// ─── SUMMARY', '''// ─── PODCAST PLAYER
+    ('// ─── FLASHCARDS', '// ─── SUMMARY', '''// ─── PODCAST PLAYER
 function PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
   return <div style={{ colorScheme: 'var(--prepza-generation-color-scheme, light)', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><PodcastGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
 }
@@ -91,7 +91,8 @@ function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
 ]
 
 for start_marker, end_marker, replacement in replacements:
-    target = study_text if start_marker == '// ─── FLASHCARDS' else text
+    is_study_flashcards = start_marker == '// ─── FLASHCARDS' and end_marker == '// ─── QUIZ'
+    target = study_text if is_study_flashcards else text
     start = target.find(start_marker)
     if start < 0:
         if start_marker == '// ─── FLASHCARDS' and 'FlashcardsStudyScreen' in target:
@@ -103,7 +104,7 @@ for start_marker, end_marker, replacement in replacements:
     current = target[start:end]
     if 'GenerationScreen' not in current:
         target = target[:start] + replacement + target[end:]
-    if start_marker == '// ─── FLASHCARDS':
+    if is_study_flashcards:
         study_text = target
     else:
         text = target
