@@ -8,6 +8,8 @@ on:
       - 'extensions.py'
       - 'academic_models.py'
       - 'learning_models.py'
+      - 'study_models.py'
+      - 'tests/test_study_models_extraction_contract.py'
       - 'tests/test_academic_models_contract.py'
       - 'tests/test_learning_models_extraction_contract.py'
       - 'tests/test_backend_extensions_contract.py'
@@ -45,4 +47,4 @@ jobs:
       - name: Run shared extension contract tests
         env:
           PYTHONPATH: .
-        run: python -m pytest -q tests/test_backend_extensions_contract.py tests/test_academic_models_contract.py tests/test_learning_models_extraction_contract.py
+        run: python -m pytest -q tests/test_backend_extensions_contract.py tests/test_academic_models_contract.py tests/test_learning_models_extraction_contract.py tests/test_study_models_extraction_contract.py
