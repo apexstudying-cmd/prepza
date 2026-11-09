@@ -671,3 +671,15 @@ def test_document_study_hub_preserves_online_offline_reading_and_material_replay
         "setReadingPage",
     ):
         assert contract in source
+
+
+def test_study_navigation_transform_and_ci_guard_follow_the_extracted_hub_module():
+    script = (ROOT / "scripts" / "apply_study_navigation_polish.py").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "study-navigation-polish.yml").read_text(encoding="utf-8")
+    assert "frontend/src/screens/study/DocumentStudyHubScreen.tsx" in script
+    assert "LoadingView" in script
+    assert "DOC_CACHE" in script
+    assert "frontend/src/screens/study/DocumentStudyHubScreen.tsx" in workflow
+    assert "cp frontend/src/screens/study/DocumentStudyHubScreen.tsx /tmp/DocumentStudyHubScreen.after" in workflow
+    assert "cmp frontend/src/screens/study/DocumentStudyHubScreen.tsx /tmp/DocumentStudyHubScreen.after" in workflow
+    assert "Loading study hub" in workflow
