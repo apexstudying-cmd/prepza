@@ -57,3 +57,16 @@ def test_shop_navigation_and_listing_loading_reserve_accessible_touch_targets():
     assert "page !== 'browse'" in source[source.index("if (loading && !listings.length"):source.index("  return <div style={ui.root}")]
     assert "if (!cached) setLoading(true)" in source
     assert "setLoading(false)" in source[source.index("const loadBrowse = async"):source.index("  const loadMine")]
+
+def test_listing_editor_uses_native_form_validation_and_single_submit_path():
+    source = SHOP_SCREEN.read_text(encoding="utf-8")
+    create_start = source.index("{page === 'create' &&")
+    detail_start = source.index("{page === 'detail' &&", create_start)
+    editor = source[create_start:detail_start]
+
+    assert "<form" in editor
+    assert "onSubmit=" in editor
+    assert "type=\"submit\"" in editor
+    assert "required" in editor
+    assert "Save & publish" in editor
+
