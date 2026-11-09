@@ -11,7 +11,7 @@ GEN = ROOT / 'frontend' / 'src' / 'generation' / 'GenerationScreens.tsx'
 STUDY = ROOT / 'frontend' / 'src' / 'screens' / 'study' / 'GeneratedStudyScreens.tsx'
 IMPORT = "import { PodcastGenerationScreen, FlashcardsGenerationScreen, SummaryGenerationScreen } from './generation/GenerationScreens'\n"
 STUDY_IMPORT = "import { PracticeQuestionsGenerationScreen, MindMapGenerationScreen } from './generation/StudyGenerationScreensClean'\n"
-GENERATED_STUDY_IMPORT = "import { FlashcardsGenerationScreen } from '../../generation/GenerationScreens'\n"
+GENERATED_STUDY_IMPORT = "import { FlashcardsGenerationScreen } from '../../generation/GenerationScreens'\nimport { PracticeQuestionsGenerationScreen } from '../../generation/StudyGenerationScreensClean'\n"
 
 text = APP.read_text(encoding='utf-8')
 original_text = text
@@ -108,7 +108,7 @@ for start_marker, end_marker, replacement in replacements:
     else:
         text = target
 
-text = text.replace(
+study_text = study_text.replace(
     "return <PracticeQuestionsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />",
     "return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><PracticeQuestionsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>"
 )
@@ -137,7 +137,7 @@ def replace_section(source: str, start_marker: str, replacement: str, aliases: t
     return source
 
 study_text = replace_section(study_text, '// ─── QUIZ', '''// ─── QUIZ
-function QuizScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+function QuizScreen({ setScreen, activeDocumentId }: { setScreen: (s: StudyMaterialScreenTarget) => void; activeDocumentId: number | null }) {
   return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><PracticeQuestionsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
 }
 
