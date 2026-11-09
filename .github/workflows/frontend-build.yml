@@ -30,6 +30,7 @@ jobs:
         with:
           python-version: "3.13"
 
+      # Includes admin controller/view ownership and Shop UX source contracts.
       - name: Test frontend source-transform boundaries
         working-directory: .
         run: |
