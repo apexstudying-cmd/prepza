@@ -55,8 +55,9 @@ def test_shop_navigation_and_listing_loading_reserve_accessible_touch_targets():
     assert "height: 44" in header
     assert "Back to Home" in header and "Back to Shop" in header
     assert "page !== 'browse'" in source[source.index("if (loading && !listings.length"):source.index("  return <div style={ui.root}")]
-    assert "if (!cached) setLoading(true)" in source
-    assert "setLoading(false)" in source[source.index("const loadBrowse = async"):source.index("  const loadMine")]
+    load_browse = source[source.index("const loadBrowse = async"):source.index("  const loadMine")]
+    assert "} else {\n      setLoading(true)" in load_browse
+    assert "setLoading(false)" in load_browse
 
 def test_listing_editor_uses_native_form_validation_and_single_submit_path():
     source = SHOP_SCREEN.read_text(encoding="utf-8")
