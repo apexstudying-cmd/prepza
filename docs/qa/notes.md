@@ -2309,3 +2309,7 @@ Release Browser run `42595814104` also completed the full disposable PostgreSQL 
 Release Browser run `42595814104` passed on code head `91ae94195bd21be3142a9216a44bebcea78bc18e`: production image, disposable database/migrations, mobile/tablet, B2B metering, full PostgreSQL QA, online/offline generated-artifact browser journeys, screenshot upload and cleanup. Frontend Build `42595814116` also passed 112 source/transform tests, 5 offline Library tests, audits, TypeScript and production build. StudyHub Library Flow was skipped.
 
 After inspecting the new phone-small screenshot, a follow-up was made for fixed bottom-nav clearance: Shop now has safe-area-aware bottom padding, and the browser journey checks that `Save & publish` can scroll fully above the global nav. This follow-up is on code head `d1a5fd8adb49aff443f7578d861b5cf7c7014d65`; its Frontend Build and Release Browser runs are queued and must pass before the UX item is closed.
+
+### Bottom-nav clearance Frontend Build
+
+Frontend Build `42596828203` passed on code head `d1a5fd8adb49aff443f7578d861b5cf7c7014d65`: 114 source/transform contracts, 5 offline Library tests, audits, TypeScript and production build. The responsive browser run `42596828231` is queued to verify the safe-area-aware scroll padding and the seller submit action above the fixed nav.
