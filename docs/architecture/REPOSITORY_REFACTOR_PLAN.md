@@ -415,3 +415,10 @@ ProfileScreen now lives in screens/profile/ProfileScreen.tsx. Its PROFILE_CACHE 
 ### Document Ready module — 2026-11-05
 
 DocReadyScreen now resides in screens/study/DocReadyScreen.tsx; DocumentDetail is shared from types/documents.ts. Existing TopBar is injected by App.tsx, and the route dispatcher remains centralized. The original screen body was verified byte-for-byte after export/prop/local-route-type normalisation. Frontend Build [42036938429] passed 90 frontend source/module contracts, 5 offline Library tests, TypeScript, production build, architecture audits and launch-wiring verification. Full release regression [42036938563] remains queued.
+
+
+## 2026-11-09 — Public application-shell routes included in consolidated integration
+
+The root document, root-scoped service worker, and health endpoints are now owned by `public_shell_routes.py` on the same integration branch as the current frontend screen extractions. `register_public_shell_routes(app, db, limiter, sweep_expired_opportunities_safe)` receives dependencies explicitly and does not import the partially initialized Flask entry module. Registration occurs after the existing activity hook and before academic catalog registration, preserving initialization order. Focused tests protect route methods and endpoint names, static-file serving, service-worker MIME/cache headers, health SQL probe, limiter exemption, sweep behavior, and error response.
+
+This consolidates the previous standalone PR #76 implementation into PR #77. Verification is pending on the combined head; do not treat the route move as release-verified until its focused route contracts, shared-extension contract, frontend build, and full cross-system release regression pass. No app-factory conversion, ORM model move, middleware change, schema change, or migration is part of this step.
