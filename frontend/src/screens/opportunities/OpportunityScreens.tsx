@@ -4,6 +4,7 @@ import { api, ApiError } from '../../lib/appApi'
 import { N, useTheme } from '../../theme/theme'
 import { Ic } from '../../ui/icons'
 import Pill from '../../ui/Pill'
+import { oppTypeMeta, fmtDeadline } from '../../lib/opportunities'
 import type { OpportunityPublic, SponsoredCampaign } from '../../types/opportunities'
 
 type OpportunityScreenTarget =
