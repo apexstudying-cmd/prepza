@@ -32,7 +32,9 @@ def test_backend_generation_routes_and_payload_keys_match_contract():
 
 
 def test_active_frontend_generation_contract_matches_backend():
-    source = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
+    app_source = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
+    study_source = Path("frontend/src/screens/study/GeneratedStudyScreens.tsx").read_text(encoding="utf-8")
+    source = app_source + "\n" + study_source
 
     expected_paths = {
         "/documents/${activeDocumentId}/summarize": "summary",
@@ -178,7 +180,9 @@ def test_theme_muted_text_meets_wcag_aa_on_light_and_dark_surfaces():
 def test_generation_ui_transform_targets_the_current_legacy_podcast_section():
     script = Path("tools/apply_generation_ui_build.py").read_text(encoding="utf-8")
     app = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
+    study = Path("frontend/src/screens/study/GeneratedStudyScreens.tsx").read_text(encoding="utf-8")
     assert "('// ─── FLASHCARDS', '// ─── SUMMARY'" in script
     assert "start_marker == '// ─── FLASHCARDS' and end_marker == '// ─── QUIZ'" in script
-    assert "// ─── FLASHCARDS" in app
+    assert "// ─── FLASHCARDS" in study
+    assert "function FlashcardsScreen(" in study
     assert "function PodcastPlayerScreen(" in app
