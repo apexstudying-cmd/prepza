@@ -638,3 +638,36 @@ def test_publish_library_screen_preserves_document_eligibility_rights_and_submis
         "EmptyState",
     ):
         assert contract in APP
+
+
+
+def test_document_study_hub_screen_is_owned_by_its_study_module():
+    assert "import DocumentStudyHubScreen from './screens/study/DocumentStudyHubScreen'" in APP
+    assert "function DocumentStudyHubScreen(" not in APP
+    assert "case 'document-study':" in APP
+    assert "LoadingView={GenerationLoading}" in APP
+    assert "ErrorView={GenerationError}" in APP
+
+
+def test_document_study_hub_preserves_online_offline_reading_and_material_replay():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "study" /
+        "DocumentStudyHubScreen.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "listSavedStudyHubOffline",
+        "listOfflineGeneratedMaterials",
+        "getSavedStudyHubOffline",
+        "saveStudyHubDocumentOffline",
+        "`/documents/${activeDocumentId}`",
+        "`/documents/${activeDocumentId}/reading`",
+        "prepza-offline-user-id",
+        "prepza-offline-reading:",
+        "prepza-open-material",
+        "setScreen('study-materials')",
+        "setScreen('document-reader')",
+        "setScreen('ai-tutor')",
+        "setSaveOfflineBusy",
+        "setReadingPage",
+    ):
+        assert contract in source
