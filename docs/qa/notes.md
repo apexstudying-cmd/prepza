@@ -2281,3 +2281,13 @@ The user's report is valid product feedback: passing Shop API/payment integratio
 The first attempt at skeletons would not have appeared during initial Browse because an earlier generic loading return intercepted that branch. The loading guard was narrowed to keep that generic path for other Shop pages while allowing Browse to render its skeleton. The browse fetch now explicitly enters loading only when no exact-query cache snapshot exists, then clears loading on success or current-request failure; the existing stale-cache fallback and request-sequencing guard remain intact.
 
 A new `tests/test_shop_ux_contract.py` was added to the Frontend Build source-contract test list. At this point the final PR head has no returned GitHub Actions runs/statuses, so the new test and build have not been claimed as passing. Next: verify the exact head, capture phone/tablet browser screenshots, and walk buyer, seller, payment recovery, saved listings, reporting and admin moderation. Keep the Shop UX gate open until those checks pass.
+
+## 2026-11-09 — Shop screenshot review and follow-up
+
+The first responsive screenshot artifact (run `42594995289`) was useful even though the browser job failed: the refreshed header and filter panel fit phone/tablet viewports without horizontal overflow, but a single result remained narrow because the listing grid used `auto-fill`. The browse, seller-owned, saved and skeleton grids now use `auto-fit`, which collapses unused tracks and lets a lone listing fill the available width.
+
+The browser job's failure was a stale test expectation for the former header tagline. The refreshed Shop header uses a shorter heading and separate contact disclaimer; the browser test now waits for both, then uses the new accessible back-button names. It did not reach the later stale-cache/form checks, so this is a corrected test selector, not a passing end-to-end journey.
+
+The listing editor now uses a real `form` and one submit path, making existing `required` fields effective in browser validation. The `ShopButton` component defaults to `type="button"`; the save action explicitly submits the form. The UX contract also protects the 44px target guidance, semantic nav/current page, filter recovery, one-result grid sizing and native form semantics.
+
+The refreshed source and browser journey were tested in release run `42595814104` on code head `91ae94195bd21be3142a9216a44bebcea78bc18e`; the run was still in progress at the time of writing. Refresh all evidence against the final PR head before marking Shop complete.
