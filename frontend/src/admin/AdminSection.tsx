@@ -8,6 +8,7 @@ import { useAdminSectionController } from './useAdminSectionController'
 import { AdminDashboardSection, AdminUsersSection, AdminContentSection, AdminAiUsageSection, AdminPaymentsSection, AdminModerationSection, AdminAnalyticsSection } from './AdminSectionCoreViews'
 import { AdminSystemSection, AdminCommunicationsSection } from './AdminSectionPlatformViews'
 
+// Screen dispatch only; the controller retains state, effects, and API ownership.
 export default function AdminSection({ section, setSection }: { section: string; setSection: (section: string) => void }) {
   const controller = useAdminSectionController(section, setSection)
   const { mode, T, settingsDraft, setSettingsDraft, settingsLoading, settingsError, settingsSaving, settingsSaveError, settingsSaved, setPrepzaControlEnabled, savePlatformSettings } = controller
