@@ -139,7 +139,7 @@ def test_billable_event_id_requires_a_valid_stable_uuid():
 def test_sponsored_impression_requires_1500ms_continuous_visibility_and_tab_reset():
     source = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
     start = source.index("function SponsoredOpportunityCard")
-    end = source.index("const OPP_FILTERS", start)
+    end = source.index("function SkOppCard", start)
     component = source[start:end]
     assert "entry.intersectionRatio >= 0.5" in component
     assert "}, 1500)" in component
@@ -150,7 +150,7 @@ def test_sponsored_impression_requires_1500ms_continuous_visibility_and_tab_rese
 def test_sponsored_click_uses_stable_uuid_without_forcing_an_impression():
     source = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
     start = source.index("function SponsoredOpportunityCard")
-    end = source.index("const OPP_FILTERS", start)
+    end = source.index("function SkOppCard", start)
     component = source[start:end]
     assert "clickEventId" in component
     assert "body: JSON.stringify({ event_id: stableClickId })" in component

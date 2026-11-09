@@ -744,3 +744,16 @@ def test_unused_legacy_organisation_portal_is_removed_without_changing_active_po
     assert "if (orgPortalMode) return <PremiumOrganisationPortal onExit={() => setOrgPortalMode(false)} />" in APP
     assert "function readStoredNavigationState()" in APP
     assert "sessionStorage.getItem('prepza-navigation-state')" in APP
+
+
+def test_opportunity_metadata_helpers_are_shared_by_the_app_and_extracted_screens():
+    assert "import { oppTypeMeta, fmtDeadline } from './lib/opportunities'" in APP
+    screen = (
+        ROOT / "frontend" / "src" / "screens" / "opportunities" /
+        "OpportunityScreens.tsx"
+    ).read_text(encoding="utf-8")
+    assert "import { oppTypeMeta, fmtDeadline } from '../../lib/opportunities'" in screen
+    library = (ROOT / "frontend" / "src" / "lib" / "opportunities.ts").read_text(encoding="utf-8")
+    assert "export const OPP_TYPE_META" in library
+    assert "export function oppTypeMeta" in library
+    assert "export function fmtDeadline" in library
