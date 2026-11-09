@@ -26,20 +26,23 @@ jobs:
       - name: Verify deterministic patch
         run: |
           cp frontend/src/App.tsx /tmp/App.after
+          cp frontend/src/screens/study/DocumentStudyHubScreen.tsx /tmp/DocumentStudyHubScreen.after
           python3 scripts/apply_study_navigation_polish.py
           cmp frontend/src/App.tsx /tmp/App.after
+          cmp frontend/src/screens/study/DocumentStudyHubScreen.tsx /tmp/DocumentStudyHubScreen.after
 
       - name: Verify required navigation anchors
         run: |
           grep -F "function MindMapScreen" frontend/src/App.tsx
-          grep -F "const [document, setDocument] = useState<DocumentDetail | null>(() => activeDocumentId != null ? DOC_CACHE[activeDocumentId] ?? null : null)" frontend/src/App.tsx
+          grep -F "const [document, setDocument] = useState<DocumentDetail | null>(() => activeDocumentId != null ? DOC_CACHE[activeDocumentId] ?? null : null)" frontend/src/screens/study/DocumentStudyHubScreen.tsx
           grep -F "const [doc, setDoc] = useState<DocumentDetail | null>(() => activeDocumentId != null ? DOC_CACHE[activeDocumentId] ?? null : null)" frontend/src/App.tsx
           grep -F "window.history.back()" frontend/src/App.tsx
           grep -F "resumeOffline={() => {" frontend/src/App.tsx
           grep -F "resumeOffline()" frontend/src/screens/onboarding/SplashScreen.tsx
           grep -F "prepza: study-navigation-polish-v2" frontend/src/App.tsx
-          if grep -F 'Opening your document' frontend/src/App.tsx; then
-            echo 'Unexpected legacy document opening loader remains'
+          grep -F 'Loading study hub' frontend/src/screens/study/DocumentStudyHubScreen.tsx
+          if grep -F 'Opening your document' frontend/src/screens/study/DocumentStudyHubScreen.tsx; then
+            echo 'Unexpected legacy document opening loader remains in the extracted study hub'
             exit 1
           fi
 

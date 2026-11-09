@@ -10383,7 +10383,7 @@ export default function App() {
       case 'upload-share-choice': return <UploadShareChoiceScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'processing':        return <ProcessingScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'doc-ready':         return <DocReadyScreen setScreen={setScreen} activeDocumentId={activeDocumentId} TopBar={TopBar} />
-      case 'document-study': return <DocumentStudyHubScreen setScreen={setScreen} activeDocumentId={activeDocumentId} LoadingView={GenerationLoading} ErrorView={GenerationError} />
+      case 'document-study': return <DocumentStudyHubScreen setScreen={setScreen} activeDocumentId={activeDocumentId} LoadingView={GenerationLoading} ErrorView={GenerationError} DOC_CACHE={DOC_CACHE} />
       case 'document-reader': return <DocumentReaderScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />
       case 'ai-tutor':          return <AITutorScreen setScreen={setScreen} activeDocumentId={activeDocumentId} setActiveDocumentId={setActiveDocumentId} GenerationError={GenerationError} DelayedScreenSkeleton={DelayedScreenSkeleton} SkeletonAITutor={SkeletonAITutor} />
       case 'flashcards':        return <FlashcardsScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />

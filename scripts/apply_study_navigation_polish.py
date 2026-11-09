@@ -41,6 +41,11 @@ def remove_document_opening_interstitials(text: str) -> str:
             '  if (loading && !document) return <GenerationLoading label="Loading study hub…" />\n  if (error || !document) return <GenerationError error={error || \'Document unavailable.\'} />',
             1,
         )
+        block = block.replace(
+            '  if (loading) return <LoadingView label="Opening your document…" />\n  if (error || !document) return <ErrorView error={error || \'Document unavailable.\'} />',
+            '  if (loading && !document) return <LoadingView label="Loading study hub…" />\n  if (error || !document) return <ErrorView error={error || \'Document unavailable.\'} />',
+            1,
+        )
         return block
 
     def update_reader(block: str) -> str:
@@ -58,7 +63,15 @@ def remove_document_opening_interstitials(text: str) -> str:
         block = block.replace('Opening your document', 'Loading…')
         return block
 
+    # Keep supporting the legacy inline location while the screen is moved
+    # into its feature module. The cache is passed from App so the reader and
+    # study hub continue sharing the same document object.
     text = _transform_function(text, "DocumentStudyHubScreen", update_hub)
+    hub_module = Path('frontend/src/screens/study/DocumentStudyHubScreen.tsx')
+    if hub_module.exists():
+        module_text = hub_module.read_text(encoding='utf-8')
+        module_text = _transform_function(module_text, "DocumentStudyHubScreen", update_hub)
+        hub_module.write_text(module_text, encoding='utf-8')
     text = _transform_function(text, "DocumentReaderScreen", update_reader)
     return text
 

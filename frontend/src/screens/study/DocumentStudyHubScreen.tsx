@@ -26,11 +26,13 @@ export default function DocumentStudyHubScreen({
   activeDocumentId,
   LoadingView,
   ErrorView,
+  DOC_CACHE,
 }: {
   setScreen: (s: DocumentStudyHubScreenTarget) => void
   activeDocumentId: number | null
   LoadingView: ComponentType<{ label: string }>
   ErrorView: ComponentType<{ error: string }>
+  DOC_CACHE: Record<number, DocumentDetail>
 }) {
   const { tokens: T } = useTheme()
   const [document, setDocument] = useState<DocumentDetail | null>(null)
