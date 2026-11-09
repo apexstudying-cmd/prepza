@@ -16,7 +16,7 @@ def _transform_function(text: str, function_name: str, transform) -> str:
     start = text.find(marker)
     if start < 0:
         return text
-    end = text.find("\\nfunction ", start + len(marker))
+    end = text.find("\nfunction ", start + len(marker))
     if end < 0:
         end = len(text)
     block = text[start:end]
@@ -37,13 +37,13 @@ def remove_document_opening_interstitials(text: str) -> str:
         if hub_state in block and hub_cached_state not in block:
             block = block.replace(hub_state, hub_cached_state, 1)
         block = block.replace(
-            "        setDocument(data)\\n        setReadingPage(Math.max(0, progress.page_num || 0))",
-            "        setDocument(data)\\n        DOC_CACHE[activeDocumentId] = data\\n        setReadingPage(Math.max(0, progress.page_num || 0))",
+            "        setDocument(data)\n        setReadingPage(Math.max(0, progress.page_num || 0))",
+            "        setDocument(data)\n        DOC_CACHE[activeDocumentId] = data\n        setReadingPage(Math.max(0, progress.page_num || 0))",
             1,
         )
         block = block.replace(
-            '  if (loading) return <GenerationLoading label="Opening your document…"/>\\n  if (error || !document) return <GenerationError error={error || \'Document unavailable.\'} />',
-            '  if (loading && !document) return <GenerationLoading label="Loading study hub…"/>\\n  if (error || !document) return <GenerationError error={error || \'Document unavailable.\'} />',
+            '  if (loading) return <GenerationLoading label="Opening your document…"/>\n  if (error || !document) return <GenerationError error={error || \'Document unavailable.\'} />',
+            '  if (loading && !document) return <GenerationLoading label="Loading study hub…"/>\n  if (error || !document) return <GenerationError error={error || \'Document unavailable.\'} />',
             1,
         )
         return block
@@ -54,8 +54,8 @@ def remove_document_opening_interstitials(text: str) -> str:
         if reader_state in block and reader_cached_state not in block:
             block = block.replace(reader_state, reader_cached_state, 1)
         block = block.replace(
-            '  if (loading) return <GenerationLoading label="Opening your document…"/>\\n  if (error) return <GenerationError error={error} />',
-            '  if (loading && !doc) return <GenerationLoading label="Loading reader…"/>\\n  if (error) return <GenerationError error={error} />',
+            '  if (loading) return <GenerationLoading label="Opening your document…"/>\n  if (error) return <GenerationError error={error} />',
+            '  if (loading && !doc) return <GenerationLoading label="Loading reader…"/>\n  if (error) return <GenerationError error={error} />',
             1,
         )
         block = block.replace('Opening your document…', 'Loading…')
@@ -71,22 +71,22 @@ def remove_document_opening_interstitials(text: str) -> str:
 def harden_document_navigation(text: str) -> str:
     """Keep the native reader cache-first and avoid redundant history entries."""
     def update_reader(block: str) -> str:
-        old_state = "  const [doc, setDoc] = useState<DocumentDetail | null>(null)\\n"
-        new_state = "  const [doc, setDoc] = useState<DocumentDetail | null>(() => activeDocumentId != null ? DOC_CACHE[activeDocumentId] ?? null : null)\\n"
+        old_state = "  const [doc, setDoc] = useState<DocumentDetail | null>(null)\n"
+        new_state = "  const [doc, setDoc] = useState<DocumentDetail | null>(() => activeDocumentId != null ? DOC_CACHE[activeDocumentId] ?? null : null)\n"
         if old_state in block and new_state not in block:
             block = block.replace(old_state, new_state, 1)
         return block
 
     def remove_study_hub_interstitial(block: str) -> str:
         block, _ = re.subn(
-            r"\\n\\s*// Only pending while there's an active document[\\s\\S]*?\\n\\s*const docLoading = activeDocumentId != null && doc === null && !docLoadError\\n\\s*if \\(docLoading\\) return <SkeletonDocument \\/>\\n",
-            "\\n",
+            r"\n\s*// Only pending while there's an active document[\s\S]*?\n\s*const docLoading = activeDocumentId != null && doc === null && !docLoadError\n\s*if \(docLoading\) return <SkeletonDocument \/>\n",
+            "\n",
             block,
             count=1,
         )
         block = re.sub(
-            r"\\n\\s*const docLoading = activeDocumentId != null && doc === null && !docLoadError\\n\\s*if \\(docLoading\\) return <SkeletonDocument \\/>\\n",
-            "\\n",
+            r"\n\s*const docLoading = activeDocumentId != null && doc === null && !docLoadError\n\s*if \(docLoading\) return <SkeletonDocument \/>\n",
+            "\n",
             block,
             count=1,
         )
