@@ -298,3 +298,7 @@ Frontend Build [run 42596828203](https://github.com/apexstudying-cmd/prepza/acti
 ### Bottom-nav browser assertion harness correction
 
 Release Browser run `42596828231` reached the updated responsive Shop flow and captured the listing form after scrolling. Its screenshots show the `Save & publish` and Cancel actions fully above the fixed global nav on phone-small. The job then failed in the new assertion because Playwright's `bounding_box()` returns `x/y/width/height`, not `top/bottom`; this was a test-harness KeyError on all three viewports, not an overlap assertion failure. The browser check now compares `y + height` with the nav's `y`. Follow-up run on code head `76fcff95c025536ab5e7f6270184d411d92271bd` is pending; do not count the bottom-nav check as passed until that run completes.
+
+### Playwright bounds correction Frontend Build
+
+Frontend Build [run 42597710544](https://github.com/apexstudying-cmd/prepza/actions/runs/42597710544) passed on code head `76fcff95c025536ab5e7f6270184d411d92271bd`: 114 frontend/source-contract tests, 5 offline Library tests, audits, TypeScript, service-worker validation and production build. This validates the code and corrected test syntax; the responsive browser check is still pending in Release Browser run `42597710733`.
