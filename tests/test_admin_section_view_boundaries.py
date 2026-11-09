@@ -28,13 +28,22 @@ def test_admin_view_modules_own_the_existing_section_renderers():
     core = CORE_VIEWS.read_text(encoding="utf-8")
     platform = PLATFORM_VIEWS.read_text(encoding="utf-8")
 
-    for key in ("dashboard", "users", "content", "ai-usage", "payments", "moderation", "analytics"):
-        assert f"Admin{key.title().replace('-', '')}Section" in core or key in core
-        assert f"if (section === '{key}')" not in section
+    core_components = {
+        "dashboard": "AdminDashboardSection",
+        "users": "AdminUsersSection",
+        "content": "AdminContentSection",
+        "ai-usage": "AdminAiUsageSection",
+        "payments": "AdminPaymentsSection",
+        "moderation": "AdminModerationSection",
+        "analytics": "AdminAnalyticsSection",
+    }
+    for key, component in core_components.items():
+        assert component in core
+        assert f"if (section === '{key}') return <{component} controller={controller} />" in section
 
-    for key in ("system", "communications"):
-        assert key in platform
-        assert f"if (section === '{key}')" not in section
+    for key, component in (("system", "AdminSystemSection"), ("communications", "AdminCommunicationsSection")):
+        assert component in platform
+        assert f"if (section === '{key}') return <{component} controller={controller} />" in section
 
     assert "AdminDashboardSection" in section
     assert "AdminSystemSection" in section
