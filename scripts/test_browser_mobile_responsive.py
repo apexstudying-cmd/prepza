@@ -253,7 +253,7 @@ def main() -> int:
                         primary_nav_bounds = page.get_by_role(
                             "navigation", name="Primary navigation"
                         ).bounding_box()
-                        if save_bounds and primary_nav_bounds and save_bounds["bottom"] > primary_nav_bounds["top"] + 1:
+                        if save_bounds and primary_nav_bounds and save_bounds["y"] + save_bounds["height"] > primary_nav_bounds["y"] + 1:
                             failures.append(
                                 f"{name}: Shop submit action overlaps fixed bottom navigation: "
                                 f"save={save_bounds}, nav={primary_nav_bounds}"
