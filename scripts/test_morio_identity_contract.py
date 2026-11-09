@@ -91,6 +91,8 @@ def test_home_quick_actions_are_the_approved_five_in_order():
 
 def test_splash_screen_uses_the_canonical_192px_icon():
     app = source("frontend/src/App.tsx")
+    admin_platform_path = ROOT / "frontend" / "src" / "admin" / "AdminPlatform.tsx"
+    admin_platform = admin_platform_path.read_text(encoding="utf-8") if admin_platform_path.exists() else ""
     splash = source("frontend/src/screens/onboarding/SplashScreen.tsx")
     assert "from './screens/onboarding/SplashScreen'" in app
     assert "function SplashScreen" not in app
@@ -104,6 +106,7 @@ def test_splash_screen_uses_the_canonical_192px_icon():
     auth_screens = source("frontend/src/screens/auth/AuthScreens.tsx")
     assert (
         app.count('src="/icon-192.png"')
+        + admin_platform.count('src="/icon-192.png"')
         + splash.count('src="/icon-192.png"')
         + profile_screen.count('src="/icon-192.png"')
         + login_screen.count('src="/icon-192.png"')
