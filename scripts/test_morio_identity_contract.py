@@ -42,9 +42,10 @@ def test_group_mention_and_visible_copy_use_morio():
 
 def test_home_study_screens_and_composer_use_morio():
     app = source("frontend/src/App.tsx")
+    study_hub = source("frontend/src/screens/study/DocumentStudyHubScreen.tsx")
     chat = source("frontend/src/crypto/WhatsAppChatExperience.tsx")
-    assert "Study with Morio" in app
-    assert "Use Morio while this document is your study context." in app
+    assert "Study with Morio" in study_hub
+    assert "Use Morio while this document is your study context." in study_hub
     assert ">Morio</div>" in app
     assert "}>@Morio</button>" in chat
     assert "}>@Ada</button>" not in chat
