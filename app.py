@@ -2903,43 +2903,8 @@ def track_last_active():
     return None
 
 
-@app.route("/")
-def home():
-    return send_from_directory(app.static_folder, "index.html")
-
-
-@app.route("/sw.js")
-def service_worker():
-    """
-    Served at the root URL (not /static/sw.js) so its scope covers the
-    whole site, not just the static folder. Deliberately not cached
-    long-term, unlike images/CSS/JS, so browsers pick up updates to this
-    file quickly.
-    """
-    response = send_from_directory(app.static_folder, "sw.js")
-    response.headers["Content-Type"] = "application/javascript"
-    response.headers["Cache-Control"] = "no-cache"
-    return response
-
-
-@app.route("/health")
-@limiter.exempt
-def health():
-    """
-    Lightweight status check. Pinged automatically every ~10 minutes by a
-    GitHub Actions workflow to prevent Render's free tier from spinning down
-    and Supabase's free tier from auto-pausing due to inactivity.
-
-    Deliberately excluded from rate limiting (it's an automated, low-value
-    target for abuse) and returns no sensitive data.
-    """
-    from sqlalchemy import text
-    try:
-        db.session.execute(text("SELECT 1"))
-        _sweep_expired_opportunities_safe()
-        return jsonify({"status": "ok"}), 200
-    except Exception:
-        return jsonify({"status": "error"}), 503
+from public_shell_routes import register_public_shell_routes
+register_public_shell_routes(app, db, limiter, lambda: _sweep_expired_opportunities_safe())
 
 
 # ---------- Auth routes ----------
