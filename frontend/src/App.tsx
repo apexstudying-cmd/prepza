@@ -2523,7 +2523,7 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
   </div>
 }
 // ─── AI TUTOR ─────────────────────────────────────────────────────────────────
-// ─── FLASHCARDS ───────────────────────────────────────────────────────────────
+// ─── PODCAST PLAYER ──────────────────────────────────────────────────────────
 function PodcastPlayerScreen({ setScreen, activeDocumentId, setActiveOpportunityId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null; setActiveOpportunityId: (id: number | null) => void }) {
   const { tokens: T } = useTheme()
   const audioRef = useRef<HTMLAudioElement>(null)
