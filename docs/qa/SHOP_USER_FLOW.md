@@ -56,6 +56,7 @@
 ## 6. Automated evidence and remaining limits
 
 Focused tests:
+- `python -m pytest tests/test_shop_ux_contract.py -q` (semantic listing cards, 44px controls, active/clear filters, filtered-empty recovery and loading skeleton reachability)
 - `python -m pytest tests/test_shop_marketplace.py -q`
 - `python -m pytest tests/test_shop_browse_cache_contract.py -q`
 - `python -m pytest tests/test_shop_image_cache_contract.py -q`
@@ -65,3 +66,9 @@ The disposable PostgreSQL Shop journey in `tests/test_local_qa_real_world.py` co
 **Latest CI evidence (28 October 2026):** Shop Marketplace Contract passed on `3e77f70`, including the regression that ensures superseded browse responses cannot overwrite cache snapshots ([run 40704322072](https://github.com/apexstudying-cmd/prepza/actions/runs/40704322072)). The full Release Browser and Cross-System Regression also passed on `3e77f70` ([run 40704322080](https://github.com/apexstudying-cmd/prepza/actions/runs/40704322080)), including responsive phone/tablet coverage and Shop integration journeys. Frontend Build, E2EE Security Regression, Realtime Runtime Regression, Screen Loading Audit and focused student/admin/B2B/AI/Kokoro checks passed on adjacent code/docs commits; see [build run](https://github.com/apexstudying-cmd/prepza/actions/runs/40704313178) and [security run](https://github.com/apexstudying-cmd/prepza/actions/runs/40704313130).
 
 Mocked-provider tests are not live-provider evidence. Paystack sandbox checkout/webhook behavior and real R2 object operations/cache headers remain external-provider checks until verified with safe staging credentials. The Shop expiry/renewal/replayed-callback journey passed in the full browser regression. The populated-database migration and backup/restore rehearsal passed in [run 40712703724](https://github.com/apexstudying-cmd/prepza/actions/runs/40712703724) through Shop head `20261029_shop_period_payment`, preserving existing document data and verifying Shop tables/payment columns. A subsequent shared-streak migration advances Alembic head to `20261030_shared_study_streak`; the migration rehearsal must be rerun for that new head. This does not change the Shop-specific migration result. Do not use live payments, provision paid infrastructure, or start billable GPU inference without explicit approval. Keep the Shop release gate IN_PROGRESS and the overall release BLOCKED until the required current-SHA evidence and provider disposition are recorded.
+
+## 7. 9 November 2026 — browse accessibility and recovery fixes (CI pending)
+
+The first remediation pass changes only the browse presentation and interactions: listing cards are keyboard-operable semantic buttons; the navigation and back controls have 44px minimum targets; active filters expose a clear action; filtered-empty results offer a clear recovery path; and first-load browse uses stable card skeletons. The header now uses the Prepza navy/gold shell pattern. These changes preserve existing listing detail requests, seller contact actions, payment flow, API contracts and the seller fee rules.
+
+The new `tests/test_shop_ux_contract.py` is included in the Frontend Build source-transform contract command. Do not treat the source contract as visual evidence. Capture actual phone/tablet screenshots and complete the buyer/seller/admin flows before changing this document's status to release-certified. Live Paystack/R2 checks remain separate.
