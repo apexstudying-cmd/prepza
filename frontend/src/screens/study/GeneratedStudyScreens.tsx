@@ -22,6 +22,7 @@ type StudyMaterialScreensProps = {
   getLatestGeneratedMaterialForPath: (path: string) => Promise<any | null>
 }
 
+// ─── FLASHCARDS ───────────────────────────────────────────────────────────────
 function FlashcardsScreen({ setScreen, activeDocumentId, GenerationLoading, GenerationError, AchievementToast, generationRequest, replaySelectedGeneratedMaterialOffline, getLatestGeneratedMaterialForPath }: StudyMaterialScreensProps) {
   const { tokens: T } = useTheme()
   const [idx, setIdx] = useState(0)
