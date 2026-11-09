@@ -173,3 +173,12 @@ def test_theme_muted_text_meets_wcag_aa_on_light_and_dark_surfaces():
     assert contrast_ratio(light_match.group(1), "#FFFFFF") >= 4.5
     assert contrast_ratio(dark_match.group(1), "#0A0E1A") >= 4.5
 
+
+
+def test_generation_ui_transform_targets_the_current_legacy_podcast_section():
+    script = Path("tools/apply_generation_ui_build.py").read_text(encoding="utf-8")
+    app = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
+    assert "('// ─── FLASHCARDS', '// ─── SUMMARY'" in script
+    assert "start_marker == '// ─── FLASHCARDS' and end_marker == '// ─── QUIZ'" in script
+    assert "// ─── FLASHCARDS" in app
+    assert "function PodcastPlayerScreen(" in app
