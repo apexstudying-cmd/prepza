@@ -4,19 +4,23 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ADMIN_DIR = ROOT / "frontend" / "src" / "admin"
 ADMIN_SECTION = ADMIN_DIR / "AdminSection.tsx"
+CONTROLLER = ADMIN_DIR / "useAdminSectionController.ts"
 VIEW_TYPES = ADMIN_DIR / "AdminSectionViewProps.ts"
 CORE_VIEWS = ADMIN_DIR / "AdminSectionCoreViews.tsx"
 PLATFORM_VIEWS = ADMIN_DIR / "AdminSectionPlatformViews.tsx"
 
 
 def test_admin_state_and_api_ownership_stays_in_the_section_controller():
-    source = ADMIN_SECTION.read_text(encoding="utf-8")
+    section = ADMIN_SECTION.read_text(encoding="utf-8")
+    controller = CONTROLLER.read_text(encoding="utf-8")
 
-    assert "useEffect(" in source
-    assert "api<" in source
-    assert "X-CSRF-Token" in source
-    assert "setPrepzaControlEnabled" in source
-    assert "Disable Control Access" in source
+    assert "useAdminSectionController(section, setSection)" in section
+    assert "useEffect(" in controller
+    assert "api<" in controller
+    assert "X-CSRF-Token" in controller
+    assert "setPrepzaControlEnabled" in controller
+    assert "Disable Control Access" in section
+    assert "from '../lib/appApi'" not in section
 
 
 def test_admin_view_modules_own_the_existing_section_renderers():
@@ -42,19 +46,21 @@ def test_admin_views_receive_typed_props_and_do_not_own_api_calls():
     core = CORE_VIEWS.read_text(encoding="utf-8")
     platform = PLATFORM_VIEWS.read_text(encoding="utf-8")
 
-    assert "export type AdminSectionViewProps" in types
-    assert "Pick<AdminSectionViewProps" in core
-    assert "Pick<AdminSectionViewProps" in platform
+    assert "export type AdminSectionController" in types
+    assert "Pick<AdminSectionController" in core
+    assert "Pick<AdminSectionController" in platform
     assert "from '../lib/appApi'" not in core
     assert "from '../lib/appApi'" not in platform
 
 
 def test_admin_refactor_files_are_bounded_and_settings_remain_in_the_state_owner():
     section_lines = len(ADMIN_SECTION.read_text(encoding="utf-8").splitlines())
+    controller_lines = len(CONTROLLER.read_text(encoding="utf-8").splitlines())
     core_lines = len(CORE_VIEWS.read_text(encoding="utf-8").splitlines())
     platform_lines = len(PLATFORM_VIEWS.read_text(encoding="utf-8").splitlines())
 
-    assert section_lines < 1000
+    assert section_lines < 500
+    assert controller_lines < 1000
     assert core_lines < 1000
     assert platform_lines < 1000
     assert "if (section === 'settings')" in ADMIN_SECTION.read_text(encoding="utf-8")
