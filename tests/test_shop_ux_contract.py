@@ -48,6 +48,8 @@ def test_shop_navigation_and_listing_loading_reserve_accessible_touch_targets():
     button_style_start = source.index("  button: {")
     button_style_end = source.index("\n  primary:", button_style_start)
     assert "minHeight: 44" in source[button_style_start:button_style_end]
+    assert '<nav aria-label="Shop sections"' in source
+    assert "aria-current={page === item.id ? 'page' : undefined}" in source
     header_start = source.index("<header style={{ ...ui.header")
     header_end = source.index("</header>", header_start)
     header = source[header_start:header_end]
