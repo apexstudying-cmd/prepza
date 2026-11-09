@@ -1,3 +1,4 @@
+// Stateless admin view renderers. Data, effects, and API mutations stay in the controller.
 import { N } from '../theme/theme'
 import { AdminBadge, AdminBarChart, AdminLineChart, AdminKPI, AdminTable, AdminCard } from './AdminShared'
 import type { AdminPayment } from './AdminShared'
