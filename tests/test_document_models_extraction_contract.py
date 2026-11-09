@@ -64,3 +64,13 @@ def test_app_reexports_document_models_for_legacy_imports():
         "GeneratedMaterial", "AiJob", "TutorConversation", "TutorMessage",
     ):
         assert f"class {name}(db.Model):" not in source
+
+    for helper in (
+        "get_generated_material_for_user",
+        "_resolve_material_generation",
+        "_recover_stale_ai_jobs",
+        "_start_async_material_generation",
+        "get_ai_job_status",
+    ):
+        assert f"def {helper}(" in source
+        assert f"def {helper}(" not in (ROOT / "document_models.py").read_text(encoding="utf-8")
