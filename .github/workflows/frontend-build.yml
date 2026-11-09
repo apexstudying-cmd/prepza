@@ -7,6 +7,8 @@ on:
   pull_request:
     paths:
       - 'frontend/**'
+      - 'tests/test_shop_ux_contract.py'
+      - 'tests/test_admin_section_view_boundaries.py'
       - 'tools/apply_generation_ui_build.py'
       - '.github/workflows/frontend-build.yml'
 
