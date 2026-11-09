@@ -2325,3 +2325,7 @@ Frontend Build `42597710544` passed on code head `76fcff95c025536ab5e7f6270184d4
 ### Bottom-nav clearance responsive pass
 
 Release Browser `42597710733` passed phone-small, phone-standard and tablet-portrait. The corrected bounding-box assertion passed for the Shop form's Save & publish action above the fixed global nav on all three viewport profiles. Image build, disposable database startup and migration checks passed; B2B, full PostgreSQL QA and generated-artifact browser journeys remained in progress.
+
+### AdminSection controller/view split
+
+AdminSection is now a 172-line dispatcher; state/effects/API/CSRF remain in the 934-line controller hook; core and platform views are 783 and 368 lines. The view components use typed controller Picks and do not call APIs. Source-contract tests passed (118 frontend/source tests plus 5 offline Library tests) on run `42599305452`; TypeScript on that run failed only on two missing `AdminPayment` type references, which were fixed by adding the type-only import. Prepza Control API `42599433232` and Backend Shared Extension Contract `42599433202` passed. The latest code head still needs a fresh Frontend Build/TypeScript pass; do not mark this split fully verified yet.
