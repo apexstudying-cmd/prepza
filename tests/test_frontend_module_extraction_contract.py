@@ -689,4 +689,4 @@ def test_document_study_progress_transform_targets_the_extracted_hub_module():
     script = (ROOT / "scripts" / "apply_document_study_progress.py").read_text(encoding="utf-8")
     assert "frontend/src/screens/study/DocumentStudyHubScreen.tsx" in script
     assert "patch_study_hub(hub_source)" in script
-    assert "HUB_MODULE.write_text(hub_source)" in script
+    assert "HUB_MODULE.write_text(hub_source, encoding='utf-8')" in script
