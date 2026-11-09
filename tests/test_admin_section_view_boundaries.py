@@ -39,11 +39,11 @@ def test_admin_view_modules_own_the_existing_section_renderers():
     }
     for key, component in core_components.items():
         assert component in core
-        assert f"if (section === '{key}') return <{component} controller={controller} />" in section
+        assert f"if (section === '{key}') return <{component} controller={{controller}} />" in section
 
     for key, component in (("system", "AdminSystemSection"), ("communications", "AdminCommunicationsSection")):
         assert component in platform
-        assert f"if (section === '{key}') return <{component} controller={controller} />" in section
+        assert f"if (section === '{key}') return <{component} controller={{controller}} />" in section
 
     assert "AdminDashboardSection" in section
     assert "AdminSystemSection" in section
