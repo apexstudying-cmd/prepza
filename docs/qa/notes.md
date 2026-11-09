@@ -2295,3 +2295,7 @@ The refreshed source and browser journey were tested in release run `42595814104
 ### Frontend verification update — code head `91ae94195bd21be3142a9216a44bebcea78bc18e`
 
 Frontend Build [42595814116](https://github.com/apexstudying-cmd/prepza/actions/runs/42595814116) passed: 112 frontend/source-contract tests, 5 offline Library tests, functional wiring and ORM/schema drift audits, TypeScript, service-worker validation and production build. The Shop UX source contract is included. Full Release Browser/Cross-System Regression [42595814104](https://github.com/apexstudying-cmd/prepza/actions/runs/42595814104) had passed disposable service startup and both migration stages but was still running the remaining app/browser/database stages at this update. Do not treat Frontend Build as a substitute for the release regression.
+
+### Responsive browser result
+
+Release Browser run `42595814104` passed the mobile/tablet responsive browser step on code head `91ae94195bd21be3142a9216a44bebcea78bc18e`. The updated Shop copy and accessible back-button selectors worked through phone-small, phone-standard and tablet-portrait. The run advanced to B2B browser-to-ledger testing; the full PostgreSQL and online/offline browser journeys were still outstanding. Keep the release gate open until the whole run passes.
