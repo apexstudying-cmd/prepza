@@ -45,7 +45,9 @@ def test_shop_navigation_and_listing_loading_reserve_accessible_touch_targets():
     assert "minHeight: 44" in source[nav_start:nav_end]
     assert 'aria-busy={loading}' in source
     assert "aria-label=\"Loading listings\"" in source
-    assert "minHeight: 44" in source[source.index("function ShopButton"):source.index("function Field")]
+    button_style_start = source.index("  button: {")
+    button_style_end = source.index("\n  primary:", button_style_start)
+    assert "minHeight: 44" in source[button_style_start:button_style_end]
     header_start = source.index("<header style={{ ...ui.header")
     header_end = source.index("</header>", header_start)
     header = source[header_start:header_end]
