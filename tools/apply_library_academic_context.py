@@ -1,22 +1,27 @@
 from pathlib import Path
 
-APP = Path(__file__).resolve().parents[1] / "app.py"
-text = APP.read_text()
+ROOT = Path(__file__).resolve().parents[1]
+APP = ROOT / "app.py"
+LIBRARY_MODELS = ROOT / "library_models.py"
+text = APP.read_text(encoding="utf-8")
+library_model_text = LIBRARY_MODELS.read_text(encoding="utf-8")
 
-# Current main may already contain the canonical academic-context schema.
-# The transformation is intentionally idempotent so the production build
-# cannot regress by expecting the retired Unit column after Day 5 reconciliation.
-library_model_start = text.find("class LibraryPublication")
-library_model_end = text.find("class SavedLibraryMaterial", library_model_start)
-library_model = text[library_model_start:library_model_end] if library_model_start >= 0 and library_model_end > library_model_start else ""
-if all(token in library_model for token in (
+# The ORM model now belongs to library_models.py; route handlers remain in
+# app.py. Apply the schema transformation only when the legacy Unit field is
+# still present, but always continue with route transformations below.
+if all(token in library_model_text for token in (
     "university_id = db.Column",
     "program_id = db.Column",
     "year = db.Column",
     "semester = db.Column",
 )):
     print("Skipped Library academic-context schema patch: canonical fields are already present.")
-    raise SystemExit(0)
+else:
+    old_model = '''    unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=True)\n    title = db.Column(db.String(200), nullable=False)'''
+    new_model = '''    # Publication context is a snapshot for this document, not a permanent\n    # mutation of the student's profile. This lets a student publish older\n    # or future-semester material without corrupting their current profile.\n    university_id = db.Column(db.Integer, db.ForeignKey("university.id"), nullable=True)\n    program_id = db.Column(db.Integer, db.ForeignKey("program.id"), nullable=True)\n    year = db.Column(db.Integer, nullable=True)\n    semester = db.Column(db.Integer, nullable=True)\n    title = db.Column(db.String(200), nullable=False)'''
+    if library_model_text.count(old_model) != 1:
+        raise SystemExit(f"FAIL CLOSED: LibraryPublication academic-context columns: expected 1 match, found {library_model_text.count(old_model)}")
+    library_model_text = library_model_text.replace(old_model, new_model, 1)
 
 
 def replace_once(old, new, label):
@@ -33,12 +38,6 @@ def replace_all_exact(old, new, expected, label):
     if count != expected:
         raise SystemExit(f"FAIL CLOSED: {label}: expected {expected} matches, found {count}")
     text = text.replace(old, new)
-
-replace_once(
-'''    unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=True)\n    title = db.Column(db.String(200), nullable=False)''',
-'''    # Publication context is a snapshot for this document, not a permanent\n    # mutation of the student's profile. This lets a student publish older\n    # or future-semester material without corrupting their current profile.\n    university_id = db.Column(db.Integer, db.ForeignKey("university.id"), nullable=True)\n    program_id = db.Column(db.Integer, db.ForeignKey("program.id"), nullable=True)\n    year = db.Column(db.Integer, nullable=True)\n    semester = db.Column(db.Integer, nullable=True)\n    title = db.Column(db.String(200), nullable=False)''',
-    "LibraryPublication academic-context columns",
-)
 
 replace_once(
 '''    material_type = (data.get("material_type") or "").strip()\n    unit_id = data.get("unit_id")\n\n    if not document_id:''',
@@ -77,5 +76,6 @@ replace_once(
     "library relevance ordering",
 )
 
-APP.write_text(text)
+APP.write_text(text, encoding="utf-8")
+LIBRARY_MODELS.write_text(library_model_text, encoding="utf-8")
 print("Applied Library academic-context patch successfully.")
