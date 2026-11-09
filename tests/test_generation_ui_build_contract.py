@@ -37,3 +37,13 @@ def test_summary_build_transform_preserves_explore_screen_definition():
     assert "case 'explore':" in transformed, (
         "The Explore navigation route must remain registered"
     )
+
+
+def test_podcast_generation_build_transform_uses_the_existing_app_section_boundary():
+    source = (ROOT / "tools" / "apply_generation_ui_build.py").read_text(encoding="utf-8")
+    app = (ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+
+    assert "('// ─── FLASHCARDS', '// ─── SUMMARY'" in source
+    assert "start_marker == '// ─── FLASHCARDS' and end_marker == '// ─── QUIZ'" in source
+    assert "// ─── FLASHCARDS" in app
+    assert "function PodcastPlayerScreen(" in app
