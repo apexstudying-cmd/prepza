@@ -430,3 +430,15 @@ Competitor context checked 27 October 2026: Jiji's official billing policy descr
 The user reports that the current Shop visual design and end-to-end journey do not match the expected Prepza experience. Treat this as an open product-quality issue even though earlier mocked-provider and responsive code checks passed. Those checks do not establish user acceptance of the visual hierarchy or end-to-end flow.
 
 Next audit must compare the live implementation screen-by-screen with `docs/ux/SHOP_UX_UI_STANDARD.md` and `docs/qa/SHOP_USER_FLOW.md`. Initial source inspection found a standalone inline `ui` style object, clickable non-keyboard-operable listing `article` cards, compact nav controls, no one-tap clear-filters/active-filter state, no distinct filtered-empty state, and text-only browse loading. Validate each finding on phone/tablet screenshots before implementation. Preserve the KES 100 per-item-per-30-day seller fee, manual renewal, direct buyer/seller contact, no buyer checkout/escrow, server-authoritative ownership/payment/moderation, and existing Shop API contracts.
+
+## 17. 9 November 2026 — first Shop browse UX remediation (verification pending)
+
+The first source-level fixes now address several concrete findings from the audit:
+
+- Listing cards are semantic `button` controls with accessible names, so keyboard users can open a listing without relying on a clickable `article`.
+- Shop navigation pills and the back control meet a 44px minimum touch target and use the same navy/gold shell pattern as the My Study screen.
+- Browse shows whether filters are active and offers a one-tap clear action. A no-match state is distinct from a genuinely empty marketplace and explains how to recover.
+- Initial browse loading reserves card space with skeletons; the loading state is reachable while the first browse request is in flight, and request failures still retain the existing stale-cache behavior.
+- Added `tests/test_shop_ux_contract.py` and wired it into the Frontend Build source-contract test command.
+
+This does not yet prove the Shop matches the whole Prepza design system or that its end-to-end user experience is acceptable. The existing inline style object remains; the shared theme CSS variables continue to provide light/dark page/card/text/border tokens. Complete phone/tablet screenshots and buyer/seller/admin runtime journeys before closing the UX gate. Preserve all existing Shop API, KES 100/30-day seller fee, manual renewal, provider verification, moderation, and no-buyer-checkout rules.
