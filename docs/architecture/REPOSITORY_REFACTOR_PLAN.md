@@ -63,11 +63,14 @@ The current `App.tsx` composition root is 5,323 lines at the 9 November 2026 adm
 | Admin module | Approximate lines | Responsibility |
 |---|---:|---|
 | `admin/AdminPlatform.tsx` | 118 | Platform shell, navigation groups, section routing, payment display metadata |
-| `admin/AdminSection.tsx` | 1,921 | Main stateful admin sections and existing API/loading/mutation workflows |
-| `admin/AdminPanels.tsx` | 1,251 | Independent ambassador, opportunity, promotion, organisation, group, university and community panels |
+| `admin/AdminSection.tsx` | 172 | Small section dispatcher; retains the existing settings view |
+| `admin/useAdminSectionController.ts` | 934 | Admin state, effects, API/CSRF calls, loading/error state and mutation handlers |
+| `admin/AdminSectionCoreViews.tsx` | 783 | Typed render-only dashboard, users, Library/content, AI, payments, moderation and analytics views |
+| `admin/AdminSectionPlatformViews.tsx` | 368 | Typed render-only system/infrastructure and communications views |
+| `admin/AdminPanels.tsx` | 1,250 | Independent ambassador, opportunity, promotion, organisation, group, university and community panels |
 | `admin/AdminShared.tsx` | 323 | Shared admin response types and presentation primitives |
 
-The admin extraction moved the existing implementation out of the app shell rather than deleting functionality: `App.tsx` fell from 8,903 to 5,323 lines (3,580 lines / 40.2% smaller) at the tested code head. The central `AdminSection.tsx` remains a large state owner; splitting its remaining tabs further is a follow-up that must preserve mount/lifecycle behavior, server-side permissions, route keys and CSRF/API contracts.
+The admin extraction moved the existing implementation out of the app shell rather than deleting functionality: `App.tsx` fell from 8,903 to 5,323 lines (3,580 lines / 40.2% smaller) at the tested code head. The admin view split then moved state/effects/API ownership into `useAdminSectionController.ts` and the render-only screens into two bounded view modules; `AdminSection.tsx` is now 172 lines. The controller remains the one large admin file (934 lines), deliberately keeping the existing state/effect lifetime intact rather than moving state into tabs and resetting it on navigation.
 
 Other large declarations still embedded in the app shell include:
 
