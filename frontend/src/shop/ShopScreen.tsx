@@ -118,6 +118,8 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
       setError(Date.now() - cached.savedAt <= BROWSE_CACHE_TTL_MS
         ? ''
         : 'Showing recently viewed listings while availability is refreshed.')
+    } else {
+      setLoading(true)
     }
     try {
       const fresh = (await shopApi<{ listings: Listing[] }>(path)).listings || []
@@ -126,9 +128,13 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
       browseSnapshots.set(cacheKey, { listings: toPublicBrowseSnapshot(fresh), savedAt: Date.now() })
       setListings(filterCurrentListings(fresh))
       setError('')
+      setLoading(false)
     } catch (cause) {
       if (requestId !== browseRequestId.current) return
-      if (!cached) throw cause
+      if (!cached) {
+        setLoading(false)
+        throw cause
+      }
       // Fall back to this query's cached public snapshot, never the previous query's rows.
       setListings(filterCurrentListings(cached.listings))
       setLoading(false)
@@ -321,7 +327,7 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
     <div style={{ padding: 12 }}><div style={{ fontSize: 15, fontWeight: 900, marginBottom: 5 }}>{money(item.price_kes)}</div><div style={{ fontSize: 12, fontWeight: 800, lineHeight: 1.4, minHeight: 32 }}>{item.title}</div><div style={{ color: 'var(--prepza-generation-muted, #596579)', fontSize: 10, marginTop: 7 }}>{conditionLabel(item.condition)} · {item.category}</div><div style={{ color: 'var(--prepza-generation-muted, #596579)', fontSize: 10, marginTop: 5 }}>{item.location_area}</div>{owned && <div style={{ display: 'inline-block', marginTop: 9, background: 'var(--prepza-generation-border, #E1E5ED)', borderRadius: 8, padding: '5px 7px', fontSize: 10, fontWeight: 800 }}>{item.status === 'active' && !periodCurrent(item) ? 'Renewal due' : statusLabel(item.status)}</div>}</div>
   </button>
 
-  if (loading && !listings.length && !mine.length && !saved.length) return <div style={ui.root}><header style={ui.header}><strong style={{ fontSize: 22 }}>Prepza Shop</strong><div style={{ opacity: .7, fontSize: 12, marginTop: 5 }}>Useful finds from your campus</div></header><div style={ui.wrap}>Loading Shop…</div></div>
+  if (loading && !listings.length && !mine.length && !saved.length && page !== 'browse') return <div style={ui.root}><header style={ui.header}><strong style={{ fontSize: 22 }}>Prepza Shop</strong><div style={{ opacity: .7, fontSize: 12, marginTop: 5 }}>Useful finds from your campus</div></header><div style={ui.wrap}>Loading Shop…</div></div>
   return <div style={ui.root}>
     <header style={{ ...ui.header, background: N.navy, padding: '0 18px 20px', flexShrink: 0 }}><div style={{ maxWidth: 1080, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
