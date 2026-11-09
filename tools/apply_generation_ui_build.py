@@ -77,7 +77,7 @@ function PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
 
 '''),
     ('// ─── FLASHCARDS', '// ─── QUIZ', '''// ─── FLASHCARDS
-function FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+function FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: StudyMaterialScreenTarget) => void; activeDocumentId: number | null }) {
   return <div style={{ colorScheme: 'var(--prepza-generation-color-scheme, light)', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><FlashcardsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
 }
 
