@@ -2299,3 +2299,7 @@ Frontend Build [42595814116](https://github.com/apexstudying-cmd/prepza/actions/
 ### Responsive browser result
 
 Release Browser run `42595814104` passed the mobile/tablet responsive browser step on code head `91ae94195bd21be3142a9216a44bebcea78bc18e`. The updated Shop copy and accessible back-button selectors worked through phone-small, phone-standard and tablet-portrait. The run advanced to B2B browser-to-ledger testing; the full PostgreSQL and online/offline browser journeys were still outstanding. Keep the release gate open until the whole run passes.
+
+### Full disposable PostgreSQL QA result
+
+Release Browser run `42595814104` also completed the full disposable PostgreSQL QA suite successfully on code head `91ae94195bd21be3142a9216a44bebcea78bc18e`. The online/offline and generated-artifact browser journeys remained in progress, so the overall release regression is not yet closed.
