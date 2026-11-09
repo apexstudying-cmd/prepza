@@ -51,13 +51,17 @@ jobs:
         run: |
           cp app.py /tmp/app.after
           cp frontend/src/App.tsx /tmp/App.after
-          if [ -f frontend/src/admin/AdminPlatform.tsx ]; then
+          if [ -f frontend/src/admin/AdminSection.tsx ]; then
+            cp frontend/src/admin/AdminSection.tsx /tmp/AdminSection.after
+          elif [ -f frontend/src/admin/AdminPlatform.tsx ]; then
             cp frontend/src/admin/AdminPlatform.tsx /tmp/AdminPlatform.after
           fi
           python3 scripts/apply_prepza_control.py
           cmp app.py /tmp/app.after
           cmp frontend/src/App.tsx /tmp/App.after
-          if [ -f /tmp/AdminPlatform.after ]; then
+          if [ -f /tmp/AdminSection.after ]; then
+            cmp frontend/src/admin/AdminSection.tsx /tmp/AdminSection.after
+          elif [ -f /tmp/AdminPlatform.after ]; then
             cmp frontend/src/admin/AdminPlatform.tsx /tmp/AdminPlatform.after
           fi
 
@@ -67,7 +71,9 @@ jobs:
           grep -q 'prepza_control_enabled' prepza_control.py
           grep -q 'hmac.compare_digest' prepza_control.py
           grep -q 'CONTROL_SETTING_KEY' prepza_control.py
-          if [ -f frontend/src/admin/AdminPlatform.tsx ]; then
+          if [ -f frontend/src/admin/AdminSection.tsx ]; then
+            ADMIN_UI=frontend/src/admin/AdminSection.tsx
+          elif [ -f frontend/src/admin/AdminPlatform.tsx ]; then
             ADMIN_UI=frontend/src/admin/AdminPlatform.tsx
           else
             ADMIN_UI=frontend/src/App.tsx
