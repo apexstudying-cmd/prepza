@@ -442,3 +442,11 @@ The first source-level fixes now address several concrete findings from the audi
 - Added `tests/test_shop_ux_contract.py` and wired it into the Frontend Build source-contract test command.
 
 This does not yet prove the Shop matches the whole Prepza design system or that its end-to-end user experience is acceptable. The existing inline style object remains; the shared theme CSS variables continue to provide light/dark page/card/text/border tokens. Complete phone/tablet screenshots and buyer/seller/admin runtime journeys before closing the UX gate. Preserve all existing Shop API, KES 100/30-day seller fee, manual renewal, provider verification, moderation, and no-buyer-checkout rules.
+
+## 18. 9 November 2026 — responsive screenshot findings and form semantics
+
+Review of the responsive screenshots from Release Browser run `42594995289` confirmed the refreshed navy/gold Shop header fits the phone and tablet widths without horizontal overflow. It also exposed a genuine layout defect: with one result, `auto-fill` reserved unused grid columns and left the only listing card narrow against a large empty area. Browse, My Listings, Saved and skeleton grids now use `auto-fit` so the remaining card expands to the available width.
+
+The same pass found the listing editor was rendered as a `section`, so its `required` attributes did not participate in native browser form validation. It is now a real form with one `onSubmit` path and an explicit submit button; other Shop buttons retain the default non-submit type. Existing save/upload/payment calls and server-side validation remain authoritative.
+
+The first browser run failed because the responsive test still expected the previous Shop tagline and old back-button accessible names after the header refresh. The test now targets the new visible copy and explicit `Back to Home` / `Back to Shop` names. This was a stale test selector, not evidence of an API/payment regression. The updated browser journey and exact current head still require a passing release run and screenshots.
