@@ -51,3 +51,44 @@ def test_podcast_generation_build_transform_uses_the_existing_app_section_bounda
     assert "function FlashcardsScreen(" in study
     assert ("// ─── PODCAST PLAYER" in app) or ("// ─── FLASHCARDS" in app)
     assert "function PodcastPlayerScreen(" in app
+
+
+def test_library_academic_context_transform_accepts_extracted_canonical_state_and_is_idempotent(tmp_path):
+    import shutil
+    import subprocess
+    import sys
+
+    (tmp_path / "tools").mkdir()
+    for relative in ("app.py", "library_models.py", "tools/apply_library_academic_context.py"):
+        source = ROOT / relative
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+
+    script = tmp_path / "tools" / "apply_library_academic_context.py"
+    app = tmp_path / "app.py"
+
+    first = subprocess.run(
+        [sys.executable, str(script)],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert first.returncode == 0, first.stdout + first.stderr
+
+    transformed = app.read_text(encoding="utf-8")
+    browse = transformed.split("def browse_library():", 1)[1].split("\n@app.route", 1)[0]
+    assert "viewer = db.session.get(User, user_id)" in browse
+    assert "relevance_order = []" in browse
+    assert "query.order_by(*relevance_order, order_col)" in browse
+
+    second = subprocess.run(
+        [sys.executable, str(script)],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert second.returncode == 0, second.stdout + second.stderr
+    assert app.read_text(encoding="utf-8") == transformed
