@@ -742,3 +742,5 @@ def test_unused_legacy_organisation_portal_is_removed_without_changing_active_po
     assert "import OrgDiscoveryTab from './organisation/OrgDiscoveryTab'" not in APP
     assert "import PremiumOrganisationPortal from './organisation/PremiumOrganisationPortal'" in APP
     assert "if (orgPortalMode) return <PremiumOrganisationPortal onExit={() => setOrgPortalMode(false)} />" in APP
+    assert "function readStoredNavigationState()" in APP
+    assert "sessionStorage.getItem('prepza-navigation-state')" in APP
