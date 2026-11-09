@@ -221,3 +221,10 @@ The ProfileScreen component body was directly compared with base main and is byt
 ### Document Ready extraction — PR #77
 
 DocReadyScreen now lives in frontend/src/screens/study/DocReadyScreen.tsx (73 lines). Its shared DocumentDetail response contract moved to frontend/src/types/documents.ts. App.tsx still owns the route and passes the existing TopBar component into the extracted module. The screen body was compared directly with base main and matches byte-for-byte after normalising only the module export, injected TopBar, and local route-union type. Source contracts protect the document details request, metadata display, error message, and all seven existing study/action destinations. Frontend Build [42036938429](https://github.com/apexstudying-cmd/prepza/actions/runs/42036938429) passed on code head 74b8fac: 90 frontend source/module contract tests, 5 offline Library tests, TypeScript, service-worker validation, production build, architecture audits and launch-wiring verification. Full Release Browser/Cross-System Regression [42036938563](https://github.com/apexstudying-cmd/prepza/actions/runs/42036938563) and remaining workflows are queued on this code head.
+
+
+## 2026-11-09 — Consolidated public-shell route contract (PR #77; pending)
+
+The public shell route move from the former PR #76 branch has been applied to the consolidated frontend integration branch. `public_shell_routes.py` registers `/`, `/sw.js`, and `/health` with explicit dependencies; `app.py` retains the global Flask entry point and registers the module after `track_last_active` and before academic catalog routes. Added focused test-client contracts cover original paths/methods/endpoint names, index serving, service-worker MIME/cache headers, health SQL probe and safe sweep, limiter exemption, and the 503 failure response.
+
+The combined-head CI run is pending. No pass is claimed yet for the public-shell route contract, backend shared-extension contract, frontend production build, or full release browser/cross-system regression. StudyHub Library Flow remains conditional and a skipped run is not counted as a pass.
