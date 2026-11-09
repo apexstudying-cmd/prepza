@@ -70,7 +70,7 @@ base_style = "colorScheme: 'var(--prepza-generation-color-scheme, light)', flex:
 text = text.replace(base_style, scroll_style)
 
 replacements = [
-    ('// ─── FLASHCARDS', '// ─── SUMMARY', '''// ─── PODCAST PLAYER
+    ('// ─── PODCAST PLAYER', '// ─── SUMMARY', '''// ─── PODCAST PLAYER
 function PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
   return <div style={{ colorScheme: 'var(--prepza-generation-color-scheme, light)', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><PodcastGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
 }
@@ -91,9 +91,16 @@ function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
 ]
 
 for start_marker, end_marker, replacement in replacements:
-    is_study_flashcards = start_marker == '// ─── FLASHCARDS' and end_marker == '// ─── QUIZ'
+    is_study_flashcards = end_marker == '// ─── QUIZ'
     target = study_text if is_study_flashcards else text
+    aliases = ('// ─── FLASHCARDS',) if start_marker == '// ─── PODCAST PLAYER' else ()
     start = target.find(start_marker)
+    if start < 0:
+        for alias in aliases:
+            start = target.find(alias)
+            if start >= 0:
+                start_marker = alias
+                break
     if start < 0:
         if start_marker == '// ─── FLASHCARDS' and 'FlashcardsStudyScreen' in target:
             continue
