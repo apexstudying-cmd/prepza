@@ -44,8 +44,10 @@ def test_podcast_generation_build_transform_uses_the_existing_app_section_bounda
     app = (ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
     study = (ROOT / "frontend" / "src" / "screens" / "study" / "GeneratedStudyScreens.tsx").read_text(encoding="utf-8")
 
-    assert "('// ─── FLASHCARDS', '// ─── SUMMARY'" in source
-    assert "start_marker == '// ─── FLASHCARDS' and end_marker == '// ─── QUIZ'" in source
+    assert "('// ─── PODCAST PLAYER', '// ─── SUMMARY'" in source
+    assert "aliases = ('// ─── FLASHCARDS',) if start_marker == '// ─── PODCAST PLAYER' else ()" in source
+    assert "is_study_flashcards = end_marker == '// ─── QUIZ'" in source
     assert "// ─── FLASHCARDS" in study
     assert "function FlashcardsScreen(" in study
+    assert ("// ─── PODCAST PLAYER" in app) or ("// ─── FLASHCARDS" in app)
     assert "function PodcastPlayerScreen(" in app
