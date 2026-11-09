@@ -2303,3 +2303,9 @@ Release Browser run `42595814104` passed the mobile/tablet responsive browser st
 ### Full disposable PostgreSQL QA result
 
 Release Browser run `42595814104` also completed the full disposable PostgreSQL QA suite successfully on code head `91ae94195bd21be3142a9216a44bebcea78bc18e`. The online/offline and generated-artifact browser journeys remained in progress, so the overall release regression is not yet closed.
+
+### Complete release regression milestone and follow-up
+
+Release Browser run `42595814104` passed on code head `91ae94195bd21be3142a9216a44bebcea78bc18e`: production image, disposable database/migrations, mobile/tablet, B2B metering, full PostgreSQL QA, online/offline generated-artifact browser journeys, screenshot upload and cleanup. Frontend Build `42595814116` also passed 112 source/transform tests, 5 offline Library tests, audits, TypeScript and production build. StudyHub Library Flow was skipped.
+
+After inspecting the new phone-small screenshot, a follow-up was made for fixed bottom-nav clearance: Shop now has safe-area-aware bottom padding, and the browser journey checks that `Save & publish` can scroll fully above the global nav. This follow-up is on code head `d1a5fd8adb49aff443f7578d861b5cf7c7014d65`; its Frontend Build and Release Browser runs are queued and must pass before the UX item is closed.
