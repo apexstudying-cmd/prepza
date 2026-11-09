@@ -5,7 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ADMIN_DIR = ROOT / "frontend" / "src" / "admin"
 ADMIN_SECTION = ADMIN_DIR / "AdminSection.tsx"
 CONTROLLER = ADMIN_DIR / "useAdminSectionController.ts"
-VIEW_TYPES = ADMIN_DIR / "AdminSectionViewProps.ts"
+VIEW_TYPES = CONTROLLER
 CORE_VIEWS = ADMIN_DIR / "AdminSectionCoreViews.tsx"
 PLATFORM_VIEWS = ADMIN_DIR / "AdminSectionPlatformViews.tsx"
 
