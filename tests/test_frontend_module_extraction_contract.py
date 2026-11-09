@@ -692,3 +692,46 @@ def test_document_study_progress_transform_targets_the_extracted_hub_module():
     assert "frontend/src/screens/study/DocumentStudyHubScreen.tsx" in script
     assert "hub_source = patch_study_hub(HUB_MODULE.read_text(encoding='utf-8'))" in script
     assert "HUB_MODULE.write_text(hub_source, encoding='utf-8')" in script
+
+
+def test_opportunity_screens_are_owned_by_the_opportunities_feature_module():
+    assert "import { OpportunitiesScreen, OppDetailScreen } from './screens/opportunities/OpportunityScreens'" in APP
+    assert "function OpportunitiesScreen(" not in APP
+    assert "function OppDetailScreen(" not in APP
+    assert "case 'opportunities':" in APP
+    assert "case 'opportunity-detail':" in APP
+
+
+def test_opportunity_screens_preserve_feed_filter_save_view_and_share_contracts():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "opportunities" /
+        "OpportunityScreens.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "/api/discovery/feed?placement=opportunities",
+        "/opportunities/saved",
+        "/opportunities?",
+        "prepza:academic-context-changed",
+        "/api/opportunities/",
+        "/opportunities/",
+        "'X-CSRF-Token': csrfToken",
+        "setScreen('opportunity-detail')",
+        "setScreen('home')",
+        "setScreen('share-opp-form')",
+        "setScreen('share-sheet')",
+        "setActiveOpportunityId",
+    ):
+        assert contract in source
+
+
+def test_opportunity_response_types_are_shared_outside_the_app_shell():
+    source = (
+        ROOT / "frontend" / "src" / "types" / "opportunities.ts"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "export type OpportunityOrg",
+        "export type OpportunityPublic",
+        "export type SponsoredCampaign",
+        "opportunity: OpportunityPublic",
+    ):
+        assert contract in source
