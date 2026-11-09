@@ -4,8 +4,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "app.py"
 APP_FRONTEND = ROOT / "frontend" / "src" / "App.tsx"
-ADMIN_FRONTEND = ROOT / "frontend" / "src" / "admin" / "AdminPlatform.tsx"
-FRONTEND = ADMIN_FRONTEND if ADMIN_FRONTEND.exists() else APP_FRONTEND
+ADMIN_SECTION = ROOT / "frontend" / "src" / "admin" / "AdminSection.tsx"
+ADMIN_PLATFORM = ROOT / "frontend" / "src" / "admin" / "AdminPlatform.tsx"
+FRONTEND = ADMIN_SECTION if ADMIN_SECTION.exists() else (ADMIN_PLATFORM if ADMIN_PLATFORM.exists() else APP_FRONTEND)
 
 
 def replace_once(text, old, new, label):
