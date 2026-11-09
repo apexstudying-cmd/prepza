@@ -3,7 +3,7 @@ import { api, ApiError } from '../lib/appApi'
 import { useTheme, currentThemeMode, DARK_THEME } from '../theme/theme'
 import type { AdminLibraryQueueItem, AdminLibraryReportItem, AdminInfrastructure, AdminStorageCapacity, AdminSystemCapacity, AdminUniversityEngagement, AdminAnalytics, AdminContentReport, AdminModerationSummary, AdminPlatformSettings, AdminAuditLogEntry, AdminContentMaterial, AdminAiUsage, AdminAiJob, AdminPayment, AdminUserRow, AdminAnnouncementItem } from './AdminShared'
 
-export function useAdminSectionController(section: string, setSection: (section: string) => void) { section, setSection }: { section: string; setSection: (s: string) => void }) {
+export function useAdminSectionController(section: string, setSection: (section: string) => void) {
   const { mode, tokens: T } = useTheme()
   const [search, setSearch] = useState('')
   const [userFilter, setUserFilter] = useState('All')
