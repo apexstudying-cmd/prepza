@@ -27,7 +27,7 @@ These are design principles, not a claim that a particular layout will improve c
 - Search should be easy to find and should not trigger a request on every keystroke; debounce it and preserve the current query when a user opens a detail page and returns.
 - Use category, condition, location and sort controls with visible active-filter states and a one-tap clear-filters action. Avoid a large filter wall on narrow screens; use compact chips or a focused sheet/panel.
 - Product cards should prioritize a consistent image ratio, short title, legible KES price, condition, location and freshness/status where available. Do not show seller-only actions to buyers.
-- Use responsive grid columns only when card width remains comfortable; a single-column list is acceptable on small screens if it improves scanning and image visibility.
+- Use responsive grid columns only when card width remains comfortable; a single-column list is acceptable on small screens if it improves scanning and image visibility. When only one listing is returned, let its card expand to the available width rather than leaving a narrow first column beside empty grid tracks.
 - Empty results should explain the situation and offer a relevant next step: clear filters or post an item. Loading states should reserve card space to reduce layout shift.
 - Clearly distinguish cached results from current server results when revalidation fails; stale cards must not imply current availability or successful payment.
 
@@ -43,7 +43,7 @@ These are design principles, not a claim that a particular layout will improve c
 
 - State the price policy before the form: **KES 100 per item for each 30-day period, including your first**. Explain that this is a posting fee, not a buyer transaction or guarantee of sale.
 - Keep the form in a clear order: title, category, condition, price, location, description, optional WhatsApp contact, photos, fee payment and final submission/review.
-- Validate required fields inline, preserve user-entered data after recoverable errors, and prevent double-submit while uploads/payment initialization are in progress.
+- Use a semantic form with a single submit path so native `required` and input constraints actually run; keep cancel/remove controls explicitly non-submit buttons. Validate required fields inline, preserve user-entered data after recoverable errors, and prevent double-submit while uploads/payment initialization are in progress.
 - Explain image types and limits before selection. Show thumbnails, upload progress, remove/retry controls, and an accurate selected-photo count. Preserve successfully uploaded image references if a later image fails, so retry does not duplicate prior uploads.
 - Make payment states distinct: draft, payment pending, payment review required, paid/ready to submit, awaiting moderation, live, rejected/needs changes. Never infer payment success from the browser redirect alone; the server/provider verification remains authoritative.
 - If payment status is uncertain, tell the seller to check My Listings before trying again; avoid prompting duplicate charges.
