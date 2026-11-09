@@ -2291,3 +2291,7 @@ The browser job's failure was a stale test expectation for the former header tag
 The listing editor now uses a real `form` and one submit path, making existing `required` fields effective in browser validation. The `ShopButton` component defaults to `type="button"`; the save action explicitly submits the form. The UX contract also protects the 44px target guidance, semantic nav/current page, filter recovery, one-result grid sizing and native form semantics.
 
 The refreshed source and browser journey were tested in release run `42595814104` on code head `91ae94195bd21be3142a9216a44bebcea78bc18e`; the run was still in progress at the time of writing. Refresh all evidence against the final PR head before marking Shop complete.
+
+### Frontend verification update — code head `91ae94195bd21be3142a9216a44bebcea78bc18e`
+
+Frontend Build [42595814116](https://github.com/apexstudying-cmd/prepza/actions/runs/42595814116) passed: 112 frontend/source-contract tests, 5 offline Library tests, functional wiring and ORM/schema drift audits, TypeScript, service-worker validation and production build. The Shop UX source contract is included. Full Release Browser/Cross-System Regression [42595814104](https://github.com/apexstudying-cmd/prepza/actions/runs/42595814104) had passed disposable service startup and both migration stages but was still running the remaining app/browser/database stages at this update. Do not treat Frontend Build as a substitute for the release regression.
