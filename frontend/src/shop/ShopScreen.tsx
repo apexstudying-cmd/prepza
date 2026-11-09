@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react'
+import { N } from '../theme/theme'
 
 type ImageRef = { key: string; url: string | null }
 type Listing = { id: number; title: string; description: string | null; category: string; condition: string; price_kes: number; location_area: string; images: ImageRef[]; status: string; seller_id: number; seller_name: string; whatsapp_url?: string | null; saved: boolean; is_mine: boolean; posting_fee_kes: number; posting_fee_paid: boolean; posting_fee_expires_at?: string | null; posting_payment_reference?: string | null; posting_payment_review_note?: string | null; moderation_note?: string | null }
@@ -322,10 +323,14 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
 
   if (loading && !listings.length && !mine.length && !saved.length) return <div style={ui.root}><header style={ui.header}><strong style={{ fontSize: 22 }}>Prepza Shop</strong><div style={{ opacity: .7, fontSize: 12, marginTop: 5 }}>Useful finds from your campus</div></header><div style={ui.wrap}>Loading Shop…</div></div>
   return <div style={ui.root}>
-    <header style={ui.header}><div style={{ maxWidth: 1080, margin: '0 auto' }}>
-      <button type="button" onClick={() => page === 'browse' ? setScreen('home') : (setPage(selected?.is_mine ? 'mine' : 'browse'), setSelected(null))} style={{ background: 'none', border: 0, color: 'rgba(255,255,255,.72)', padding: 0, marginBottom: 13, cursor: 'pointer', fontSize: 11, fontWeight: 800 }}>‹ {page === 'browse' ? 'Home' : 'Back'}</button>
-      <div style={{ display: 'flex', gap: 12, justifyContent: 'space-between', alignItems: 'center' }}><div><div style={{ fontSize: 23, fontWeight: 900 }}>Shop</div><div style={{ color: 'rgba(255,255,255,.68)', fontSize: 12, marginTop: 4 }}>Find useful things near campus. Connect directly with sellers.</div></div><ShopButton onClick={() => startCreate()}>＋ Sell an item</ShopButton></div>
-      <div style={{ display: 'flex', gap: 7, marginTop: 17, overflowX: 'auto' }}>{nav.map(item => <button key={item.id} type="button" onClick={() => { feedback(); setPage(item.id) }} style={{ flexShrink: 0, border: '1px solid ' + (page === item.id ? '#C9A84C' : 'rgba(255,255,255,.18)'), background: page === item.id ? '#C9A84C' : 'rgba(255,255,255,.08)', color: page === item.id ? '#101B35' : '#fff', padding: '8px 12px', minHeight: 44, borderRadius: 20, fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>{item.label}</button>)}</div>
+    <header style={{ ...ui.header, background: N.navy, padding: '0 18px 20px', flexShrink: 0 }}><div style={{ maxWidth: 1080, margin: '0 auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <button type="button" aria-label={page === 'browse' ? 'Back to Home' : 'Back to Shop'} onClick={() => page === 'browse' ? setScreen('home') : (setPage(selected?.is_mine ? 'mine' : 'browse'), setSelected(null))} style={{ width: 44, height: 44, flexShrink: 0, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 12, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>‹</button>
+        <div style={{ minWidth: 0, flex: 1 }}><div style={{ fontSize: 18, fontWeight: 800, color: '#fff' }}>Shop</div><div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, marginTop: 2 }}>Find useful things near campus</div></div>
+        <ShopButton onClick={() => startCreate()}>＋ Sell an item</ShopButton>
+      </div>
+      <div style={{ color: 'rgba(255,255,255,0.68)', fontSize: 12, marginBottom: 12 }}>Connect directly with sellers. Prepza does not process buyer purchases.</div>
+      <div style={{ display: 'flex', gap: 7, overflowX: 'auto' }}>{nav.map(item => <button key={item.id} type="button" onClick={() => { feedback(); setPage(item.id) }} style={{ flexShrink: 0, border: '1px solid ' + (page === item.id ? N.gold : 'rgba(255,255,255,.18)'), background: page === item.id ? N.gold : 'rgba(255,255,255,.08)', color: page === item.id ? N.navy : '#fff', padding: '8px 12px', minHeight: 44, borderRadius: 20, fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>{item.label}</button>)}</div>
     </div></header>
     <main style={ui.wrap}>
       {notice && <div role="status" style={{ background: 'color-mix(in srgb, #22C55E 10%, var(--prepza-generation-page, #F8F9FC))', border: '1px solid color-mix(in srgb, #22C55E 28%, var(--prepza-generation-border, #E1E5ED))', color: 'var(--prepza-generation-text, #0B1437)', borderRadius: 12, padding: 12, fontSize: 12, marginBottom: 12 }}>{notice}</div>}
