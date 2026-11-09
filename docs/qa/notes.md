@@ -2317,3 +2317,7 @@ Frontend Build `42596828203` passed on code head `d1a5fd8adb49aff443f7578d861b5c
 ### Bottom-nav assertion harness correction
 
 Run `42596828231` captured the Shop form with Save & publish above the fixed bottom navigation on phone-small. The check then raised `KeyError: 'bottom'` because Playwright bounding boxes expose `y` and `height`, not `top` and `bottom`. The script now compares `y + height` to the nav's `y`; the next run on code head `76fcff95c025536ab5e7f6270184d411d92271bd` must pass before this is closed.
+
+### Playwright bounds correction Frontend Build
+
+Frontend Build `42597710544` passed on code head `76fcff95c025536ab5e7f6270184d411d92271bd`: 114 source/transform contracts, 5 offline Library tests, audits, TypeScript and production build. The corrected responsive browser assertion remains pending in Release Browser `42597710733`.
