@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ComponentType } from 'react'
 
 import { api, ApiError } from '../../lib/appApi'
 import { N, useTheme } from '../../theme/theme'
@@ -14,9 +14,9 @@ type GenerationProgress = { progress_percent: number; progress_stage: string; st
 type StudyMaterialScreensProps = {
   setScreen: (screen: StudyMaterialScreenTarget) => void
   activeDocumentId: number | null
-  GenerationLoading: (props: { label: string }) => JSX.Element
-  GenerationError: (props: { error: string }) => JSX.Element
-  AchievementToast: (props: { codes: string[] }) => JSX.Element | null
+  GenerationLoading: ComponentType<{ label: string }>
+  GenerationError: ComponentType<{ error: string }>
+  AchievementToast: ComponentType<{ codes: string[] }>
   generationRequest: <T = any>(path: string, options?: RequestInit, onProgress?: (progress: GenerationProgress) => void, currentUserId?: number) => Promise<T>
   replaySelectedGeneratedMaterialOffline: (documentId: string | number, feature: string) => Promise<any | null>
   getLatestGeneratedMaterialForPath: (path: string) => Promise<any | null>
