@@ -5,7 +5,10 @@ The admin feature is entered through `AdminPlatform`, imported by the app shell.
 ## Module map
 
 - `AdminPlatform.tsx` — compact platform shell: sidebar navigation, section labels, header, and the existing `AdminPlatform` entry point. It also exports the payment-status display metadata consumed by the student payment-history screen.
-- `AdminSection.tsx` — admin section orchestration and the main dashboard, student, Library/content, AI usage, payment, moderation, analytics, infrastructure, settings, and communications views. It owns the existing per-section loading state and mutation handlers.
+- `AdminSection.tsx` — small section dispatcher. It preserves the existing settings view and routes the other sections to their view modules.
+- `useAdminSectionController.ts` — owns admin state, effects, API calls, CSRF handling, loading/error state, and mutation handlers. The hook is called unconditionally by `AdminSection`, preserving state/effect lifetime across tab changes.
+- `AdminSectionCoreViews.tsx` — typed, render-only dashboard, users, Library/content, AI usage, payments, moderation, and analytics views.
+- `AdminSectionPlatformViews.tsx` — typed, render-only infrastructure/system and communications views.
 - `AdminPanels.tsx` — independent domain panels for ambassadors, opportunities, promotions, organisations, groups, universities, and community reports.
 - `AdminShared.tsx` — shared admin response types and presentational primitives (`AdminCard`, `AdminKPI`, `AdminTable`, charts, and badges).
 - `B2BFinanceAdmin.tsx` and `AdminOperationsDashboard.tsx` — existing dedicated finance and operations modules.
@@ -28,3 +31,9 @@ pnpm --dir frontend build
 ```
 
 The Frontend Build workflow also runs source-transform contracts, offline Library regression, TypeScript, service-worker validation, production Vite build, and architecture/launch-wiring audits. The Admin Route Contract separately protects backend admin route behavior.
+
+## Admin section state/view boundary
+
+The main admin section is split between one stateful controller and bounded render modules. View components receive a typed `Pick<AdminSectionController, ...>` rather than importing API clients or owning new effects. Keep network calls, authorization-related UI state, CSRF headers, confirmation flows and mutation ordering in the controller; keep JSX and display-only derived values in the view modules. This preserves the existing section IDs and avoids resetting parent-owned state when users switch tabs.
+
+Current extraction target sizes are kept below 1,000 lines per file: `AdminSection.tsx` is the dispatcher, `useAdminSectionController.ts` is the controller, and the two view modules are separate domain groups. Do not split the controller further until its effects and mutation dependencies have focused contract coverage.
