@@ -25,12 +25,7 @@ def _transform_function(text: str, function_name: str, transform) -> str:
 
 
 def remove_document_opening_interstitials(text: str) -> str:
-    """Make the document-study hub and native reader cache-first.
-
-    Keep the transform scoped to the owning screen functions. App.tsx also has
-    unrelated local variables named doc and document; global first-match
-    replacements can mutate the wrong screen and are not idempotent.
-    """
+    """Make the document study hub and native reader cache-first."""
     def update_hub(block: str) -> str:
         hub_state = "  const [document, setDocument] = useState<DocumentDetail | null>(null)"
         hub_cached_state = "  const [document, setDocument] = useState<DocumentDetail | null>(() => activeDocumentId != null ? DOC_CACHE[activeDocumentId] ?? null : null)"
@@ -42,8 +37,8 @@ def remove_document_opening_interstitials(text: str) -> str:
             1,
         )
         block = block.replace(
-            '  if (loading) return <GenerationLoading label="Opening your document…"/>\n  if (error || !document) return <GenerationError error={error || \'Document unavailable.\'} />',
-            '  if (loading && !document) return <GenerationLoading label="Loading study hub…"/>\n  if (error || !document) return <GenerationError error={error || \'Document unavailable.\'} />',
+            '  if (loading) return <GenerationLoading label="Opening your document…" />\n  if (error || !document) return <GenerationError error={error || \'Document unavailable.\'} />',
+            '  if (loading && !document) return <GenerationLoading label="Loading study hub…" />\n  if (error || !document) return <GenerationError error={error || \'Document unavailable.\'} />',
             1,
         )
         return block
@@ -54,8 +49,8 @@ def remove_document_opening_interstitials(text: str) -> str:
         if reader_state in block and reader_cached_state not in block:
             block = block.replace(reader_state, reader_cached_state, 1)
         block = block.replace(
-            '  if (loading) return <GenerationLoading label="Opening your document…"/>\n  if (error) return <GenerationError error={error} />',
-            '  if (loading && !doc) return <GenerationLoading label="Loading reader…"/>\n  if (error) return <GenerationError error={error} />',
+            '  if (loading) return <GenerationLoading label="Opening your document…" />\n  if (error) return <GenerationError error={error} />',
+            '  if (loading && !doc) return <GenerationLoading label="Loading reader…" />\n  if (error) return <GenerationError error={error} />',
             1,
         )
         block = block.replace('Opening your document…', 'Loading…')
@@ -63,21 +58,14 @@ def remove_document_opening_interstitials(text: str) -> str:
         block = block.replace('Opening your document', 'Loading…')
         return block
 
-    text = _transform_function(text, "DocumentStudyScreen", update_hub)
+    text = _transform_function(text, "DocumentStudyHubScreen", update_hub)
     text = _transform_function(text, "DocumentReaderScreen", update_reader)
     return text
 
 
 def harden_document_navigation(text: str) -> str:
-    """Keep the native reader cache-first and avoid redundant history entries."""
-    def update_reader(block: str) -> str:
-        old_state = "  const [doc, setDoc] = useState<DocumentDetail | null>(null)\n"
-        new_state = "  const [doc, setDoc] = useState<DocumentDetail | null>(() => activeDocumentId != null ? DOC_CACHE[activeDocumentId] ?? null : null)\n"
-        if old_state in block and new_state not in block:
-            block = block.replace(old_state, new_state, 1)
-        return block
-
-    def remove_study_hub_interstitial(block: str) -> str:
+    """Remove the legacy empty-document interstitial and keep back navigation stable."""
+    def remove_study_interstitial(block: str) -> str:
         block, _ = re.subn(
             r"\n\s*// Only pending while there's an active document[\s\S]*?\n\s*const docLoading = activeDocumentId != null && doc === null && !docLoadError\n\s*if \(docLoading\) return <SkeletonDocument \/>\n",
             "\n",
@@ -92,8 +80,7 @@ def harden_document_navigation(text: str) -> str:
         )
         return block
 
-    text = _transform_function(text, "DocumentReaderScreen", update_reader)
-    text = _transform_function(text, "DocumentStudyScreen", remove_study_hub_interstitial)
+    text = _transform_function(text, "DocumentStudyScreen", remove_study_interstitial)
 
     old_set_screen = """  const setScreen = (s: Screen) => {
     if (s === screen) return
@@ -117,7 +104,6 @@ def harden_document_navigation(text: str) -> str:
     if old_set_screen in text and new_set_screen not in text:
         text = text.replace(old_set_screen, new_set_screen, 1)
     return text
-
 
 
 def harden_offline_startup(text: str) -> str:
