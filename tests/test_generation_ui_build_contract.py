@@ -96,16 +96,31 @@ def test_library_academic_context_transform_accepts_extracted_canonical_state_an
 
 def test_admin_platform_is_owned_by_a_dedicated_admin_module_without_changing_route_keys():
     app = (ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
-    module_path = ROOT / "frontend" / "src" / "admin" / "AdminPlatform.tsx"
-    assert module_path.exists(), "Admin UI should be owned by the admin feature module"
-    module = module_path.read_text(encoding="utf-8")
+    admin_dir = ROOT / "frontend" / "src" / "admin"
+    platform_path = admin_dir / "AdminPlatform.tsx"
+    section_path = admin_dir / "AdminSection.tsx"
+    panels_path = admin_dir / "AdminPanels.tsx"
+    shared_path = admin_dir / "AdminShared.tsx"
+    assert all(path.exists() for path in (platform_path, section_path, panels_path, shared_path)), (
+        "Admin UI should be split into platform, section, domain-panel, and shared modules"
+    )
+    platform = platform_path.read_text(encoding="utf-8")
+    section_module = section_path.read_text(encoding="utf-8")
+    panels = panels_path.read_text(encoding="utf-8")
+    shared = shared_path.read_text(encoding="utf-8")
 
     assert "import AdminPlatform from './admin/AdminPlatform'" in app
     assert "function AdminSection(" not in app
     assert "function AdminPlatform(" not in app
-    assert "function AdminSection(" in module
-    assert "function AdminPlatform(" in module
+    assert "import AdminSection from './AdminSection'" in platform
+    assert "export default function AdminPlatform(" in platform
+    assert "export default function AdminSection(" in section_module
+    assert "export function AdminAmbassadorsPanel(" in panels
+    assert "export function AdminCommunityPanel(" in panels
+    assert "export function AdminCard(" in shared
+    assert "export type AdminUserRow" in shared
 
+    combined = platform + section_module + panels + shared
     for section in (
         "dashboard", "users", "content", "ai-usage", "b2b-finance",
         "payments", "moderation", "analytics", "operations", "system",
@@ -113,4 +128,4 @@ def test_admin_platform_is_owned_by_a_dedicated_admin_module_without_changing_ro
         "opportunities", "promotions", "organisations", "universities",
         "community",
     ):
-        assert f"'{section}'" in module, f"Existing admin section key {section!r} must remain"
+        assert f"'{section}'" in combined, f"Existing admin section key {section!r} must remain"
