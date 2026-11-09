@@ -1,0 +1,19 @@
+.shop-filter-grid {
+  display: grid;
+}
+
+@media (max-width: 639px) {
+  .shop-filter-grid {
+    display: none;
+  }
+
+  .shop-filter-grid.is-expanded {
+    display: grid;
+  }
+}
+
+@media (min-width: 640px) {
+  .shop-filter-toggle {
+    display: none;
+  }
+}
