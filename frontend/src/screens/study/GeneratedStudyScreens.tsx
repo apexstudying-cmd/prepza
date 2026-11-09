@@ -22,7 +22,7 @@ type StudyMaterialScreensProps = {
   getLatestGeneratedMaterialForPath: (path: string) => Promise<any | null>
 }
 
-function FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: StudyMaterialScreenTarget) => void; activeDocumentId: number | null }) {
+function FlashcardsScreen({ setScreen, activeDocumentId, GenerationLoading, GenerationError, AchievementToast, generationRequest, replaySelectedGeneratedMaterialOffline, getLatestGeneratedMaterialForPath }: StudyMaterialScreensProps) {
   const { tokens: T } = useTheme()
   const [idx, setIdx] = useState(0)
   const [flipped, setFlipped] = useState(false)
@@ -170,7 +170,7 @@ function FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: Stud
 }
 
 // ─── QUIZ ─────────────────────────────────────────────────────────────────────
-function QuizScreen({ setScreen, activeDocumentId }: { setScreen: (s: StudyMaterialScreenTarget) => void; activeDocumentId: number | null }) {
+function QuizScreen({ setScreen, activeDocumentId, GenerationLoading, GenerationError, AchievementToast, generationRequest, replaySelectedGeneratedMaterialOffline, getLatestGeneratedMaterialForPath }: StudyMaterialScreensProps) {
   const { tokens: T } = useTheme()
   const [qi, setQi] = useState(0)
   const [selected, setSelected] = useState<number|null>(null)
