@@ -244,6 +244,20 @@ def main() -> int:
                             ),
                         })
                         page.get_by_text("1 photo(s) selected: calculator.png", exact=True).wait_for(timeout=5000)
+                        # The global app navigation is fixed above the bottom edge.
+                        # The Shop scroll area must leave enough safe space for the
+                        # seller's final form action to be fully reachable above it.
+                        save_action = page.get_by_role("button", name="Save & publish")
+                        save_action.scroll_into_view_if_needed(timeout=5000)
+                        save_bounds = save_action.bounding_box()
+                        primary_nav_bounds = page.get_by_role(
+                            "navigation", name="Primary navigation"
+                        ).bounding_box()
+                        if save_bounds and primary_nav_bounds and save_bounds["bottom"] > primary_nav_bounds["top"] + 1:
+                            failures.append(
+                                f"{name}: Shop submit action overlaps fixed bottom navigation: "
+                                f"save={save_bounds}, nav={primary_nav_bounds}"
+                            )
                         page.screenshot(
                             path=str(ARTIFACTS / f"shop-listing-form-{name}.png"),
                             full_page=True,
