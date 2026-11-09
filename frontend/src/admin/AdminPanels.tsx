@@ -1247,5 +1247,3 @@ export function AdminCommunityPanel() {
     </div>
   )
 }
-
-export default
