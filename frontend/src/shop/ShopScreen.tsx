@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react'
 import { N } from '../theme/theme'
+import './ShopScreen.css'
 
 type ImageRef = { key: string; url: string | null }
 type Listing = { id: number; title: string; description: string | null; category: string; condition: string; price_kes: number; location_area: string; images: ImageRef[]; status: string; seller_id: number; seller_name: string; whatsapp_url?: string | null; saved: boolean; is_mine: boolean; posting_fee_kes: number; posting_fee_paid: boolean; posting_fee_expires_at?: string | null; posting_payment_reference?: string | null; posting_payment_review_note?: string | null; moderation_note?: string | null }
@@ -86,6 +87,7 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
   const [condition, setCondition] = useState('')
   const [location, setLocation] = useState('')
   const [sort, setSort] = useState('newest')
+  const [filtersExpanded, setFiltersExpanded] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -343,13 +345,22 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
       {error && <div role="alert" style={{ background: 'color-mix(in srgb, #EF4444 10%, var(--prepza-generation-page, #F8F9FC))', border: '1px solid color-mix(in srgb, #EF4444 28%, var(--prepza-generation-border, #E1E5ED))', color: 'var(--prepza-generation-text, #0B1437)', borderRadius: 12, padding: 12, fontSize: 12, marginBottom: 12 }}>{error}<button onClick={() => setError('')} style={{ float: 'right', border: 0, background: 'transparent', cursor: 'pointer' }}>Dismiss</button></div>}
 
       {page === 'browse' && <>
-        <section style={{ ...ui.panel, marginBottom: 16 }}><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
-          <Field label="Search products"><input style={ui.input} value={query} onChange={e => setQuery(e.target.value)} placeholder="Textbooks, calculators…" /></Field>
-          <Field label="Category"><select style={ui.input} value={category} onChange={e => setCategory(e.target.value)}><option value="">All categories</option>{CATEGORIES.map(item => <option key={item}>{item}</option>)}</select></Field>
-          <Field label="Condition"><select style={ui.input} value={condition} onChange={e => setCondition(e.target.value)}><option value="">Any condition</option>{CONDITIONS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></Field>
-          <Field label="Campus / area"><input style={ui.input} value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Kahawa, KU" /></Field>
-          <Field label="Sort by"><select style={ui.input} value={sort} onChange={e => setSort(e.target.value)}><option value="newest">Newest</option><option value="price_low">Price: low to high</option><option value="price_high">Price: high to low</option></select></Field>
-        </div><div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 12 }}><span aria-live="polite" style={{ color: 'var(--prepza-generation-muted, #596579)', fontSize: 11 }}>{hasActiveFilters ? 'Filters applied' : 'Refine your search'}</span>{hasActiveFilters && <button type="button" aria-label="Clear all active filters" onClick={clearFilters} style={{ ...ui.button, ...ui.secondary, minHeight: 44, fontSize: 12 }}>Clear filters</button>}</div></section>
+        <section style={{ ...ui.panel, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', alignItems: 'end', gap: 10 }}>
+            <Field label="Search products"><input style={ui.input} value={query} onChange={e => setQuery(e.target.value)} placeholder="Textbooks, calculators…" /></Field>
+            <button type="button" className="shop-filter-toggle" aria-expanded={filtersExpanded} aria-controls="shop-additional-filters" onClick={() => setFiltersExpanded(value => !value)} style={{ ...ui.button, ...ui.secondary, minHeight: 44 }}>{filtersExpanded ? 'Hide filters' : 'More filters'}</button>
+          </div>
+          <div id="shop-additional-filters" className={`shop-filter-grid${filtersExpanded ? ' is-expanded' : ''}`} style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, marginTop: 10 }}>
+            <Field label="Category"><select style={ui.input} value={category} onChange={e => setCategory(e.target.value)}><option value="">All categories</option>{CATEGORIES.map(item => <option key={item}>{item}</option>)}</select></Field>
+            <Field label="Condition"><select style={ui.input} value={condition} onChange={e => setCondition(e.target.value)}><option value="">Any condition</option>{CONDITIONS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></Field>
+            <Field label="Campus / area"><input style={ui.input} value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Kahawa, KU" /></Field>
+            <Field label="Sort by"><select style={ui.input} value={sort} onChange={e => setSort(e.target.value)}><option value="newest">Newest</option><option value="price_low">Price: low to high</option><option value="price_high">Price: high to low</option></select></Field>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
+            <span aria-live="polite" style={{ color: 'var(--prepza-generation-muted, #596579)', fontSize: 11 }}>{hasActiveFilters ? 'Filters applied' : 'Refine your search'}</span>
+            {hasActiveFilters && <button type="button" aria-label="Clear all active filters" onClick={clearFilters} style={{ ...ui.button, ...ui.secondary, minHeight: 44, fontSize: 12 }}>Clear filters</button>}
+          </div>
+        </section>
         {loading ? <div aria-label="Loading listings" aria-busy={loading} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(155px,1fr))', gap: 12 }}>{Array.from({ length: 4 }, (_, index) => <div key={index} style={{ ...ui.panel, padding: 0, overflow: 'hidden' }}><div style={{ height: 148, background: 'var(--prepza-generation-border, #E1E5ED)' }} /><div style={{ padding: 12 }}><div style={{ height: 16, width: '38%', borderRadius: 6, background: 'var(--prepza-generation-border, #E1E5ED)', marginBottom: 9 }} /><div style={{ height: 12, width: '82%', borderRadius: 6, background: 'var(--prepza-generation-border, #E1E5ED)' }} /></div></div>)}</div> : listings.length ? <div aria-busy={loading} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(155px,1fr))', gap: 12 }}>{listings.map(item => card(item))}</div> : <div style={{ ...ui.panel, textAlign: 'center', padding: 18 }}><div style={{ fontSize: 17, fontWeight: 900 }}>{hasActiveFilters ? 'No listings match these filters' : 'No listings yet'}</div><p style={{ color: 'var(--prepza-generation-muted, #596579)', fontSize: 12, lineHeight: 1.4, margin: '6px 0 0' }}>{hasActiveFilters ? 'Clear filters to see all listings, or try a different search.' : 'Use Sell an item above to post.'}</p>{hasActiveFilters && <div style={{ marginTop: 12 }}><ShopButton secondary onClick={clearFilters}>Clear filters</ShopButton></div>}</div>}
       </>}
 
