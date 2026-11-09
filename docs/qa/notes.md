@@ -2313,3 +2313,7 @@ After inspecting the new phone-small screenshot, a follow-up was made for fixed 
 ### Bottom-nav clearance Frontend Build
 
 Frontend Build `42596828203` passed on code head `d1a5fd8adb49aff443f7578d861b5cf7c7014d65`: 114 source/transform contracts, 5 offline Library tests, audits, TypeScript and production build. The responsive browser run `42596828231` is queued to verify the safe-area-aware scroll padding and the seller submit action above the fixed nav.
+
+### Bottom-nav assertion harness correction
+
+Run `42596828231` captured the Shop form with Save & publish above the fixed bottom navigation on phone-small. The check then raised `KeyError: 'bottom'` because Playwright bounding boxes expose `y` and `height`, not `top` and `bottom`. The script now compares `y + height` to the nav's `y`; the next run on code head `76fcff95c025536ab5e7f6270184d411d92271bd` must pass before this is closed.
