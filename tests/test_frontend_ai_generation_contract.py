@@ -32,9 +32,16 @@ def test_backend_generation_routes_and_payload_keys_match_contract():
 
 
 def test_active_frontend_generation_contract_matches_backend():
-    app_source = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
-    study_source = Path("frontend/src/screens/study/GeneratedStudyScreens.tsx").read_text(encoding="utf-8")
-    source = app_source + "\n" + study_source
+    # Screen extraction deliberately moves generation calls out of App.tsx.
+    source = "\n".join(
+        Path(path).read_text(encoding="utf-8")
+        for path in (
+            "frontend/src/App.tsx",
+            "frontend/src/screens/study/GeneratedStudyScreens.tsx",
+            "frontend/src/generation/GenerationScreens.tsx",
+            "frontend/src/generation/StudyGenerationScreensClean.tsx",
+        )
+    )
 
     expected_paths = {
         "/documents/${activeDocumentId}/summarize": "summary",
@@ -181,8 +188,10 @@ def test_generation_ui_transform_targets_the_current_legacy_podcast_section():
     script = Path("tools/apply_generation_ui_build.py").read_text(encoding="utf-8")
     app = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
     study = Path("frontend/src/screens/study/GeneratedStudyScreens.tsx").read_text(encoding="utf-8")
-    assert "('// ─── FLASHCARDS', '// ─── SUMMARY'" in script
-    assert "start_marker == '// ─── FLASHCARDS' and end_marker == '// ─── QUIZ'" in script
+    assert "('// ─── PODCAST PLAYER', '// ─── SUMMARY'" in script
+    assert "aliases = ('// ─── FLASHCARDS',) if start_marker == '// ─── PODCAST PLAYER' else ()" in script
+    assert "is_study_flashcards = end_marker == '// ─── QUIZ'" in script
+    assert ("// ─── PODCAST PLAYER" in app) or ("// ─── FLASHCARDS" in app)
     assert "// ─── FLASHCARDS" in study
     assert "function FlashcardsScreen(" in study
     assert "function PodcastPlayerScreen(" in app
