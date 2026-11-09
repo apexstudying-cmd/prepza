@@ -228,3 +228,5 @@ DocReadyScreen now lives in frontend/src/screens/study/DocReadyScreen.tsx (73 li
 The public shell route move from the former PR #76 branch has been applied to the consolidated frontend integration branch. `public_shell_routes.py` registers `/`, `/sw.js`, and `/health` with explicit dependencies; `app.py` retains the global Flask entry point and registers the module after `track_last_active` and before academic catalog routes. Added focused test-client contracts cover original paths/methods/endpoint names, index serving, service-worker MIME/cache headers, health SQL probe and safe sweep, limiter exemption, and the 503 failure response.
 
 The combined-head CI run is pending. No pass is claimed yet for the public-shell route contract, backend shared-extension contract, frontend production build, or full release browser/cross-system regression. StudyHub Library Flow remains conditional and a skipped run is not counted as a pass.
+
+PR #76 is now closed as superseded, not merged. Its implementation is represented in consolidated PR #77; all verification claims must refer to the final combined PR #77 head.
