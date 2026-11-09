@@ -92,3 +92,25 @@ def test_library_academic_context_transform_accepts_extracted_canonical_state_an
     )
     assert second.returncode == 0, second.stdout + second.stderr
     assert app.read_text(encoding="utf-8") == transformed
+
+
+def test_admin_platform_is_owned_by_a_dedicated_admin_module_without_changing_route_keys():
+    app = (ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+    module_path = ROOT / "frontend" / "src" / "admin" / "AdminPlatform.tsx"
+    assert module_path.exists(), "Admin UI should be owned by the admin feature module"
+    module = module_path.read_text(encoding="utf-8")
+
+    assert "import AdminPlatform from './admin/AdminPlatform'" in app
+    assert "function AdminSection(" not in app
+    assert "function AdminPlatform(" not in app
+    assert "function AdminSection(" in module
+    assert "function AdminPlatform(" in module
+
+    for section in (
+        "dashboard", "users", "content", "ai-usage", "b2b-finance",
+        "payments", "moderation", "analytics", "operations", "system",
+        "settings", "groups", "ambassadors", "communications",
+        "opportunities", "promotions", "organisations", "universities",
+        "community",
+    ):
+        assert f"'{section}'" in module, f"Existing admin section key {section!r} must remain"
