@@ -1,6 +1,7 @@
 from pathlib import Path
 
 APP = Path('frontend/src/App.tsx')
+HUB_MODULE = Path('frontend/src/screens/study/DocumentStudyHubScreen.tsx')
 API = Path('frontend/src/lib/appApi.ts')
 
 
@@ -93,20 +94,27 @@ def patch_api_gate(s):
 def main():
     s = APP.read_text()
     api_source = API.read_text()
-    s = patch_study_hub(s)
+    hub_source = None
+    if HUB_MODULE.exists():
+        hub_source = patch_study_hub(HUB_MODULE.read_text(encoding='utf-8'))
+    else:
+        s = patch_study_hub(s)
     s = patch_native_reader(s)
     api_source = patch_offline_reading_gate(api_source)
+    verified_source = s + (hub_source or '')
     required = [
         'const [readingPage, setReadingPage] = useState(0)',
         'const [readerUserId, setReaderUserId] = useState<number | null>(null)',
         'prepza-reading-progress:',
     ]
-    missing = [marker for marker in required if marker not in s and marker != 'prepza-reading-progress:']
+    missing = [marker for marker in required if marker not in verified_source and marker != 'prepza-reading-progress:']
     if missing:
         raise SystemExit(f'document study progress verification failed: {missing}')
     if 'prepza-reading-progress:' not in api_source:
         raise SystemExit('document study progress API verification failed: offline reading progress route missing')
     APP.write_text(s)
+    if hub_source is not None:
+        HUB_MODULE.write_text(hub_source, encoding='utf-8')
     API.write_text(api_source)
     print('document study progress patch applied and verified.')
 
