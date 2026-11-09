@@ -173,10 +173,11 @@ def main() -> int:
                         # not just the Home shortcut's presence.
                         shop_button = page.get_by_role("button", name="Shop").first
                         shop_button.click(timeout=5000)
+                        page.get_by_text("Find useful things near campus", exact=True).wait_for(timeout=10000)
                         page.get_by_text(
-                            "Find useful things near campus. Connect directly with sellers.",
+                            "Connect directly with sellers. Prepza does not process buyer purchases.",
                             exact=True,
-                        ).wait_for(timeout=10000)
+                        ).wait_for(timeout=5000)
                         page.get_by_text("QA cached listing", exact=True).wait_for(timeout=5000)
                         shop_dimensions = page.evaluate(
                             """() => ({
@@ -197,7 +198,7 @@ def main() -> int:
 
                         # Prove an older same-query snapshot is shown while revalidation
                         # runs, and remains visible with a clear stale notice when offline.
-                        page.get_by_role("button", name="‹ Home").click(timeout=5000)
+                        page.get_by_role("button", name="Back to Home").click(timeout=5000)
                         page.get_by_role("navigation", name="Primary navigation").wait_for(state="visible", timeout=5000)
                         page.evaluate(
                             """() => {
@@ -248,8 +249,8 @@ def main() -> int:
                             full_page=True,
                             animations="disabled",
                         )
-                        page.get_by_role("button", name="‹ Back").click(timeout=5000)
-                        page.get_by_role("button", name="‹ Home").click(timeout=5000)
+                        page.get_by_role("button", name="Back to Shop").click(timeout=5000)
+                        page.get_by_role("button", name="Back to Home").click(timeout=5000)
                         page.get_by_role("navigation", name="Primary navigation").wait_for(state="visible", timeout=5000)
 
                         if page_errors:
