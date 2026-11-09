@@ -302,3 +302,7 @@ Release Browser run `42596828231` reached the updated responsive Shop flow and c
 ### Playwright bounds correction Frontend Build
 
 Frontend Build [run 42597710544](https://github.com/apexstudying-cmd/prepza/actions/runs/42597710544) passed on code head `76fcff95c025536ab5e7f6270184d411d92271bd`: 114 frontend/source-contract tests, 5 offline Library tests, audits, TypeScript, service-worker validation and production build. This validates the code and corrected test syntax; the responsive browser check is still pending in Release Browser run `42597710733`.
+
+### Bottom-nav clearance responsive pass — code head `76fcff95c025536ab5e7f6270184d411d92271bd`
+
+Release Browser run [42597710733](https://github.com/apexstudying-cmd/prepza/actions/runs/42597710733) passed the phone-small, phone-standard and tablet-portrait responsive browser step. The corrected Playwright assertion completed on all three viewports and confirmed the listing editor's `Save & publish` action can be scrolled fully above the fixed global navigation. Production image build, disposable PostgreSQL/Redis startup, Alembic migration and controlled migration-ledger checks also passed. B2B metering, full disposable PostgreSQL QA and online/offline generated-artifact journeys remained in progress at this update.
