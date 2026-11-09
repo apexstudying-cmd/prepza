@@ -58,12 +58,22 @@ The shared extension boundary now exists in `extensions.py`. Continue model extr
 
 ### Frontend largest remaining screen areas
 
-The current `App.tsx` scan shows these large declarations still embedded in the app shell:
+The current `App.tsx` composition root is 5,323 lines at the 9 November 2026 admin extraction head. The admin feature is no longer embedded in `App.tsx`; it now has explicit ownership boundaries:
+
+| Admin module | Approximate lines | Responsibility |
+|---|---:|---|
+| `admin/AdminPlatform.tsx` | 118 | Platform shell, navigation groups, section routing, payment display metadata |
+| `admin/AdminSection.tsx` | 1,921 | Main stateful admin sections and existing API/loading/mutation workflows |
+| `admin/AdminPanels.tsx` | 1,251 | Independent ambassador, opportunity, promotion, organisation, group, university and community panels |
+| `admin/AdminShared.tsx` | 323 | Shared admin response types and presentation primitives |
+
+The admin extraction moved the existing implementation out of the app shell rather than deleting functionality: `App.tsx` fell from 8,903 to 5,323 lines (3,580 lines / 40.2% smaller) at the tested code head. The central `AdminSection.tsx` remains a large state owner; splitting its remaining tabs further is a follow-up that must preserve mount/lifecycle behavior, server-side permissions, route keys and CSRF/API contracts.
+
+Other large declarations still embedded in the app shell include:
 
 | Declaration | Approximate lines | Refactor priority |
 |---|---:|---|
-| `AdminSection` | 1,961 | High; split by admin domain after mapping state and permissions |
-| `App` composition root | 538 | High; move navigation state/history into `app/navigation/` behind storage/history contract tests, leaving providers and route composition in `App` |
+| `App` composition root / navigation state | 538 | High; move navigation state/history into `app/navigation/` behind storage/history contract tests, leaving providers and route composition in `App` |
 | `GroupDetailScreen` | Extracted in PR #62 | Existing 417-line screen body moved verbatim; app-shell feedback components passed as props |
 | `FollowListScreen` + `FollowRequestsScreen` | Extracted in PR #64 (merged) | Existing follower/following and request screens moved to one social module; existing state and request flows retained |
 | `ChatDetailScreen` | 406 | High; extract only after mapping E2EE, realtime and message-state dependencies |
