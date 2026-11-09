@@ -2321,3 +2321,7 @@ Run `42596828231` captured the Shop form with Save & publish above the fixed bot
 ### Playwright bounds correction Frontend Build
 
 Frontend Build `42597710544` passed on code head `76fcff95c025536ab5e7f6270184d411d92271bd`: 114 source/transform contracts, 5 offline Library tests, audits, TypeScript and production build. The corrected responsive browser assertion remains pending in Release Browser `42597710733`.
+
+### Bottom-nav clearance responsive pass
+
+Release Browser `42597710733` passed phone-small, phone-standard and tablet-portrait. The corrected bounding-box assertion passed for the Shop form's Save & publish action above the fixed global nav on all three viewport profiles. Image build, disposable database startup and migration checks passed; B2B, full PostgreSQL QA and generated-artifact browser journeys remained in progress.
