@@ -45,8 +45,13 @@ def test_shop_navigation_and_listing_loading_reserve_accessible_touch_targets():
     assert "minHeight: 44" in source[nav_start:nav_end]
     assert 'aria-busy={loading}' in source
     assert "aria-label=\"Loading listings\"" in source
-    assert "minHeight: 44" in source[source.index("const card ="):source.index("\n\n  if (loading")]
     assert "minHeight: 44" in source[source.index("function ShopButton"):source.index("function Field")]
+    header_start = source.index("<header style={{ ...ui.header")
+    header_end = source.index("</header>", header_start)
+    header = source[header_start:header_end]
+    assert "width: 44" in header
+    assert "height: 44" in header
+    assert "Back to Home" in header and "Back to Shop" in header
     assert "page !== 'browse'" in source[source.index("if (loading && !listings.length"):source.index("  return <div style={ui.root}")]
     assert "if (!cached) setLoading(true)" in source
     assert "setLoading(false)" in source[source.index("const loadBrowse = async"):source.index("  const loadMine")]
