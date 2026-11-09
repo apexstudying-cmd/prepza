@@ -51,9 +51,15 @@ jobs:
         run: |
           cp app.py /tmp/app.after
           cp frontend/src/App.tsx /tmp/App.after
+          if [ -f frontend/src/admin/AdminPlatform.tsx ]; then
+            cp frontend/src/admin/AdminPlatform.tsx /tmp/AdminPlatform.after
+          fi
           python3 scripts/apply_prepza_control.py
           cmp app.py /tmp/app.after
           cmp frontend/src/App.tsx /tmp/App.after
+          if [ -f /tmp/AdminPlatform.after ]; then
+            cmp frontend/src/admin/AdminPlatform.tsx /tmp/AdminPlatform.after
+          fi
 
       - name: Verify control API security anchors
         run: |
@@ -61,8 +67,13 @@ jobs:
           grep -q 'prepza_control_enabled' prepza_control.py
           grep -q 'hmac.compare_digest' prepza_control.py
           grep -q 'CONTROL_SETTING_KEY' prepza_control.py
-          grep -q 'Disable Control Access' frontend/src/App.tsx
-          grep -q 'Enable Control Access' frontend/src/App.tsx
+          if [ -f frontend/src/admin/AdminPlatform.tsx ]; then
+            ADMIN_UI=frontend/src/admin/AdminPlatform.tsx
+          else
+            ADMIN_UI=frontend/src/App.tsx
+          fi
+          grep -q 'Disable Control Access' "$ADMIN_UI"
+          grep -q 'Enable Control Access' "$ADMIN_UI"
           grep -q 'MCP_ACCESS_TOKEN' control-mcp/server.py
           grep -q 'TransportSecuritySettings' control-mcp/server.py
           grep -q 'prepza_document_materials' control-mcp/server.py
@@ -76,6 +87,6 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add app.py frontend/src/App.tsx
+          git add app.py frontend/src/App.tsx frontend/src/admin/
           git commit -m 'feat: wire Prepza control API and admin kill switch'
           git push
