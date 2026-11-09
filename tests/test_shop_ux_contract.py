@@ -90,6 +90,7 @@ def test_mobile_browse_keeps_search_visible_and_collapses_secondary_filters():
     assert 'className="shop-filter-toggle"' in source
     assert "aria-expanded={filtersExpanded}" in source
     assert 'aria-controls="shop-additional-filters"' in source
-    assert ".shop-filter-grid { display: none; }" in stylesheet
-    assert ".shop-filter-grid.is-expanded { display: grid; }" in stylesheet
+    compact_stylesheet = " ".join(stylesheet.split())
+    assert ".shop-filter-grid { display: none; }" in compact_stylesheet
+    assert ".shop-filter-grid.is-expanded { display: grid; }" in compact_stylesheet
     assert "@media (min-width: 640px)" in stylesheet
