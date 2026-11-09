@@ -1,6 +1,6 @@
 # Prepza — Persistent Engineering Execution Tracker
 
-Last updated: 2026-11-05
+Last updated: 2026-11-09
 Branch: `main`; PR #62 merged as `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`; PR #64 merged as `7b0e9301543beabc5dee02af2388983737bada5c`; PR #65 Login extraction squash-merged as `222b4011c40ddadaae3bdcf331022b79a78f5926` after the documentation-complete CI run passed.
 
 Status:
@@ -859,16 +859,20 @@ PR #77 is intentionally one consolidated review rather than separate PRs for eac
 - [ ] Full Release Browser/Cross-System Regression [42036938563](https://github.com/apexstudying-cmd/prepza/actions/runs/42036938563) and remaining contract/security workflows are queued on this code head; wait for all before merge.
 
 
-## 2026-11-09 — Consolidated frontend and public-shell extraction (PR #77; verification pending)
+## 2026-11-09 — Consolidated frontend and public-shell extraction (PR #77; historical pre-verification snapshot)
 
 The active integration branch now also carries the public application-shell route extraction that had been developed separately in PR #76. The root document (`/`), root-scoped service worker (`/sw.js`), and process-health (`/health`) handlers are registered through `public_shell_routes.py`; `app.py` injects the existing Flask app, shared database extension, limiter, and safe opportunity-expiry callback. Route paths, endpoint names, methods, service-worker content/cache headers, health SQL probe, limiter exemption, sweep side effect, and response bodies are protected by focused Flask test-client contracts. No app factory, ORM model, middleware, schema, or migration change is included.
 
-The public-shell code and contract tests are now consolidated into PR #77 rather than requiring a separate backend PR. CI verification for this combined head is pending. Do not mark this extraction verified or merge until the backend route contracts, shared-extension contract, frontend build, full release browser/cross-system regression, and remaining required checks pass. PR #76 has been closed as superseded after its source, tests, and workflow were integrated into this branch; it was not merged. Combined-head verification remains pending.
+The public-shell code and contract tests are consolidated into PR #77. This paragraph records the state before final CI completed; it is superseded by the exact-head verification closeout below. PR #76 was closed as superseded after its source, tests, and workflow were integrated into PR #77; PR #76 was not merged.
 
 The frontend extraction remains incremental: continue mapping high-coupling screens and app-shell ownership before moving them. Preserve existing component bodies, route dispatch, parent-owned state, API contracts, and behavior; do not redesign or rewrite screens.
 
 ## 2026-11-09 — Consolidated refactor verification closeout
 
-Verified against the exact PR #77 head `95f4004c734777e9cda88f8ae4fbbcd72c0d503a` (base `main` at `459c96cd7179810499edbec266e1f5deab3f9d4c`). The final combined-head GitHub Actions checks completed successfully: Frontend Build; Study Navigation Polish; Student Frontend and Student Contract; Admin Route Contract; Prepza Control API; Backend Shared Extension Contract; Academic Catalog Route Contract; Public Shell Route Contract; B2B Contract Validation; AI Generation Architecture and AI Economics; E2EE Chat Validation and E2EE Security Regression; Study Hub Runtime Regression; and Release Browser/Cross-System Regression. The full release workflow passed its production image build, disposable PostgreSQL/Redis startup, Alembic migrations and controlled migration-ledger checks, mobile/tablet browser checks, B2B browser-to-ledger metering regression, full disposable PostgreSQL QA, online/offline and generated-artifact browser journeys, screenshot upload, and service cleanup. No failed steps were reported. StudyHub Library Flow was skipped by its workflow conditions and is not counted as a pass.
+Verified against the exact PR #77 head `b37cad55f3fb6e389dead1d4ca19df2f31265674` (base `main` at `459c96cd7179810499edbec266e1f5deab3f9d4c`). PR #77 contains 30 changed files (+2,191/−1,236 lines) and remains open, unmerged, and mergeable. On this exact head, 15 GitHub Actions workflows passed: Frontend Build; Study Navigation Polish; Student Frontend Contract; Student Contract Validation; Admin Route Contract; Prepza Control API; Backend Shared Extension Contract; Backend Academic Catalog Route Contract; B2B Contract Validation; AI Generation Architecture; AI Economics Validation; E2EE Chat Validation; E2EE Security Regression; Study Hub Runtime Regression; Kokoro GPU Worker Validation; and Release Browser and Cross-System Regression. (The workflow inventory contains 15 successful runs plus one skipped run.)
 
-The earlier entries below that say the combined-head checks are pending are historical snapshots and are superseded by this exact-head closeout. PR #77 remains open and unmerged; this verifies the refactor on the integration branch, not deployment or a production release. Do not claim that `main` contains these changes until PR #77 is merged.
+Release Browser and Cross-System Regression [run 42581515451](https://github.com/apexstudying-cmd/prepza/actions/runs/42581515451) passed on this exact SHA: production image build; disposable PostgreSQL/Redis startup; Alembic migrations and controlled migration-ledger checks; app startup; mobile/tablet responsive browser checks; B2B browser-to-ledger metering regression; full disposable PostgreSQL QA; online/offline and generated-artifact browser journeys; responsive screenshot upload; and service cleanup. The separate StudyHub Library Flow [run 42581515401](https://github.com/apexstudying-cmd/prepza/actions/runs/42581515401) was skipped by workflow conditions and is not counted as a pass. The failure-log collection step was skipped because the job succeeded.
+
+At this exact PR head, `frontend/src/App.tsx` is 10,745 lines and `app.py` is 10,139 lines. This is a structural refactor, not completion of all repository modularization: both root files remain substantial and further bounded extraction can continue later. No production deployment, live provider verification, or production-database migration is implied by these CI results.
+
+PR #77 remains open and unmerged. These checks verify the integration branch only; `main` does not contain these changes until the PR is merged. Do not merge without the user's explicit approval.
