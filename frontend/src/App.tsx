@@ -8666,6 +8666,25 @@ function AdminPlatform({ onExit }: { onExit: () => void }) {
 // Follows this file's existing per-screen CSRF pattern (fetch /me once on
 // mount, store csrf_token in local state, attach it to mutating calls).
 
+function readStoredNavigationState(): {
+  stack: Screen[]
+  activeConversationId: number | null
+  activeDocumentId: number | null
+  activeGroupId: number | null
+  activeProfileUserId: number | null
+  activeOpportunityId: number | null
+} | null {
+  try {
+    const raw = sessionStorage.getItem('prepza-navigation-state')
+    if (!raw) return null
+    const value = JSON.parse(raw)
+    if (!value || !Array.isArray(value.stack) || value.stack.length === 0) return null
+    return value
+  } catch {
+    return null
+  }
+}
+
 export default function App() {
   const storedNavigation = readStoredNavigationState()
   // Real navigation history instead of a flat useState<Screen>. setScreen(x)
