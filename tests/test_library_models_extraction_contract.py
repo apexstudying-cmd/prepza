@@ -34,3 +34,13 @@ def test_app_reexports_library_models_for_legacy_imports():
     assert expected_import in source
     for name in ("LibraryPublication", "SavedLibraryMaterial", "LibraryReport"):
         assert f"class {name}(db.Model):" not in source
+
+
+def test_library_prebuild_transforms_follow_the_extracted_model_owner():
+    root = Path(__file__).resolve().parents[1]
+    academic = (root / "tools" / "apply_library_academic_context.py").read_text(encoding="utf-8")
+    eligibility = (root / "tools" / "apply_library_exact_academic_eligibility.py").read_text(encoding="utf-8")
+    assert 'LIBRARY_MODELS = ROOT / "library_models.py"' in academic
+    assert 'library_model_text = LIBRARY_MODELS.read_text(encoding="utf-8")' in academic
+    assert 'LIBRARY_MODELS = ROOT / "library_models.py"' in eligibility
+    assert 'library_model = LIBRARY_MODELS.read_text(encoding="utf-8")' in eligibility
