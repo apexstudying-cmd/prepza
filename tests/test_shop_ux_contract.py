@@ -94,3 +94,13 @@ def test_mobile_browse_keeps_search_visible_and_collapses_secondary_filters():
     assert ".shop-filter-grid { display: none; }" in compact_stylesheet
     assert ".shop-filter-grid.is-expanded { display: grid; }" in compact_stylesheet
     assert "@media (min-width: 640px)" in stylesheet
+
+def test_shop_scroll_content_clears_the_fixed_global_bottom_navigation():
+    source = SHOP_SCREEN.read_text(encoding="utf-8")
+    wrap_start = source.index("  wrap: {")
+    wrap_end = source.index("\n  button:", wrap_start)
+    wrap_style = source[wrap_start:wrap_end]
+
+    assert "paddingBottom" in wrap_style
+    assert "safe-area-inset-bottom" in wrap_style
+
