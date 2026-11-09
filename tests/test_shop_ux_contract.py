@@ -26,7 +26,8 @@ def test_browse_filters_have_one_tap_clear_and_visible_active_state():
     assert "setCondition('')" in source
     assert "setLocation('')" in source
     assert "Clear filters" in source
-    assert "aria-pressed={hasActiveFilters}" in source
+    assert 'aria-live="polite"' in source
+    assert "{hasActiveFilters ? 'Filters applied' : 'Refine your search'}" in source
 
 
 def test_filtered_empty_state_explains_how_to_recover():
