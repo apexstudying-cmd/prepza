@@ -857,3 +857,12 @@ PR #77 is intentionally one consolidated review rather than separate PRs for eac
 - [x] Add source contracts for document detail loading/error handling, metadata labels, all seven existing action destinations, and the existing header.
 - [x] Frontend Build [42036938429](https://github.com/apexstudying-cmd/prepza/actions/runs/42036938429) passed on code head 74b8fac: 90 frontend source/module contract tests, 5 offline Library tests, TypeScript, service-worker validation, production build, architecture audits and launch-wiring verification.
 - [ ] Full Release Browser/Cross-System Regression [42036938563](https://github.com/apexstudying-cmd/prepza/actions/runs/42036938563) and remaining contract/security workflows are queued on this code head; wait for all before merge.
+
+
+## 2026-11-09 — Consolidated frontend and public-shell extraction (PR #77; verification pending)
+
+The active integration branch now also carries the public application-shell route extraction that had been developed separately in PR #76. The root document (`/`), root-scoped service worker (`/sw.js`), and process-health (`/health`) handlers are registered through `public_shell_routes.py`; `app.py` injects the existing Flask app, shared database extension, limiter, and safe opportunity-expiry callback. Route paths, endpoint names, methods, service-worker content/cache headers, health SQL probe, limiter exemption, sweep side effect, and response bodies are protected by focused Flask test-client contracts. No app factory, ORM model, middleware, schema, or migration change is included.
+
+The public-shell code and contract tests are now consolidated into PR #77 rather than requiring a separate backend PR. CI verification for this combined head is pending. Do not mark this extraction verified or merge until the backend route contracts, shared-extension contract, frontend build, full release browser/cross-system regression, and remaining required checks pass. The prior PR #76 branch is superseded by this consolidated integration and should be closed only after the combined checks are reviewed.
+
+The frontend extraction remains incremental: continue mapping high-coupling screens and app-shell ownership before moving them. Preserve existing component bodies, route dispatch, parent-owned state, API contracts, and behavior; do not redesign or rewrite screens.
