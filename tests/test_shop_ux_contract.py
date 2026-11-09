@@ -74,3 +74,9 @@ def test_listing_editor_uses_native_form_validation_and_single_submit_path():
     assert "required" in editor
     assert "Save & publish" in editor
 
+def test_listing_grids_expand_single_results_instead_of_leaving_empty_columns():
+    source = SHOP_SCREEN.read_text(encoding="utf-8")
+
+    assert source.count("repeat(auto-fit,minmax(155px,1fr))") == 4
+    assert "repeat(auto-fill,minmax(155px,1fr))" not in source
+
