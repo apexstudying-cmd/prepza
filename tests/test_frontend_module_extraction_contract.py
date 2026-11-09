@@ -757,3 +757,30 @@ def test_opportunity_metadata_helpers_are_shared_by_the_app_and_extracted_screen
     assert "export const OPP_TYPE_META" in library
     assert "export function oppTypeMeta" in library
     assert "export function fmtDeadline" in library
+
+
+def test_flashcards_and_quiz_are_owned_by_the_generated_study_module():
+    assert "import { FlashcardsStudyScreen, QuizStudyScreen } from './screens/study/GeneratedStudyScreens'" in APP
+    assert "function FlashcardsScreen(" not in APP
+    assert "function QuizScreen(" not in APP
+    assert "case 'flashcards':" in APP
+    assert "case 'quiz':" in APP
+
+
+def test_generated_study_screens_keep_offline_generation_and_completion_contracts():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "study" /
+        "GeneratedStudyScreens.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "'/study-time/heartbeat'",
+        "'flashcards'",
+        "'quiz'",
+        "replaySelectedGeneratedMaterialOffline",
+        "getLatestGeneratedMaterialForPath",
+        "/complete",
+        "'X-CSRF-Token': csrfToken",
+        "newly_unlocked_achievements",
+        "setScreen('document-study')",
+    ):
+        assert contract in source
