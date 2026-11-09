@@ -735,3 +735,10 @@ def test_opportunity_response_types_are_shared_outside_the_app_shell():
         "opportunity: OpportunityPublic",
     ):
         assert contract in source
+
+
+def test_unused_legacy_organisation_portal_is_removed_without_changing_active_portal():
+    assert "function OrganisationPortalScreen(" not in APP
+    assert "import OrgDiscoveryTab from './organisation/OrgDiscoveryTab'" not in APP
+    assert "import PremiumOrganisationPortal from './organisation/PremiumOrganisationPortal'" in APP
+    assert "if (orgPortalMode) return <PremiumOrganisationPortal onExit={() => setOrgPortalMode(false)} />" in APP
