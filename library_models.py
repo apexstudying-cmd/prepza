@@ -64,9 +64,3 @@ class LibraryReport(db.Model):
     admin_notes = db.Column(db.String(500), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-
-from study_models import (
-    XpEvent, StudyStreak, StudyActivityLog, StudyTimeLog,
-    QuizAttempt, FlashcardSession, UserAchievement, AiUsageLog,
-    STUDY_TIME_FEATURES,
-)
