@@ -669,8 +669,10 @@ def test_document_study_hub_preserves_online_offline_reading_and_material_replay
         "setScreen('ai-tutor')",
         "setSaveOfflineBusy",
         "setReadingPage",
+        "as DocumentStudyHubScreenTarget",
     ):
         assert contract in source
+    assert "as Screen" not in source
 
 
 def test_study_navigation_transform_and_ci_guard_follow_the_extracted_hub_module():
