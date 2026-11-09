@@ -1,5 +1,5 @@
-type OpportunityOrg = { id: number; name: string; logo_url: string | null; website: string | null }
-type OpportunityPublic = {
+export type OpportunityOrg = { id: number; name: string; logo_url: string | null; website: string | null }
+export type OpportunityPublic = {
   id: number
   title: string
   description: string
@@ -17,7 +17,7 @@ type OpportunityPublic = {
   saved: boolean
 }
 
-type SponsoredCampaign = {
+export type SponsoredCampaign = {
   campaign_id: number
   organisation_id: number
   opportunity_id: number | null
