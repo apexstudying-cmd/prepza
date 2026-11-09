@@ -338,6 +338,7 @@ function QuizScreen({ setScreen, activeDocumentId, GenerationLoading, Generation
 
 // ─── PODCAST PLAYER ───────────────────────────────────────────────────────────
 
+// ─── EXPORTED STUDY SCREEN BOUNDARIES ────────────────────────────────────────
 export function FlashcardsStudyScreen(props: StudyMaterialScreensProps) {
   return <FlashcardsScreen {...props} />
 }
