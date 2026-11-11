@@ -9,7 +9,8 @@ runpy.run_path(str(ROOT / 'tools' / 'apply_study_generation_polish.py'))
 APP = ROOT / 'frontend' / 'src' / 'App.tsx'
 GEN = ROOT / 'frontend' / 'src' / 'generation' / 'GenerationScreens.tsx'
 STUDY = ROOT / 'frontend' / 'src' / 'screens' / 'study' / 'GeneratedStudyScreens.tsx'
-IMPORT = "import { PodcastGenerationScreen, FlashcardsGenerationScreen, SummaryGenerationScreen } from './generation/GenerationScreens'\n"
+PLAYER = ROOT / 'frontend' / 'src' / 'screens' / 'podcast' / 'PodcastPlayerScreen.tsx'
+IMPORT = "import { FlashcardsGenerationScreen, SummaryGenerationScreen } from './generation/GenerationScreens'\n"
 STUDY_IMPORT = "import { PracticeQuestionsGenerationScreen, MindMapGenerationScreen } from './generation/StudyGenerationScreensClean'\n"
 GENERATED_STUDY_IMPORT = "import { FlashcardsGenerationScreen } from '../../generation/GenerationScreens'\nimport { PracticeQuestionsGenerationScreen } from '../../generation/StudyGenerationScreensClean'\n"
 
@@ -70,12 +71,6 @@ base_style = "colorScheme: 'var(--prepza-generation-color-scheme, light)', flex:
 text = text.replace(base_style, scroll_style)
 
 replacements = [
-    ('// ─── PODCAST PLAYER', '// ─── SUMMARY', '''// ─── PODCAST PLAYER
-function PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
-  return <div style={{ colorScheme: 'var(--prepza-generation-color-scheme, light)', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><PodcastGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
-}
-
-'''),
     ('// ─── FLASHCARDS', '// ─── QUIZ', '''// ─── FLASHCARDS
 function FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: StudyMaterialScreenTarget) => void; activeDocumentId: number | null }) {
   return <div style={{ colorScheme: 'var(--prepza-generation-color-scheme, light)', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><FlashcardsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
@@ -178,6 +173,14 @@ text = text.replace('Opening document', '')
 
 if 'function ExploreScreen(' in original_text and 'function ExploreScreen(' not in text:
     raise SystemExit('generation UI transformation removed the ExploreScreen component definition')
+
+player_wrapper = '''import { PodcastGenerationScreen } from '../../generation/GenerationScreens'
+
+export default function PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (screen: any) => void; activeDocumentId: number | null }) {
+  return <div style={{ colorScheme: 'var(--prepza-generation-color-scheme, light)', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><PodcastGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
+}
+'''
+PLAYER.write_text(player_wrapper, encoding='utf-8')
 
 APP.write_text(text, encoding='utf-8')
 if study_text != original_study_text:
