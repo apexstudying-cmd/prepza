@@ -104,3 +104,24 @@ def test_shop_scroll_content_clears_the_fixed_global_bottom_navigation():
     assert "paddingBottom" in wrap_style
     assert "safe-area-inset-bottom" in wrap_style
 
+
+
+def test_shop_tabs_and_listing_cards_follow_prepza_shell_hierarchy():
+    source = SHOP_SCREEN.read_text(encoding="utf-8")
+    nav_start = source.index('<nav aria-label="Shop sections"')
+    nav_end = source.index("</nav>", nav_start)
+    nav = source[nav_start:nav_end]
+    assert "borderBottom: '1px solid rgba(255,255,255,.12)'" in nav
+    assert "background: 'transparent'" in nav
+    assert "borderRadius: 0" in nav
+    assert "minHeight: 44" in nav
+    assert "borderBottom: '2px solid '" in nav
+
+    card_start = source.index("const card =")
+    card_end = source.index("\n\n  if (loading", card_start)
+    card = source[card_start:card_end]
+    assert "borderRadius: 14" in card
+    assert "height: 124" in card
+    assert "fontSize: 16" in card
+    assert "fontSize: 13" in card
+    assert "fontSize: 11" in card
