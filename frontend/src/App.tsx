@@ -2550,14 +2550,6 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
   </div>
 }
 // ─── AI TUTOR ─────────────────────────────────────────────────────────────────
-// ─── PO>Speed</span>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ─── SUMMARY ──────────────────────────────────────────────────────────────────
 function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
   const { tokens: T } = useTheme()

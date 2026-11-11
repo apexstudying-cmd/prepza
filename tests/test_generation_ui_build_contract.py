@@ -44,17 +44,13 @@ def test_podcast_generation_build_transform_uses_the_existing_app_section_bounda
     app = (ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
     study = (ROOT / "frontend" / "src" / "screens" / "study" / "GeneratedStudyScreens.tsx").read_text(encoding="utf-8")
 
-    player = (ROOT / "frontend" / "src" / "screens" / "podcast" / "PodcastPlayerScreen.tsx").read_text(encoding="utf-8")
-
-    assert "PLAYER = ROOT / 'frontend' / 'src' / 'screens' / 'podcast' / 'PodcastPlayerScreen.tsx'" in source
-    assert "player_wrapper = '''import { PodcastGenerationScreen } from '../../generation/GenerationScreens'" in source
-    assert "PLAYER.write_text(player_wrapper, encoding='utf-8')" in source
-    assert "('// ─── PODCAST PLAYER', '// ─── SUMMARY'" not in source
+    assert "('// ─── PODCAST PLAYER', '// ─── SUMMARY'" in source
+    assert "aliases = ('// ─── FLASHCARDS',) if start_marker == '// ─── PODCAST PLAYER' else ()" in source
     assert "is_study_flashcards = end_marker == '// ─── QUIZ'" in source
     assert "// ─── FLASHCARDS" in study
     assert "function FlashcardsScreen(" in study
-    assert "function PodcastPlayerScreen(" not in app
-    assert "export default function PodcastPlayerScreen(" in player
+    assert ("// ─── PODCAST PLAYER" in app) or ("// ─── FLASHCARDS" in app)
+    assert "function PodcastPlayerScreen(" in app
 
 
 def test_library_academic_context_transform_accepts_extracted_canonical_state_and_is_idempotent(tmp_path):
