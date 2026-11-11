@@ -46,9 +46,10 @@ def test_podcast_generation_build_transform_uses_the_existing_app_section_bounda
 
     player = (ROOT / "frontend" / "src" / "screens" / "podcast" / "PodcastPlayerScreen.tsx").read_text(encoding="utf-8")
 
-    assert "PLAYER = ROOT / 'frontend' / 'src' / 'screens' / 'podcast' / 'PodcastPlayerScreen.tsx'" in source
-    assert "player_wrapper = '''import { PodcastGenerationScreen } from '../../generation/GenerationScreens'" in source
-    assert "PLAYER.write_text(player_wrapper, encoding='utf-8')" in source
+    assert "PLAYER.write_text" not in source
+    assert "PodcastPlayerScreen is an extracted feature module" in source
+    assert "setActiveOpportunityId: (id: number | null) => void" in player
+    assert "getCachedPodcastAudio(podcastAudioPath)" in player
     assert "('// ─── PODCAST PLAYER', '// ─── SUMMARY'" not in source
     assert "is_study_flashcards = end_marker == '// ─── QUIZ'" in source
     assert "// ─── FLASHCARDS" in study

@@ -12,7 +12,7 @@ def test_podcast_player_is_feature_owned_and_app_route_is_preserved():
     assert "import PodcastPlayerScreen from './screens/podcast/PodcastPlayerScreen'" in app
     assert "function PodcastPlayerScreen(" not in app
     assert ">Speed</span>" not in app
-    assert "// ─── PODCAST PLAYER" not in app
+    assert "// ─── PO" not in app
     assert "export default function PodcastPlayerScreen(" in player
     assert "case 'podcast-player':" in app
     assert "'podcast-player'" in app[app.index("const noNav"):app.index("const darkHomeIndicator")]
