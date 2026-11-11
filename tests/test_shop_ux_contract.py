@@ -121,7 +121,8 @@ def test_shop_tabs_and_listing_cards_follow_prepza_shell_hierarchy():
     card_end = source.index("\n\n  if (loading", card_start)
     card = source[card_start:card_end]
     assert "borderRadius: 14" in card
-    assert "height: 124" in card
+    assert card.count("height: 124") == 2
+    assert "height: 148" not in card
     assert "fontSize: 16" in card
     assert "fontSize: 13" in card
     assert "fontSize: 11" in card

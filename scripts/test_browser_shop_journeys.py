@@ -65,6 +65,7 @@ with app.app_context():
         **common,
         title={PENDING_APPROVE_TITLE!r},
         description="A paid listing awaiting moderator approval.",
+        image_keys=["qa-shop-fixtures/approved-listing.png"],
         status="pending_review",
     )
     reject = Listing(
@@ -98,6 +99,28 @@ with app.app_context():
     }}))
 """
     return json.loads(run_container_python(code).splitlines()[-1])
+
+
+def cleanup_shop_conversations(user_ids: list[int]) -> None:
+    # The buyer journey creates a direct chat. Remove that disposable thread
+    # before the shared fixture helper deletes its users; conversation
+    # participants have a restrictive user FK in the current schema.
+    code = f"""
+from app import app, db, Conversation, ConversationParticipant
+
+with app.app_context():
+    conversation_ids = [
+        row[0] for row in db.session.query(ConversationParticipant.conversation_id)
+        .filter(ConversationParticipant.user_id.in_({user_ids!r}))
+        .distinct().all()
+    ]
+    if conversation_ids:
+        Conversation.query.filter(Conversation.id.in_(conversation_ids)).delete(
+            synchronize_session=False
+        )
+    db.session.commit()
+"""
+    run_container_python(code)
 
 
 def open_shop(page) -> None:
@@ -246,6 +269,10 @@ def main() -> int:
         print(f"Shop browser journeys passed; seeded listing IDs: {rows}")
         return 0
     finally:
+        # Remove the buyer-created conversation before deleting the users.
+        cleanup_shop_conversations([
+            seller["user_id"], buyer["user_id"], admin["user_id"]
+        ])
         # Shop rows are owned by the fixture seller; FK cascades clean reports,
         # saved rows and listings when the disposable users are removed.
         for fixture in (seller, buyer, admin):
