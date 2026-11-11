@@ -107,6 +107,8 @@ def test_admin_platform_is_owned_by_a_dedicated_admin_module_without_changing_ro
     platform = platform_path.read_text(encoding="utf-8")
     section_module = section_path.read_text(encoding="utf-8")
     panels = panels_path.read_text(encoding="utf-8")
+    growth_panels = (admin_dir / "AdminGrowthPanels.tsx").read_text(encoding="utf-8")
+    domain_panels = (admin_dir / "AdminDomainPanels.tsx").read_text(encoding="utf-8")
     shared = shared_path.read_text(encoding="utf-8")
 
     assert "import AdminPlatform from './admin/AdminPlatform'" in app
@@ -115,12 +117,15 @@ def test_admin_platform_is_owned_by_a_dedicated_admin_module_without_changing_ro
     assert "import AdminSection from './AdminSection'" in platform
     assert "export default function AdminPlatform(" in platform
     assert "export default function AdminSection(" in section_module
-    assert "export function AdminAmbassadorsPanel(" in panels
-    assert "export function AdminCommunityPanel(" in panels
+    assert "AdminAmbassadorsPanel" in panels and "AdminGrowthPanels" in panels
+    assert "AdminCommunityPanel" in panels and "AdminDomainPanels" in panels
+    assert "export function AdminAmbassadorsPanel(" in growth_panels
+    assert "export function AdminOpportunitiesPanel(" in growth_panels
+    assert "export function AdminCommunityPanel(" in domain_panels
     assert "export function AdminCard(" in shared
     assert "export type AdminUserRow" in shared
 
-    combined = platform + section_module + panels + shared
+    combined = platform + section_module + panels + growth_panels + domain_panels + shared
     for section in (
         "dashboard", "users", "content", "ai-usage", "b2b-finance",
         "payments", "moderation", "analytics", "operations", "system",
