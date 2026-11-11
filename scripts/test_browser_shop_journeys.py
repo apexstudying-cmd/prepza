@@ -158,6 +158,17 @@ def main() -> int:
                 )
                 buyer_page.get_by_role("button", name="Save item").click(timeout=10000)
                 buyer_page.get_by_role("button", name="Saved ✓").wait_for(timeout=5000)
+                buyer_page.get_by_role("button", name="Saved", exact=True).click(timeout=5000)
+                buyer_page.get_by_text(ACTIVE_TITLE, exact=True).wait_for(timeout=10000)
+                buyer_page.screenshot(
+                    path=str(ARTIFACTS / "buyer-saved-listing.png"),
+                    full_page=True,
+                    animations="disabled",
+                )
+                buyer_page.get_by_role("button", name="Browse", exact=True).click(timeout=5000)
+                buyer_page.get_by_role(
+                    "button", name=f"Open listing: {ACTIVE_TITLE}"
+                ).click(timeout=10000)
                 buyer_page.get_by_role("button", name="Report").click(timeout=5000)
                 buyer_page.get_by_label("Reason").select_option("misleading")
                 buyer_page.get_by_label("Details (optional)").fill(
