@@ -1,7 +1,7 @@
 # Prepza Shop — End-to-End User Flow
 
 **Status:** Implementation in progress; not release-certified.
-**Last updated:** 28 October 2026.
+**Last updated:** 11 November 2026.
 **Commercial rule:** KES 100 per item per manually renewed 30-day listing period, including the first listing.
 **Payment boundary:** Prepza collects only the seller's listing fee. Buyers pay and arrange handover directly with sellers; there is no buyer checkout, cart, escrow, or seller payout flow.
 
@@ -74,3 +74,19 @@ The first remediation pass changes only the browse presentation and interactions
 The new `tests/test_shop_ux_contract.py` is included in the Frontend Build source-transform contract command. On exact PR #77 head `949530b97fea9df8557eddbd408f2c667130c511`, Frontend Build [run 43001890115](https://github.com/apexstudying-cmd/prepza/actions/runs/43001890115) and Release Browser/Cross-System Regression [run 43001889849](https://github.com/apexstudying-cmd/prepza/actions/runs/43001889849) passed. The latter passed phone-small (360x800), phone-standard (390x844), tablet-portrait (768x1024), B2B browser-to-ledger, full disposable PostgreSQL QA, and online/offline generated-artifact journeys. Twelve screenshots were uploaded in [artifact 13845874778](https://github.com/apexstudying-cmd/prepza/actions/runs/43001889849/artifacts/13845874778).
 
 The screenshots were reviewed. They establish responsive rendering and bottom-nav clearance, not a visual design sign-off. Shop still looks more like a standalone mini-app than Home: its tall navy header/section-pill navigation, smaller dense typography and large listing-card image treatment are not yet harmonized with Home's card and quick-action language. The dedicated buyer/seller/admin walkthrough (detail, create/payment, My Listings, Saved, seller contact, reporting and moderation) remains open. Live Paystack sandbox and R2 provider checks also remain separate. Keep Shop IN_PROGRESS and do not mark it release-certified.
+
+
+## 8. 11 November 2026 — visual consistency and role-based browser verification
+
+The focused visual pass replaces the former rounded section-pill row with compact underline tabs on the existing navy Shop header, preserves the 44px interaction targets, reduces browse-card image/placeholder height to 124px, and increases listing price/title/metadata legibility. It retains the Prepza navy/gold palette, existing screen routes, seller fee disclosure, buyer-direct-contact boundary and fixed global navigation. Phone-small, phone-standard and tablet-portrait screenshots were captured and inspected against Home; Shop now uses a quieter, more consistent header/tab hierarchy and familiar white card surfaces. This is a source-and-screenshot consistency pass, not a substitute for a human student usability study.
+
+A dedicated real-browser journey, `scripts/test_browser_shop_journeys.py`, now runs in the release workflow against disposable PostgreSQL:
+- **Buyer:** browse listing/detail; confirm seller contact actions; save item; open Saved and confirm the listing appears; return to Browse; report with details; start in-app contact.
+- **Seller:** open My listings; inspect an active listing; pause it; mark it sold; open the listing form and confirm the KES 100 / 30-day fee disclosure.
+- **Admin:** approve a photo-referenced pending listing; reject a second listing; resolve the buyer report; record provider-verification notes and allow retry for an ambiguous payment review.
+
+The approval fixture uses a synthetic object-key reference solely to exercise the server's moderation requirement. The browser journey does not upload to a real R2 bucket or invoke Paystack. The disposable PostgreSQL Shop suite continues to cover fee enforcement, mocked checkout/callback/idempotency, photo validation, renewal/expiry, ownership and moderation routes.
+
+**Exact PR #77 evidence:** code head `76a435d91db27ca09292e20d16c31ec2b34c9884`; Frontend Build [run 43023202179](https://github.com/apexstudying-cmd/prepza/actions/runs/43023202179); Release Browser and Cross-System Regression [run 43023202418](https://github.com/apexstudying-cmd/prepza/actions/runs/43023202418). The release job passed production-image build, migrations/ledger, responsive phone/tablet checks, all three Shop role journeys, B2B browser-to-ledger, 99 PostgreSQL tests and online/offline generated-artifact replay. Screenshot artifact: [13855748767](https://github.com/apexstudying-cmd/prepza/actions/runs/43023202418/artifacts/13855748767). Sixteen of 17 workflows succeeded; StudyHub Library Flow was skipped and is not counted as a pass.
+
+Paystack sandbox and real R2 operations/cache headers remain unverified pending safe staging credentials. Keep the Shop release gate IN_PROGRESS and the overall release BLOCKED. PR #77 remains open and unmerged; no production deployment or purchase was performed.
