@@ -446,3 +446,10 @@ Release Browser and Cross-System Regression [run 42581515451](https://github.com
 At this exact PR head, `frontend/src/App.tsx` is 10,745 lines and `app.py` is 10,139 lines. This is a structural refactor, not completion of all repository modularization: both root files remain substantial and further bounded extraction can continue later. No production deployment, live provider verification, or production-database migration is implied by these CI results.
 
 PR #77 remains open and unmerged. These checks verify the integration branch only; `main` does not contain these changes until the PR is merged. Do not merge without the user's explicit approval.
+
+
+## 2026-11-11 — Admin domain-panel split (PR #77)
+
+The 1,250-line `AdminPanels.tsx` implementation has been separated into two feature-owned modules while preserving the original component bodies and named import surface. `AdminGrowthPanels.tsx` (531 lines) owns the existing ambassador and opportunity review panels. `AdminDomainPanels.tsx` (728 lines) owns the existing promotions, organisations, groups, universities and community panels. `AdminPanels.tsx` is now a three-line compatibility barrel re-exporting the same seven component names consumed by `AdminSection.tsx`. No component state, effects, API paths, CSRF headers, route keys or mutation handlers were intentionally changed.
+
+A focused boundary contract protects the barrel exports, component ownership, file-size bounds and existing API/CSRF ownership. The legacy Admin platform ownership contract was updated to follow the re-exported modules instead of assuming every component implementation must remain in one file. Frontend Build [run 43001624586](https://github.com/apexstudying-cmd/prepza/actions/runs/43001624586) passed on code head `99796c39e81f2ed79949e9b492b31a5541de5d8b`: 120 focused source/transform tests, 5 offline Library tests, both audits, TypeScript, service-worker validation and production Vite build. The complete Release Browser/Cross-System Regression is still running at this update; do not infer its result from Frontend Build.
