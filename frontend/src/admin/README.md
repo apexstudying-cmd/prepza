@@ -9,7 +9,9 @@ The admin feature is entered through `AdminPlatform`, imported by the app shell.
 - `useAdminSectionController.ts` — owns admin state, effects, API calls, CSRF handling, loading/error state, and mutation handlers. The hook is called unconditionally by `AdminSection`, preserving state/effect lifetime across tab changes.
 - `AdminSectionCoreViews.tsx` — typed, render-only dashboard, users, Library/content, AI usage, payments, moderation, and analytics views.
 - `AdminSectionPlatformViews.tsx` — typed, render-only infrastructure/system and communications views.
-- `AdminPanels.tsx` — independent domain panels for ambassadors, opportunities, promotions, organisations, groups, universities, and community reports.
+- `AdminPanels.tsx` — compatibility barrel preserving the existing named imports used by `AdminSection.tsx`.
+- `AdminGrowthPanels.tsx` — existing ambassador and opportunity review panels (independent state/effects/API workflows).
+- `AdminDomainPanels.tsx` — existing promotion, organisation, group, university, and community panels (independent state/effects/API workflows).
 - `AdminShared.tsx` — shared admin response types and presentational primitives (`AdminCard`, `AdminKPI`, `AdminTable`, charts, and badges).
 - `B2BFinanceAdmin.tsx` and `AdminOperationsDashboard.tsx` — existing dedicated finance and operations modules.
 
@@ -36,4 +38,4 @@ The Frontend Build workflow also runs source-transform contracts, offline Librar
 
 The main admin section is split between one stateful controller and bounded render modules. View components receive a typed `Pick<AdminSectionController, ...>` rather than importing API clients or owning new effects. Keep network calls, authorization-related UI state, CSRF headers, confirmation flows and mutation ordering in the controller; keep JSX and display-only derived values in the view modules. This preserves the existing section IDs and avoids resetting parent-owned state when users switch tabs.
 
-Current extraction target sizes are kept below 1,000 lines per file: `AdminSection.tsx` is the dispatcher, `useAdminSectionController.ts` is the controller, and the two view modules are separate domain groups. Do not split the controller further until its effects and mutation dependencies have focused contract coverage.
+Current extraction target sizes are kept below 1,000 lines per file: `AdminSection.tsx` is the dispatcher, `useAdminSectionController.ts` is the controller, the two view modules own render-only sections, and the domain panels are grouped by their existing workflows. `AdminPanels.tsx` remains a compatibility barrel so its imports do not change. Do not split the controller further until its effects and mutation dependencies have focused contract coverage.
