@@ -184,14 +184,17 @@ def test_theme_muted_text_meets_wcag_aa_on_light_and_dark_surfaces():
 
 
 
-def test_generation_ui_transform_targets_the_current_legacy_podcast_section():
+def test_generation_ui_transform_targets_the_extracted_podcast_player_module():
     script = Path("tools/apply_generation_ui_build.py").read_text(encoding="utf-8")
     app = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
     study = Path("frontend/src/screens/study/GeneratedStudyScreens.tsx").read_text(encoding="utf-8")
-    assert "('// ─── PODCAST PLAYER', '// ─── SUMMARY'" in script
-    assert "aliases = ('// ─── FLASHCARDS',) if start_marker == '// ─── PODCAST PLAYER' else ()" in script
+    player = Path("frontend/src/screens/podcast/PodcastPlayerScreen.tsx").read_text(encoding="utf-8")
+    assert "PLAYER.write_text" not in script
+    assert "PodcastPlayerScreen is an extracted feature module" in script
+    assert "getCachedPodcastAudio(podcastAudioPath)" in player
+    assert "('// ─── PODCAST PLAYER', '// ─── SUMMARY'" not in script
     assert "is_study_flashcards = end_marker == '// ─── QUIZ'" in script
-    assert ("// ─── PODCAST PLAYER" in app) or ("// ─── FLASHCARDS" in app)
+    assert "function PodcastPlayerScreen(" not in app
+    assert "export default function PodcastPlayerScreen(" in player
     assert "// ─── FLASHCARDS" in study
     assert "function FlashcardsScreen(" in study
-    assert "function PodcastPlayerScreen(" in app
