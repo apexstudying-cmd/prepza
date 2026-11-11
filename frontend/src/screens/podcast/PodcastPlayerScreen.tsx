@@ -106,6 +106,25 @@ export default function PodcastPlayerScreen({ setScreen, activeDocumentId, setAc
     let cancelled = false
     const run = async () => {
       try {
+        // A service worker may return a cached "ready" API descriptor while
+        // the browser is offline. Its audio_url is still a remote URL, not the
+        // locally persisted Blob. Prefer the account-scoped audio cache before
+        // consulting that descriptor so offline replay never selects an
+        // unreachable network URL.
+        if (!navigator.onLine) {
+          const cachedAudio = await getCachedPodcastAudio(podcastAudioPath)
+          if (cancelled) return
+          if (cachedAudio.audioUrl) {
+            setAudioUrl(cachedAudio.audioUrl)
+            setDuration(cachedAudio.duration)
+            setGenerationPercent(100)
+            setGenerationStage('ready')
+            setStage('ready')
+            return
+          }
+          setError('This podcast is not available offline yet. Reconnect to download its audio, then try again.')
+          return
+        }
         const existing = await api<{ audio_status: string; audio_url: string | null; duration_seconds: number | null; progress_percent?: number; progress_stage?: string }>(podcastAudioPath)
         if (cancelled) return
         if (existing.audio_status === 'ready' && existing.audio_url) {
