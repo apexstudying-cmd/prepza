@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/test_browser_mobile_responsive.py'
+      - 'scripts/test_browser_shop_journeys.py'
       - 'scripts/test_browser_study_hub_offline_content.py'
       - 'scripts/test_browser_b2b_metering.py'
       - 'discovery_billing.py'
@@ -231,6 +232,9 @@ jobs:
 
       - name: Run mobile and tablet responsive browser checks
         run: python scripts/test_browser_mobile_responsive.py
+
+      - name: Run Shop buyer, seller and admin browser journeys
+        run: python scripts/test_browser_shop_journeys.py
 
       - name: Run B2B browser-to-ledger metering regression
         run: python scripts/test_browser_b2b_metering.py
