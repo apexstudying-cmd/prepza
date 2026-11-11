@@ -86,7 +86,7 @@ Other large declarations still embedded in the app shell include:
 | `ChatsScreen` | 358 | High; extract after mapping realtime and encryption integration |
 | `AITutorScreen` | Extracted in PR #75 | Existing 183-line component body preserved; tutor cache/types move with the feature, while app-shell error/skeleton components are injected through typed props |
 | `ChatOptionsScreen` | Extracted in merged PR #67 | The original 331-line body is preserved after explicit injection of the existing file-extension helper and image-type list; shared chat types and the existing Avi primitive now have owned modules. |
-| `PodcastPlayerScreen` | Extracted in PR #77 | 349-line module at code head `76a435d`; offline Blob replay and reload recovery pass in the exact-head release browser run. |
+| `PodcastPlayerScreen` | Extracted | 349-line module at code head `76a435d`; offline Blob replay and reload recovery pass in the exact-head release browser run. |
 | `DocumentStudyScreen` | 323 | High; protect reader progress/offline contracts |
 | `LibraryScreen` | Extracted in merged PR #69 |
 | `SignupScreen` | Extracted in PR #66 | Auth flow screens are owned by `screens/auth/AuthScreens.tsx`; route IDs and auth/CSRF behavior remain in the app shell. |
