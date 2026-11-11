@@ -315,7 +315,7 @@ export default function PodcastPlayerScreen({ setScreen, activeDocumentId, setAc
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 26 }}>
             <button aria-label="Rewind 15 seconds" onClick={() => seek(-15)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.text }}>{Ic.rewind()}</button>
-            <button aria-label={playing ? 'Pause' : 'Play'} onClick={togglePlay} style={{ width: 64, height: 64, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 6px 20px rgba(201,168,76,0.4)` }}><div style={{ color: T.text }}>{playing ? Ic.pause() : Ic.play()}</div></button>
+            <button aria-label={playing ? 'Pause podcast' : 'Play podcast'} onClick={togglePlay} style={{ width: 64, height: 64, background: `linear-gradient(135deg,${N.gold},${N.goldL})`, border: 'none', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 6px 20px rgba(201,168,76,0.4)` }}><div style={{ color: T.text }}>{playing ? Ic.pause() : Ic.play()}</div></button>
             <button aria-label="Forward 15 seconds" onClick={() => seek(15)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.text }}>{Ic.skip()}</button>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
