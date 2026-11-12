@@ -4,7 +4,7 @@
 
 **Baseline source checkpoint:** `f747b0d95a6b81cb2868843093546a97e3d09fb5` (2026-10-31).
 **Working branch:** `main`; PR #61, #62, #64, #65, #66, and #67 are merged (PR #62 merge `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b`; PR #64 merge `7b0e9301543beabc5dee02af2388983737bada5c`; PR #65 merge `222b4011c40ddadaae3bdcf331022b79a78f5926`; PR #66 merge `29b582b6ca9e47b8a0cd725673c6be76b71358a1`). PR #56, #59, and the consolidated My Study integration PR #61 are also merged; the Achievements module is present on `main`. PR #67 was squash-merged to main as 62cdf80f2652746593b58f131c939f95442b0446. PR #68 (XP Progress), #69 (Library + Notifications), and #70 (shared SQLAlchemy extension) are also merged. PR #73 (public academic-catalog routes) was squash-merged as `d57cfecde2c98b59eec867c70cca4270ed2b1e73`. PR #74 (University and Program ORM models) was squash-merged as `6b82aba7bd7d167488c4a0e9921be6deb50a7648`.
-**Status:** incremental refactor in progress. This document distinguishes current implementation from target structure.
+**Status:** incremental refactor in progress. PR #77 is the current consolidated integration branch and has passed its exact-head CI; it remains open and unmerged. This document distinguishes current implementation from target structure.
 
 ## 1. Verified baseline
 
@@ -13,9 +13,10 @@ The initial source scan found:
 | Area | Baseline size | Observation |
 |---|---:|---|
 | `app.py` | 10,332 lines; 318 top-level function/class declarations | Flask setup, SQLAlchemy models, shared helpers, and many HTTP routes coexist in one module. |
-| `frontend/src/App.tsx` | 16,032 lines at the initial scan; 14,945 after PR #56; 14,887 after PR #59; 14,758 after the Achievements extraction on `main`; 14,573 after the My Study extraction in PR #61 (tested head `48cae152`); 14,129 on PR #62, merged as `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b` after Group Detail was extracted; 13,739 on PR #64 after the two social follow screens were extracted; 12,979 after PR #66 merged the auth-flow screens; 12,622 on main after PR #67 merged Chat Options, shared chat types, and the Avi primitive. The `main` snapshot after PR #69 was 12,044 lines; after the Morio AI Tutor extraction, the tested PR #75 app shell is 11,853 lines. | Shared API/theme/icon/type definitions and several screens now live in focused modules. The app shell remains large and still needs staged extraction. |
+| `frontend/src/App.tsx` | 16,032 lines at the initial scan; 14,945 after PR #56; 14,887 after PR #59; 14,758 after the Achievements extraction on `main`; 14,573 after the My Study extraction in PR #61 (tested head `48cae152`); 14,129 on PR #62, merged as `adbd7a9fc5bac3487e67f6f3ea319a3845e7401b` after Group Detail was extracted; 13,739 on PR #64 after the two social follow screens were extracted; 12,979 after PR #66 merged the auth-flow screens; 12,622 on main after PR #67 merged Chat Options, shared chat types, and the Avi primitive. The `main` snapshot after PR #69 was 12,044 lines; after the Morio AI Tutor extraction, the tested PR #75 app shell was 11,853 lines. The consolidated PR #77 branch contains the later screen/public-shell route extractions, Admin feature/domain panels and Podcast Player; at exact code head `76a435d91db27ca09292e20d16c31ec2b34c9884`, `frontend/src/App.tsx` is 5,034 lines. | Shared API/theme/icon/type definitions and several screens now live in focused modules. The app shell remains large and still needs staged extraction. |
 | Frontend build | Long `prebuild` chain | Python scripts rewrite source files before TypeScript/Vite compilation. |
-| Local QA runner | 11 test files; 95 test functions; 98 collected cases | Latest disposable PostgreSQL CI run passed 98/98; the detailed numbered test descriptions in `actualtest.md` are explicitly retained as a historical 74-case snapshot. |
+| Current PR #77 source snapshot | `frontend/src/App.tsx`: 5,034 lines; `app.py`: 9,643 lines | Measured from exact code head `76a435d`; App.tsx has been reduced through behavior-preserving screen extraction. Both entry points still need future bounded extraction. |
+| Local QA runner | 11 test files; 99 collected cases in the current release run | Latest disposable PostgreSQL CI run passed 99/99; the detailed numbered test descriptions in `actualtest.md` are historical snapshots unless explicitly refreshed. |
 
 A Graphify index of the baseline commit reported 3,946 code nodes, 8,259 edges, and 325 communities. Its index is a static dependency map, not a test run; its test links are incomplete and must not be treated as proof of coverage.
 
@@ -57,12 +58,25 @@ The shared extension boundary now exists in `extensions.py`. Continue model extr
 
 ### Frontend largest remaining screen areas
 
-The current `App.tsx` scan shows these large declarations still embedded in the app shell:
+The current `App.tsx` composition root is 5,323 lines at the 9 November 2026 admin extraction head. The admin feature is no longer embedded in `App.tsx`; it now has explicit ownership boundaries:
+
+| Admin module | Approximate lines | Responsibility |
+|---|---:|---|
+| `admin/AdminPlatform.tsx` | 118 | Platform shell, navigation groups, section routing, payment display metadata |
+| `admin/AdminSection.tsx` | 172 | Small section dispatcher; retains the existing settings view |
+| `admin/useAdminSectionController.ts` | 934 | Admin state, effects, API/CSRF calls, loading/error state and mutation handlers |
+| `admin/AdminSectionCoreViews.tsx` | 783 | Typed render-only dashboard, users, Library/content, AI, payments, moderation and analytics views |
+| `admin/AdminSectionPlatformViews.tsx` | 368 | Typed render-only system/infrastructure and communications views |
+| `admin/AdminPanels.tsx` | 1,250 | Independent ambassador, opportunity, promotion, organisation, group, university and community panels |
+| `admin/AdminShared.tsx` | 323 | Shared admin response types and presentation primitives |
+
+The admin extraction moved the existing implementation out of the app shell rather than deleting functionality: `App.tsx` fell from 8,903 to 5,323 lines (3,580 lines / 40.2% smaller) at the tested code head. The admin view split then moved state/effects/API ownership into `useAdminSectionController.ts` and the render-only screens into two bounded view modules; `AdminSection.tsx` is now 172 lines. The controller remains the one large admin file (934 lines), deliberately keeping the existing state/effect lifetime intact rather than moving state into tabs and resetting it on navigation.
+
+Other large declarations still embedded in the app shell include:
 
 | Declaration | Approximate lines | Refactor priority |
 |---|---:|---|
-| `AdminSection` | 1,961 | High; split by admin domain after mapping state and permissions |
-| `App` composition root | 538 | High; move navigation state/history into `app/navigation/` behind storage/history contract tests, leaving providers and route composition in `App` |
+| `App` composition root / navigation state | 538 | High; move navigation state/history into `app/navigation/` behind storage/history contract tests, leaving providers and route composition in `App` |
 | `GroupDetailScreen` | Extracted in PR #62 | Existing 417-line screen body moved verbatim; app-shell feedback components passed as props |
 | `FollowListScreen` + `FollowRequestsScreen` | Extracted in PR #64 (merged) | Existing follower/following and request screens moved to one social module; existing state and request flows retained |
 | `ChatDetailScreen` | 406 | High; extract only after mapping E2EE, realtime and message-state dependencies |
@@ -72,7 +86,7 @@ The current `App.tsx` scan shows these large declarations still embedded in the 
 | `ChatsScreen` | 358 | High; extract after mapping realtime and encryption integration |
 | `AITutorScreen` | Extracted in PR #75 | Existing 183-line component body preserved; tutor cache/types move with the feature, while app-shell error/skeleton components are injected through typed props |
 | `ChatOptionsScreen` | Extracted in merged PR #67 | The original 331-line body is preserved after explicit injection of the existing file-extension helper and image-type list; shared chat types and the existing Avi primitive now have owned modules. |
-| `PodcastPlayerScreen` | 327 | Medium |
+| `PodcastPlayerScreen` | Extracted | 349-line module at code head `76a435d`; offline Blob replay and reload recovery pass in the exact-head release browser run. |
 | `DocumentStudyScreen` | 323 | High; protect reader progress/offline contracts |
 | `LibraryScreen` | Extracted in merged PR #69 |
 | `SignupScreen` | Extracted in PR #66 | Auth flow screens are owned by `screens/auth/AuthScreens.tsx`; route IDs and auth/CSRF behavior remain in the app shell. |
@@ -370,3 +384,92 @@ Verification on tested code head `f5f8afb34a8d74c742de4b4d33762ec882b05a81`:
 - StudyHub Library Flow [42022943808](https://github.com/apexstudying-cmd/prepza/actions/runs/42022943808) was skipped by workflow conditions and is not counted as passing.
 
 The tested PR #75 application-code head is `f5f8afb34a8d74c742de4b4d33762ec882b05a81`; subsequent commits on the PR branch update documentation only. The frontend refactor remains incomplete: ChatDetail/Chats, DocumentStudy/Reader, generation flows, Podcast Player, AdminSection/panels, and app-shell navigation remain to be mapped and extracted. Backend extraction remains a separate, staged effort.
+
+
+## 2026-11-05 — Splash and Edit Profile extraction (PR #77; current branch)
+
+The current PR #77 branch moves the existing SplashScreen into frontend/src/screens/onboarding/SplashScreen.tsx (63 lines) and EditProfileScreen into frontend/src/screens/profile/EditProfileScreen.tsx (224 lines). App.tsx is 11,591 lines on this branch, down from 11,853 before these two extractions. Both component bodies were compared directly with the base main declarations and are byte-for-byte identical after only the documented module signature, brandline prop, narrowed navigation callback, and local response-type adjustments.
+
+The SplashScreen move exposed a prebuild-transform ownership assumption. The Study Navigation patch previously expected the component's state marker inside App.tsx and returned early whenever the historical patch marker existed. It now supports both inline legacy and module-owned SplashScreen modes, passes the app-shell offline-resume callback into the module, and continues idempotent transforms even when the historical marker is already present. The production-build verifier and workflow anchors now assert the extracted module contract.
+
+Frontend Build [42030603950] passed 76 source/module tests, 5 offline Library regression tests, TypeScript, service-worker validation, production build and architecture audits. Student Frontend [42030604065], Student Contract [42030603908], Admin Route [42030604002], B2B [42030603900], AI Generation [42030604051], AI Economics [42030604139], Prepza Control API [42030603917], E2EE Security [42030603959], and E2EE Chat [42030604078] passed. Full Release Browser/Cross-System Regression [42030603969] passed production image, disposable PostgreSQL/Redis, 43 migration files and controlled SQL ledger, app startup, mobile/tablet browser checks, B2B metering, 98/98 PostgreSQL QA, online/offline Study Hub and generated-artifact journeys, screenshot upload, and cleanup. The tested application-code head is unchanged by subsequent documentation-only commits.
+
+The frontend refactor remains incremental, not complete. Remaining large or high-coupling boundaries include ChatsScreen/ChatDetailScreen (E2EE/realtime), DocumentStudyScreen/DocumentReaderScreen (offline/progress), AdminSection and admin panels (permissions/multi-domain state), generation flows, Podcast Player, Home/Explore, opportunity/profile flows, and app-shell navigation. Continue only with dependency mapping, explicit props, source-preservation comparisons, and behavior contracts. Do not redesign screens, change API contracts, or move high-risk logic without dedicated regression evidence.
+
+
+### New Chat extraction follow-up — PR #77
+
+NewChatScreen now resides in frontend/src/screens/chat/NewChatScreen.tsx (159 lines). The PR branch App.tsx is 11,440 lines, down 413 from the starting 11,853 lines. Its implementation was compared with base main and preserved byte-for-byte apart from the module export and narrowed callback type. The module contract protects debounced search and cleanup, direct chat create/reuse, group validation/creation, CSRF, participant selection, and route navigation.
+
+Frontend Build [42031983870] passed 78 source/module tests, 5 offline Library tests, TypeScript, service-worker checks, production build, and architecture audits. Student Frontend, Student Contract, Admin Route, B2B, AI, Prepza Control API, E2EE Chat and E2EE Security workflows passed. Full Release Browser/Cross-System Regression [42031984075] passed on the New Chat code head: production image, disposable PostgreSQL/Redis, 43 migration files and controlled ledger, mobile/tablet browser checks, B2B metering, 98/98 PostgreSQL QA, online/offline Study Hub and generated-artifact journeys, screenshot upload, and cleanup. Subsequent PR commits are documentation-only.
+
+
+### Additional small screen-boundary extractions — 2026-11-05
+
+TimeStudiedScreen now lives in frontend/src/screens/gamification/TimeStudiedScreen.tsx (61 lines), and ShareOppForm in frontend/src/screens/opportunities/ShareOppForm.tsx (45 lines). Their moved component bodies were directly compared with base main and are byte-for-byte identical after normalising only exports and narrowed callback types. Focused source contracts protect the original study-time loading/cancellation/period-selection behavior and the opportunity form's controlled fields, categories and navigation. Latest CI and full release regression are pending on the new head.
+
+
+### Student Profile extraction follow-up — PR #77
+
+StudentProfileScreen and its PublicProfile/FollowSummary types now live in frontend/src/screens/profile/StudentProfileScreen.tsx (164 lines). App.tsx is 11,286 lines on this branch, 567 lines below the 11,853-line starting point. The component body was compared directly to base main and preserved byte-for-byte after normalising only module export and narrowed callback/back-screen types. The app-shell back-screen state was narrowed to its actual two values.
+
+Frontend Build [42033518073] passed 80 source/module tests, 5 offline Library tests, TypeScript, service-worker validation, production build and architecture audits. Student Frontend, Student Contract, Admin Route, B2B, AI, control API, and E2EE Chat workflows passed. Full Release Browser/Cross-System Regression [42033518119] and E2EE Security Regression [42033518226] were still running at the time of this update and remain required before merge.
+
+
+### Study Streak module — 2026-11-05
+
+StudyStreakScreen and its response types are now owned by frontend/src/screens/gamification/StudyStreakScreen.tsx. The screen body matches base main byte-for-byte after export and callback-type normalisation. The module preserves its existing month navigation, cancellation, tap-to-reveal calendar day, milestone, and share-sheet behavior. A prior typecheck caught and prompted correction of the existing share-sheet callback in TimeStudiedScreen; the corrected route union is now covered by a source contract. The latest Frontend Build [42034876037] passed 86 frontend source/module contracts, 5 offline Library tests, TypeScript, production build, architecture audits and launch-wiring verification. Full release regression [42034875673] remains pending.
+
+
+### Profile screen boundary — 2026-11-05
+
+ProfileScreen now lives in screens/profile/ProfileScreen.tsx. Its PROFILE_CACHE moved with it; ProfileMe and HomeDocument are shared in types/profile.ts, while GamificationSummary is in types/gamification.ts. App.tsx retains route dispatch, parent-owned state and the existing SkeletonProfile component (passed into the screen). The screen body was verified byte-for-byte against base main after export/prop/callback type normalisation. The first typecheck identified dynamic profile-card destinations still typed against the App-local Screen alias; the extracted module now uses an equivalent local ProfileScreenRoute union. Frontend Build [42036291254] passed 88 frontend source/module contracts, 5 offline Library tests, TypeScript, production build, architecture audits and launch-wiring verification. Full release regression [42036291297] remains queued.
+
+
+### Document Ready module — 2026-11-05
+
+DocReadyScreen now resides in screens/study/DocReadyScreen.tsx; DocumentDetail is shared from types/documents.ts. Existing TopBar is injected by App.tsx, and the route dispatcher remains centralized. The original screen body was verified byte-for-byte after export/prop/local-route-type normalisation. Frontend Build [42036938429] passed 90 frontend source/module contracts, 5 offline Library tests, TypeScript, production build, architecture audits and launch-wiring verification. Full release regression [42036938563] remains queued.
+
+
+## 2026-11-09 — Public application-shell routes included in consolidated integration
+
+The root document, root-scoped service worker, and health endpoints are now owned by `public_shell_routes.py` on the same integration branch as the current frontend screen extractions. `register_public_shell_routes(app, db, limiter, sweep_expired_opportunities_safe)` receives dependencies explicitly and does not import the partially initialized Flask entry module. Registration occurs after the existing activity hook and before academic catalog registration, preserving initialization order. Focused tests protect route methods and endpoint names, static-file serving, service-worker MIME/cache headers, health SQL probe, limiter exemption, sweep behavior, and error response.
+
+This consolidates the previous standalone PR #76 implementation into PR #77. Verification is pending on the combined head; do not treat the route move as release-verified until its focused route contracts, shared-extension contract, frontend build, and full cross-system release regression pass. No app-factory conversion, ORM model move, middleware change, schema change, or migration is part of this step.
+
+## 2026-11-09 — Consolidated refactor verification closeout
+
+Verified against the exact PR #77 head `b37cad55f3fb6e389dead1d4ca19df2f31265674` (base `main` at `459c96cd7179810499edbec266e1f5deab3f9d4c`). PR #77 contains 30 changed files (+2,191/−1,236 lines) and remains open, unmerged, and mergeable. On this exact head, 16 GitHub Actions workflows passed: Frontend Build; Study Navigation Polish; Student Frontend Contract; Student Contract Validation; Admin Route Contract; Prepza Control API; Backend Shared Extension Contract; Backend Academic Catalog Route Contract; B2B Contract Validation; AI Generation Architecture; AI Economics Validation; E2EE Chat Validation; E2EE Security Regression; Study Hub Runtime Regression; Kokoro GPU Worker Validation; and Release Browser and Cross-System Regression. (The workflow inventory contains 16 successful runs plus one skipped run.)
+
+Release Browser and Cross-System Regression [run 42581515451](https://github.com/apexstudying-cmd/prepza/actions/runs/42581515451) passed on this exact SHA: production image build; disposable PostgreSQL/Redis startup; Alembic migrations and controlled migration-ledger checks; app startup; mobile/tablet responsive browser checks; B2B browser-to-ledger metering regression; full disposable PostgreSQL QA; online/offline and generated-artifact browser journeys; responsive screenshot upload; and service cleanup. The separate StudyHub Library Flow [run 42581515401](https://github.com/apexstudying-cmd/prepza/actions/runs/42581515401) was skipped by workflow conditions and is not counted as a pass. The failure-log collection step was skipped because the job succeeded.
+
+At this exact PR head, `frontend/src/App.tsx` is 10,745 lines and `app.py` is 10,139 lines. This is a structural refactor, not completion of all repository modularization: both root files remain substantial and further bounded extraction can continue later. No production deployment, live provider verification, or production-database migration is implied by these CI results.
+
+PR #77 remains open and unmerged. These checks verify the integration branch only; `main` does not contain these changes until the PR is merged. Do not merge without the user's explicit approval.
+
+
+## 2026-11-11 — Admin domain-panel split (PR #77)
+
+The 1,250-line `AdminPanels.tsx` implementation has been separated into two feature-owned modules while preserving the original component bodies and named import surface. `AdminGrowthPanels.tsx` (531 lines) owns the existing ambassador and opportunity review panels. `AdminDomainPanels.tsx` (728 lines) owns the existing promotions, organisations, groups, universities and community panels. `AdminPanels.tsx` is now a three-line compatibility barrel re-exporting the same seven component names consumed by `AdminSection.tsx`. No component state, effects, API paths, CSRF headers, route keys or mutation handlers were intentionally changed.
+
+A focused boundary contract protects the barrel exports, component ownership, file-size bounds and existing API/CSRF ownership. The legacy Admin platform ownership contract was updated to follow the re-exported modules instead of assuming every component implementation must remain in one file. Frontend Build [run 43001624586](https://github.com/apexstudying-cmd/prepza/actions/runs/43001624586) passed on code head `99796c39e81f2ed79949e9b492b31a5541de5d8b`: 120 focused source/transform tests, 5 offline Library tests, both audits, TypeScript, service-worker validation and production Vite build. The complete Release Browser/Cross-System Regression is still running at this update; do not infer its result from Frontend Build.
+
+
+## 2026-11-11 — Exact-head release regression closeout for Admin domain-panel split
+
+Release Browser and Cross-System Regression [run 43001889849](https://github.com/apexstudying-cmd/prepza/actions/runs/43001889849) passed on exact PR #77 head `949530b97fea9df8557eddbd408f2c667130c511`. The job built the production image; started disposable PostgreSQL/Redis; passed Alembic and controlled migration-ledger checks; passed phone-small (360x800), phone-standard (390x844), and tablet-portrait (768x1024) browser checks; passed B2B browser-to-ledger metering; passed the full disposable PostgreSQL QA suite; passed online/offline Study Hub and generated-artifact journeys; uploaded 12 responsive screenshots (artifact [prepza-mobile-responsive-screenshots](https://github.com/apexstudying-cmd/prepza/actions/runs/43001889849/artifacts/13845874778)); and cleaned up disposable services/volumes. Frontend Build [run 43001890115](https://github.com/apexstudying-cmd/prepza/actions/runs/43001890115) also passed on the same exact head. Of 17 workflows on the head, 16 succeeded and StudyHub Library Flow was skipped by workflow conditions; the skipped workflow is not counted as a pass. This verifies the PR branch, not production deployment or live provider behavior.
+
+This closes the CI verification for the current PR #77 Admin domain-panel extraction and combined refactor head. It does not close the overall release: `app.py` remains a large backend entry module, the Shop visual-system and detailed user-flow audit remain open, and provider/staging/retrieval/observability gates remain separate. PR #77 remains open and unmerged; do not merge or deploy without explicit approval.
+
+
+## 2026-11-11 — Podcast Player extraction and Shop browser verification (PR #77)
+
+The Podcast Player boundary is now module-owned in `frontend/src/screens/podcast/PodcastPlayerScreen.tsx` (349 lines). The screen receives its existing API, offline-cache, activity-credit and navigation responsibilities through explicit props/callbacks. A cached service-worker `ready` descriptor is not treated as an offline audio asset: when offline, the component resolves the account-scoped cached Blob first. Exact-head CI verifies the Blob opens offline and after reload, podcast activity credit continues while hidden, and pausing playback stops credit.
+
+At exact code head `76a435d91db27ca09292e20d16c31ec2b34c9884`, `frontend/src/App.tsx` is 5,034 lines and `app.py` is 9,643 lines. AdminSection and Admin domain-panel extraction are also present in this consolidated PR. Remaining frontend extraction work should focus on ChatDetail/Chats, DocumentStudy/Reader, generation flows, Home/Explore and app-shell navigation; backend modularization remains separate.
+
+Shop's short visual consistency pass replaces section pills with compact underline tabs, normalizes listing-card image/placeholder height to 124px and improves title/price/meta hierarchy. Existing routes, 44px targets, navy/gold brand, seller fee/payment behavior, buyer direct-contact boundary and fixed global navigation are preserved. The new `scripts/test_browser_shop_journeys.py` verifies buyer browse/detail/save/Saved/report/contact, seller My Listings/pause/sold/paid-form disclosure and admin approve/reject/report/payment-review handling. Its admin approval fixture uses a synthetic uploaded-photo key; it does not assert a real R2 upload.
+
+Frontend Build [run 43023202179](https://github.com/apexstudying-cmd/prepza/actions/runs/43023202179) and Release Browser/Cross-System Regression [run 43023202418](https://github.com/apexstudying-cmd/prepza/actions/runs/43023202418) passed on exact code head `76a435d91db27ca09292e20d16c31ec2b34c9884). The release job passed production image build, disposable migrations/ledger, responsive phone/tablet, Shop role journeys, B2B browser-to-ledger, 99 disposable PostgreSQL QA tests, online/offline generated-artifact replay, screenshot upload and cleanup. Of 17 workflows, 16 succeeded and StudyHub Library Flow was skipped. Screenshot artifact: [13855748767](https://github.com/apexstudying-cmd/prepza/actions/runs/43023202418/artifacts/13855748767).
+
+PR #77 remains open and unmerged. Live Paystack sandbox/R2 provider verification, production deployment and unrelated release gates are not covered by these results.

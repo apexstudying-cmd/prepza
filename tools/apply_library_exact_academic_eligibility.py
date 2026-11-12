@@ -1,14 +1,13 @@
 from pathlib import Path
 
-APP = Path(__file__).resolve().parents[1] / "app.py"
-text = APP.read_text()
+ROOT = Path(__file__).resolve().parents[1]
+APP = ROOT / "app.py"
+LIBRARY_MODELS = ROOT / "library_models.py"
+text = APP.read_text(encoding="utf-8")
 
-# This patch targets the newer LibraryPublication academic-context schema.
-# Older/current branches still derive cohort eligibility from Unit/UnitProgram;
-# do not fail the entire frontend build when that schema is not present.
-model_start=text.find("class LibraryPublication")
-model_end=text.find("class SavedLibraryMaterial", model_start)
-library_model=text[model_start:model_end] if model_start >= 0 and model_end > model_start else ""
+# Read schema ownership from the extracted model module while keeping route
+# transformations scoped to the existing Flask entry point.
+library_model = LIBRARY_MODELS.read_text(encoding="utf-8")
 if "university_id = db.Column" not in library_model or "program_id = db.Column" not in library_model:
     print("Skipped exact Library academic-eligibility patch: LibraryPublication academic fields are not present.")
     raise SystemExit(0)

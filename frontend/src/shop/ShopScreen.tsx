@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from 'react'
+import { N } from '../theme/theme'
+import './ShopScreen.css'
 
 type ImageRef = { key: string; url: string | null }
 type Listing = { id: number; title: string; description: string | null; category: string; condition: string; price_kes: number; location_area: string; images: ImageRef[]; status: string; seller_id: number; seller_name: string; whatsapp_url?: string | null; saved: boolean; is_mine: boolean; posting_fee_kes: number; posting_fee_paid: boolean; posting_fee_expires_at?: string | null; posting_payment_reference?: string | null; posting_payment_review_note?: string | null; moderation_note?: string | null }
@@ -40,8 +42,8 @@ const conditionLabel = (value: string) => CONDITIONS.find(item => item.value ===
 const ui: Record<string, CSSProperties> = {
   root: { flex: 1, minHeight: 0, overflowY: 'auto', background: 'var(--prepza-generation-page, #F8F9FC)', color: 'var(--prepza-generation-text, #0B1437)', fontFamily: 'Plus Jakarta Sans, system-ui, sans-serif' },
   header: { background: 'linear-gradient(130deg, var(--prepza-brand-navy, #101B35), #24365B)', color: '#fff', padding: '20px 18px 18px' },
-  wrap: { width: '100%', maxWidth: 1080, margin: '0 auto', padding: 18, boxSizing: 'border-box' },
-  button: { border: 0, borderRadius: 12, padding: '11px 14px', fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 },
+  wrap: { width: '100%', maxWidth: 1080, margin: '0 auto', padding: 18, paddingBottom: 'calc(104px + env(safe-area-inset-bottom, 0px))', boxSizing: 'border-box' },
+  button: { border: 0, borderRadius: 12, padding: '11px 14px', minHeight: 44, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 },
   primary: { background: 'var(--prepza-brand-gold, #C9A84C)', color: 'var(--prepza-brand-navy, #101B35)' },
   secondary: { background: 'var(--prepza-generation-card, #FFFFFF)', color: 'var(--prepza-generation-text, #0B1437)', border: '1px solid var(--prepza-generation-border, #E1E5ED)' },
   input: { width: '100%', boxSizing: 'border-box', border: '1px solid var(--prepza-generation-border, #E1E5ED)', borderRadius: 12, padding: '12px 13px', fontSize: 13, color: 'var(--prepza-generation-text, #0B1437)', background: 'var(--prepza-generation-card, #FFFFFF)', colorScheme: 'var(--prepza-generation-color-scheme, light)' as CSSProperties['colorScheme'], fontFamily: 'inherit' },
@@ -60,8 +62,8 @@ async function shopApi<T = any>(path: string, options: RequestInit = {}): Promis
   }
   return body as T
 }
-function ShopButton({ children, onClick, disabled, secondary = false }: { children: ReactNode; onClick: () => void; disabled?: boolean; secondary?: boolean }) {
-  return <button type="button" disabled={disabled} onClick={onClick} style={{ ...ui.button, ...(secondary ? ui.secondary : ui.primary), opacity: disabled ? .55 : 1, cursor: disabled ? 'not-allowed' : 'pointer' }}>{children}</button>
+function ShopButton({ children, onClick, disabled, secondary = false, type = 'button' }: { children: ReactNode; onClick?: () => void; disabled?: boolean; secondary?: boolean; type?: 'button' | 'submit' }) {
+  return <button type={type} disabled={disabled} onClick={onClick} style={{ ...ui.button, ...(secondary ? ui.secondary : ui.primary), minHeight: 44, opacity: disabled ? .55 : 1, cursor: disabled ? 'not-allowed' : 'pointer' }}>{children}</button>
 }
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label style={{ display: 'block', minWidth: 0 }}><span style={{ display: 'block', fontSize: 11, fontWeight: 800, marginBottom: 5, color: 'var(--prepza-generation-muted, #596579)' }}>{label}</span>{children}</label>
@@ -85,6 +87,7 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
   const [condition, setCondition] = useState('')
   const [location, setLocation] = useState('')
   const [sort, setSort] = useState('newest')
+  const [filtersExpanded, setFiltersExpanded] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -117,6 +120,8 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
       setError(Date.now() - cached.savedAt <= BROWSE_CACHE_TTL_MS
         ? ''
         : 'Showing recently viewed listings while availability is refreshed.')
+    } else {
+      setLoading(true)
     }
     try {
       const fresh = (await shopApi<{ listings: Listing[] }>(path)).listings || []
@@ -125,9 +130,13 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
       browseSnapshots.set(cacheKey, { listings: toPublicBrowseSnapshot(fresh), savedAt: Date.now() })
       setListings(filterCurrentListings(fresh))
       setError('')
+      setLoading(false)
     } catch (cause) {
       if (requestId !== browseRequestId.current) return
-      if (!cached) throw cause
+      if (!cached) {
+        setLoading(false)
+        throw cause
+      }
       // Fall back to this query's cached public snapshot, never the previous query's rows.
       setListings(filterCurrentListings(cached.listings))
       setLoading(false)
@@ -313,38 +322,53 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
     } catch (e: any) { setError(e?.message || 'Could not resolve the posting payment.') }
   }
   const nav: { id: Page; label: string }[] = [{ id: 'browse', label: 'Browse' }, { id: 'mine', label: 'My listings' }, { id: 'saved', label: 'Saved' }, ...(isAdmin ? [{ id: 'admin' as Page, label: 'Moderation' }] : [])]
-  const card = (item: Listing, owned = false) => <article key={item.id} onClick={() => openDetail(item)} style={{ ...ui.panel, padding: 0, overflow: 'hidden', minWidth: 0, cursor: 'pointer' }}>
-    {imageFor(item) ? <img src={imageFor(item)!} alt={item.title} loading="lazy" style={{ width: '100%', height: 148, objectFit: 'cover', display: 'block', background: 'var(--prepza-generation-border, #E1E5ED)' }} /> : <div style={{ height: 148, display: 'grid', placeItems: 'center', background: 'var(--prepza-generation-page, #F8F9FC)', color: 'var(--prepza-generation-muted, #596579)', fontSize: 12 }}>Photo unavailable</div>}
-    <div style={{ padding: 12 }}><div style={{ fontSize: 15, fontWeight: 900, marginBottom: 5 }}>{money(item.price_kes)}</div><div style={{ fontSize: 12, fontWeight: 800, lineHeight: 1.4, minHeight: 32 }}>{item.title}</div><div style={{ color: 'var(--prepza-generation-muted, #596579)', fontSize: 10, marginTop: 7 }}>{conditionLabel(item.condition)} · {item.category}</div><div style={{ color: 'var(--prepza-generation-muted, #596579)', fontSize: 10, marginTop: 5 }}>{item.location_area}</div>{owned && <div style={{ display: 'inline-block', marginTop: 9, background: 'var(--prepza-generation-border, #E1E5ED)', borderRadius: 8, padding: '5px 7px', fontSize: 10, fontWeight: 800 }}>{item.status === 'active' && !periodCurrent(item) ? 'Renewal due' : statusLabel(item.status)}</div>}</div>
-  </article>
+  const hasActiveFilters = Boolean(query.trim() || category || condition || location.trim())
+  const clearFilters = () => { setQuery(''); setCategory(''); setCondition(''); setLocation('') }
+  const card = (item: Listing, owned = false) => <button type="button" key={item.id} aria-label={`Open listing: ${item.title}`} onClick={() => openDetail(item)} style={{ ...ui.panel, borderRadius: 14, display: 'block', width: '100%', minHeight: 44, padding: 0, overflow: 'hidden', minWidth: 0, textAlign: 'left', color: 'inherit', fontFamily: 'inherit', cursor: 'pointer' }}>
+    {imageFor(item) ? <img src={imageFor(item)!} alt={item.title} loading="lazy" style={{ width: '100%', height: 124, objectFit: 'cover', display: 'block', background: 'var(--prepza-generation-border, #E1E5ED)' }} /> : <div style={{ height: 124, display: 'grid', placeItems: 'center', background: 'var(--prepza-generation-page, #F8F9FC)', color: 'var(--prepza-generation-muted, #596579)', fontSize: 12 }}>Photo unavailable</div>}
+    <div style={{ padding: 12 }}><div style={{ fontSize: 16, fontWeight: 900, marginBottom: 5 }}>{money(item.price_kes)}</div><div style={{ fontSize: 13, fontWeight: 800, lineHeight: 1.4, minHeight: 36 }}>{item.title}</div><div style={{ color: 'var(--prepza-generation-muted, #596579)', fontSize: 11, marginTop: 7 }}>{conditionLabel(item.condition)} · {item.category}</div><div style={{ color: 'var(--prepza-generation-muted, #596579)', fontSize: 11, marginTop: 5 }}>{item.location_area}</div>{owned && <div style={{ display: 'inline-block', marginTop: 9, background: 'var(--prepza-generation-border, #E1E5ED)', borderRadius: 8, padding: '5px 7px', fontSize: 10, fontWeight: 800 }}>{item.status === 'active' && !periodCurrent(item) ? 'Renewal due' : statusLabel(item.status)}</div>}</div>
+  </button>
 
-  if (loading && !listings.length && !mine.length && !saved.length) return <div style={ui.root}><header style={ui.header}><strong style={{ fontSize: 22 }}>Prepza Shop</strong><div style={{ opacity: .7, fontSize: 12, marginTop: 5 }}>Useful finds from your campus</div></header><div style={ui.wrap}>Loading Shop…</div></div>
+  if (loading && !listings.length && !mine.length && !saved.length && page !== 'browse') return <div style={ui.root}><header style={ui.header}><strong style={{ fontSize: 22 }}>Prepza Shop</strong><div style={{ opacity: .7, fontSize: 12, marginTop: 5 }}>Useful finds from your campus</div></header><div style={ui.wrap}>Loading Shop…</div></div>
   return <div style={ui.root}>
-    <header style={ui.header}><div style={{ maxWidth: 1080, margin: '0 auto' }}>
-      <button type="button" onClick={() => page === 'browse' ? setScreen('home') : (setPage(selected?.is_mine ? 'mine' : 'browse'), setSelected(null))} style={{ background: 'none', border: 0, color: 'rgba(255,255,255,.72)', padding: 0, marginBottom: 13, cursor: 'pointer', fontSize: 11, fontWeight: 800 }}>‹ {page === 'browse' ? 'Home' : 'Back'}</button>
-      <div style={{ display: 'flex', gap: 12, justifyContent: 'space-between', alignItems: 'center' }}><div><div style={{ fontSize: 23, fontWeight: 900 }}>Shop</div><div style={{ color: 'rgba(255,255,255,.68)', fontSize: 12, marginTop: 4 }}>Find useful things near campus. Connect directly with sellers.</div></div><ShopButton onClick={() => startCreate()}>＋ Sell an item</ShopButton></div>
-      <div style={{ display: 'flex', gap: 7, marginTop: 17, overflowX: 'auto' }}>{nav.map(item => <button key={item.id} type="button" onClick={() => { feedback(); setPage(item.id) }} style={{ flexShrink: 0, border: '1px solid ' + (page === item.id ? '#C9A84C' : 'rgba(255,255,255,.18)'), background: page === item.id ? '#C9A84C' : 'rgba(255,255,255,.08)', color: page === item.id ? '#101B35' : '#fff', padding: '8px 12px', borderRadius: 20, fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>{item.label}</button>)}</div>
+    <header style={{ ...ui.header, background: N.navy, padding: '0 18px 16px', flexShrink: 0 }}><div style={{ maxWidth: 1080, margin: '0 auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <button type="button" aria-label={page === 'browse' ? 'Back to Home' : 'Back to Shop'} onClick={() => page === 'browse' ? setScreen('home') : (setPage(selected?.is_mine ? 'mine' : 'browse'), setSelected(null))} style={{ width: 44, height: 44, flexShrink: 0, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 12, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>‹</button>
+        <div style={{ minWidth: 0, flex: 1 }}><div style={{ fontSize: 17, fontWeight: 800, letterSpacing: '-0.3px', color: '#fff' }}>Shop</div><div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, marginTop: 2 }}>Find useful things near campus</div></div>
+        <ShopButton onClick={() => startCreate()}>＋ Sell an item</ShopButton>
+      </div>
+      <div style={{ color: 'rgba(255,255,255,0.58)', fontSize: 11, marginBottom: 10 }}>Connect directly with sellers. Prepza does not process buyer purchases.</div>
+      <nav aria-label="Shop sections" style={{ display: 'flex', gap: 18, overflowX: 'auto', borderBottom: '1px solid rgba(255,255,255,.12)' }}>{nav.map(item => <button key={item.id} type="button" aria-current={page === item.id ? 'page' : undefined} onClick={() => { feedback(); setPage(item.id) }} style={{ position: 'relative', flexShrink: 0, border: 0, borderBottom: '2px solid ' + (page === item.id ? N.gold : 'transparent'), background: 'transparent', color: page === item.id ? N.gold : 'rgba(255,255,255,.72)', padding: '8px 2px', minHeight: 44, borderRadius: 0, fontSize: 12, fontWeight: 800, cursor: 'pointer', marginBottom: -1 }}>{item.label}</button>)}</nav>
     </div></header>
     <main style={ui.wrap}>
       {notice && <div role="status" style={{ background: 'color-mix(in srgb, #22C55E 10%, var(--prepza-generation-page, #F8F9FC))', border: '1px solid color-mix(in srgb, #22C55E 28%, var(--prepza-generation-border, #E1E5ED))', color: 'var(--prepza-generation-text, #0B1437)', borderRadius: 12, padding: 12, fontSize: 12, marginBottom: 12 }}>{notice}</div>}
       {error && <div role="alert" style={{ background: 'color-mix(in srgb, #EF4444 10%, var(--prepza-generation-page, #F8F9FC))', border: '1px solid color-mix(in srgb, #EF4444 28%, var(--prepza-generation-border, #E1E5ED))', color: 'var(--prepza-generation-text, #0B1437)', borderRadius: 12, padding: 12, fontSize: 12, marginBottom: 12 }}>{error}<button onClick={() => setError('')} style={{ float: 'right', border: 0, background: 'transparent', cursor: 'pointer' }}>Dismiss</button></div>}
 
       {page === 'browse' && <>
-        <section style={{ ...ui.panel, marginBottom: 16 }}><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
-          <Field label="Search products"><input style={ui.input} value={query} onChange={e => setQuery(e.target.value)} placeholder="Textbooks, calculators…" /></Field>
-          <Field label="Category"><select style={ui.input} value={category} onChange={e => setCategory(e.target.value)}><option value="">All categories</option>{CATEGORIES.map(item => <option key={item}>{item}</option>)}</select></Field>
-          <Field label="Condition"><select style={ui.input} value={condition} onChange={e => setCondition(e.target.value)}><option value="">Any condition</option>{CONDITIONS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></Field>
-          <Field label="Campus / area"><input style={ui.input} value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Kahawa, KU" /></Field>
-          <Field label="Sort by"><select style={ui.input} value={sort} onChange={e => setSort(e.target.value)}><option value="newest">Newest</option><option value="price_low">Price: low to high</option><option value="price_high">Price: high to low</option></select></Field>
-        </div></section>
-        {loading ? <div style={{ padding: 22, textAlign: 'center', color: 'var(--prepza-generation-muted, #596579)' }}>Finding listings…</div> : listings.length ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(155px,1fr))', gap: 12 }}>{listings.map(item => card(item))}</div> : <div style={{ ...ui.panel, textAlign: 'center', padding: 18 }}><div style={{ fontSize: 17, fontWeight: 900 }}>No listings yet</div><p style={{ color: 'var(--prepza-generation-muted, #596579)', fontSize: 12, lineHeight: 1.4, margin: '6px 0 0' }}>Use Sell an item above to post.</p></div>}
+        <section style={{ ...ui.panel, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', alignItems: 'end', gap: 10 }}>
+            <Field label="Search products"><input style={ui.input} value={query} onChange={e => setQuery(e.target.value)} placeholder="Textbooks, calculators…" /></Field>
+            <button type="button" className="shop-filter-toggle" aria-expanded={filtersExpanded} aria-controls="shop-additional-filters" onClick={() => setFiltersExpanded(value => !value)} style={{ ...ui.button, ...ui.secondary, minHeight: 44 }}>{filtersExpanded ? 'Hide filters' : 'More filters'}</button>
+          </div>
+          <div id="shop-additional-filters" className={`shop-filter-grid${filtersExpanded ? ' is-expanded' : ''}`} style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, marginTop: 10 }}>
+            <Field label="Category"><select style={ui.input} value={category} onChange={e => setCategory(e.target.value)}><option value="">All categories</option>{CATEGORIES.map(item => <option key={item}>{item}</option>)}</select></Field>
+            <Field label="Condition"><select style={ui.input} value={condition} onChange={e => setCondition(e.target.value)}><option value="">Any condition</option>{CONDITIONS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></Field>
+            <Field label="Campus / area"><input style={ui.input} value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Kahawa, KU" /></Field>
+            <Field label="Sort by"><select style={ui.input} value={sort} onChange={e => setSort(e.target.value)}><option value="newest">Newest</option><option value="price_low">Price: low to high</option><option value="price_high">Price: high to low</option></select></Field>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
+            <span aria-live="polite" style={{ color: 'var(--prepza-generation-muted, #596579)', fontSize: 11 }}>{hasActiveFilters ? 'Filters applied' : 'Refine your search'}</span>
+            {hasActiveFilters && <button type="button" aria-label="Clear all active filters" onClick={clearFilters} style={{ ...ui.button, ...ui.secondary, minHeight: 44, fontSize: 12 }}>Clear filters</button>}
+          </div>
+        </section>
+        {loading ? <div aria-label="Loading listings" aria-busy={loading} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(155px,1fr))', gap: 12 }}>{Array.from({ length: 4 }, (_, index) => <div key={index} style={{ ...ui.panel, padding: 0, overflow: 'hidden' }}><div style={{ height: 124, background: 'var(--prepza-generation-border, #E1E5ED)' }} /><div style={{ padding: 12 }}><div style={{ height: 16, width: '38%', borderRadius: 6, background: 'var(--prepza-generation-border, #E1E5ED)', marginBottom: 9 }} /><div style={{ height: 12, width: '82%', borderRadius: 6, background: 'var(--prepza-generation-border, #E1E5ED)' }} /></div></div>)}</div> : listings.length ? <div aria-busy={loading} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(155px,1fr))', gap: 12 }}>{listings.map(item => card(item))}</div> : <div style={{ ...ui.panel, textAlign: 'center', padding: 18 }}><div style={{ fontSize: 17, fontWeight: 900 }}>{hasActiveFilters ? 'No listings match these filters' : 'No listings yet'}</div><p style={{ color: 'var(--prepza-generation-muted, #596579)', fontSize: 12, lineHeight: 1.4, margin: '6px 0 0' }}>{hasActiveFilters ? 'Clear filters to see all listings, or try a different search.' : 'Use Sell an item above to post.'}</p>{hasActiveFilters && <div style={{ marginTop: 12 }}><ShopButton secondary onClick={clearFilters}>Clear filters</ShopButton></div>}</div>}
       </>}
 
-      {page === 'mine' && <><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 14 }}><div><h2 style={{ fontSize: 17, margin: 0 }}>My listings</h2><p style={{ color: 'var(--prepza-generation-muted, #596579)', fontSize: 11, margin: '5px 0 0' }}>Each listing costs KES 100 per 30 days.</p></div><ShopButton onClick={() => startCreate()}>＋ New listing</ShopButton></div>{mine.length ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(155px,1fr))', gap: 12 }}>{mine.map(item => card(item, true))}</div> : <div style={{ ...ui.panel, textAlign: 'center', padding: 28 }}><h3 style={{ marginTop: 0 }}>No products posted yet</h3><p style={{ fontSize: 12, color: 'var(--prepza-generation-muted, #596579)' }}>Each item costs KES 100 per 30 days. Add a photo, complete secure checkout, then submit it for review.</p><ShopButton onClick={() => startCreate()}>Create your first listing</ShopButton></div>}</>}
+      {page === 'mine' && <><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 14 }}><div><h2 style={{ fontSize: 17, margin: 0 }}>My listings</h2><p style={{ color: 'var(--prepza-generation-muted, #596579)', fontSize: 11, margin: '5px 0 0' }}>Each listing costs KES 100 per 30 days.</p></div><ShopButton onClick={() => startCreate()}>＋ New listing</ShopButton></div>{mine.length ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(155px,1fr))', gap: 12 }}>{mine.map(item => card(item, true))}</div> : <div style={{ ...ui.panel, textAlign: 'center', padding: 28 }}><h3 style={{ marginTop: 0 }}>No products posted yet</h3><p style={{ fontSize: 12, color: 'var(--prepza-generation-muted, #596579)' }}>Each item costs KES 100 per 30 days. Add a photo, complete secure checkout, then submit it for review.</p><ShopButton onClick={() => startCreate()}>Create your first listing</ShopButton></div>}</>}
 
-      {page === 'saved' && (saved.length ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(155px,1fr))', gap: 12 }}>{saved.map(item => card(item))}</div> : <div style={{ ...ui.panel, textAlign: 'center', padding: 30 }}>No saved listings yet. Save products to compare them later.</div>)}
+      {page === 'saved' && (saved.length ? <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(155px,1fr))', gap: 12 }}>{saved.map(item => card(item))}</div> : <div style={{ ...ui.panel, textAlign: 'center', padding: 30 }}>No saved listings yet. Save products to compare them later.</div>)}
 
-      {page === 'create' && <section style={{ ...ui.panel, maxWidth: 760, margin: '0 auto' }}>
+      {page === 'create' && <form onSubmit={event => { event.preventDefault(); void saveForm() }} style={{ ...ui.panel, maxWidth: 760, margin: '0 auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'start', marginBottom: 18 }}><div><h2 style={{ margin: 0, fontSize: 18 }}>{formId ? 'Edit listing' : 'List a product'}</h2><p style={{ color: 'var(--prepza-generation-muted, #596579)', fontSize: 12, margin: '6px 0 0' }}>Buyers contact you directly. Prepza never takes payment for the product.</p></div><button type="button" onClick={() => setPage('mine')} style={{ border: 0, background: 'transparent', fontWeight: 800, cursor: 'pointer' }}>Cancel</button></div>
         <div style={{ background: 'color-mix(in srgb, #C9A84C 13%, var(--prepza-generation-page, #F8F9FC))', border: '1px solid color-mix(in srgb, #C9A84C 40%, var(--prepza-generation-border, #E1E5ED))', borderRadius: 12, padding: 12, marginBottom: 15, fontSize: 12, lineHeight: 1.55, color: 'var(--prepza-generation-text, #0B1437)' }}><strong>Posting fee: KES 100 per item for each 30-day period, including your first.</strong> Pay securely before submitting for review. Buyers pay you directly; Prepza never handles product purchases.</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', rowGap: 6, columnGap: 13 }}>
@@ -358,8 +382,8 @@ export default function ShopScreen({ setScreen, setActiveConversationId }: Props
         <div style={{ marginTop: 13 }}><Field label="Description"><textarea style={{ ...ui.input, resize: 'vertical', minHeight: 105 }} value={form.description} maxLength={2000} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Describe the item honestly, including wear, defects and what is included." required /></Field><div style={{ color: 'var(--prepza-generation-muted, #596579)', textAlign: 'right', fontSize: 10 }}>{form.description.length}/2000</div></div>
         {formImages.length > 0 && <div style={{ marginTop: 13 }}><div style={{ fontSize: 11, fontWeight: 800, marginBottom: 7 }}>Current photos</div><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(92px,1fr))', gap: 8 }}>{formImages.map((image, index) => <div key={image.key} style={{ border: '1px solid var(--prepza-generation-border, #E1E5ED)', borderRadius: 10, padding: 6 }}>{image.url ? <img src={image.url} alt={'Current product photo ' + (index + 1)} style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', borderRadius: 7 }} /> : <div style={{ aspectRatio: '1 / 1', background: 'var(--prepza-generation-border, #E1E5ED)', borderRadius: 7 }} />}<button type="button" onClick={() => removeFormImage(index)} style={{ width: '100%', marginTop: 5, border: 0, background: 'color-mix(in srgb, #EF4444 10%, var(--prepza-generation-page, #F8F9FC))', color: 'var(--prepza-generation-text, #0B1437)', borderRadius: 7, padding: 6, fontSize: 10, fontWeight: 800, cursor: 'pointer' }}>Remove</button></div>)}</div></div>}
         <div style={{ marginTop: 13 }}><Field label={'Add photos (' + Math.max(0, 6 - formImages.length) + ' slots left; JPEG, PNG or WebP; 5 MB each)'}><input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(e: ChangeEvent<HTMLInputElement>) => setFiles(Array.from(e.target.files || []).slice(0, Math.max(0, 6 - formImages.length)))} style={{ ...ui.input, padding: 10 }} disabled={formImages.length >= 6} /></Field><p style={{ color: 'var(--prepza-generation-muted, #596579)', fontSize: 10, lineHeight: 1.5 }}>Use clear photos of the actual item. Photos are resized and location metadata is removed before storage.</p>{files.length > 0 && <div style={{ fontSize: 11, marginBottom: 8 }}>{files.length} photo(s) selected: {files.map(f => f.name).join(', ')}</div>}<p style={{ color: 'var(--prepza-generation-text, #0B1437)', fontSize: 10, lineHeight: 1.5 }}>Do not list stolen or counterfeit goods, weapons, medicines, alcohol, tobacco/nicotine, or other prohibited or regulated items.</p></div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 18 }}><ShopButton onClick={saveForm} disabled={saving}>{saving ? 'Saving…' : formId ? 'Save changes' : 'Save & publish'}</ShopButton><ShopButton secondary onClick={() => setPage('mine')}>Cancel</ShopButton></div>
-      </section>}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 18 }}><ShopButton type="submit" disabled={saving}>{saving ? 'Saving…' : formId ? 'Save changes' : 'Save & publish'}</ShopButton><ShopButton secondary onClick={() => setPage('mine')}>Cancel</ShopButton></div>
+      </form>}
 
       {page === 'detail' && selected && <section style={{ ...ui.panel, maxWidth: 900, margin: '0 auto' }}>
         <button type="button" onClick={() => { setSelected(null); setPage(selected.is_mine ? 'mine' : 'browse') }} style={{ border: 0, background: 'transparent', padding: 0, marginBottom: 15, cursor: 'pointer', fontWeight: 800 }}>‹ Back to {selected.is_mine ? 'My listings' : 'Shop'}</button>

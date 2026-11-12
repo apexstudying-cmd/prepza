@@ -32,7 +32,16 @@ def test_backend_generation_routes_and_payload_keys_match_contract():
 
 
 def test_active_frontend_generation_contract_matches_backend():
-    source = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
+    # Screen extraction deliberately moves generation calls out of App.tsx.
+    source = "\n".join(
+        Path(path).read_text(encoding="utf-8")
+        for path in (
+            "frontend/src/App.tsx",
+            "frontend/src/screens/study/GeneratedStudyScreens.tsx",
+            "frontend/src/generation/GenerationScreens.tsx",
+            "frontend/src/generation/StudyGenerationScreensClean.tsx",
+        )
+    )
 
     expected_paths = {
         "/documents/${activeDocumentId}/summarize": "summary",
@@ -173,3 +182,19 @@ def test_theme_muted_text_meets_wcag_aa_on_light_and_dark_surfaces():
     assert contrast_ratio(light_match.group(1), "#FFFFFF") >= 4.5
     assert contrast_ratio(dark_match.group(1), "#0A0E1A") >= 4.5
 
+
+
+def test_generation_ui_transform_targets_the_extracted_podcast_player_module():
+    script = Path("tools/apply_generation_ui_build.py").read_text(encoding="utf-8")
+    app = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
+    study = Path("frontend/src/screens/study/GeneratedStudyScreens.tsx").read_text(encoding="utf-8")
+    player = Path("frontend/src/screens/podcast/PodcastPlayerScreen.tsx").read_text(encoding="utf-8")
+    assert "PLAYER.write_text" not in script
+    assert "PodcastPlayerScreen is an extracted feature module" in script
+    assert "('// ─── PODCAST PLAYER', '// ─── SUMMARY'" not in script
+    assert "is_study_flashcards = end_marker == '// ─── QUIZ'" in script
+    assert "function PodcastPlayerScreen(" not in app
+    assert "export default function PodcastPlayerScreen(" in player
+    assert "getCachedPodcastAudio(podcastAudioPath)" in player
+    assert "// ─── FLASHCARDS" in study
+    assert "function FlashcardsScreen(" in study

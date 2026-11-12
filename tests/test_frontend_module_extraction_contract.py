@@ -161,6 +161,7 @@ def test_achievements_screen_preserves_load_share_and_navigation_contracts():
         "formatAchievementDate(a.unlocked_at)",
         "setScreen('profile')",
         "setScreen('share-sheet')",
+        "setScreen('share-sheet')",
         "Achievement Unlocked",
         "Join me on Prepza",
         "<Pill",
@@ -315,5 +316,471 @@ def test_login_screen_preserves_existing_auth_and_navigation_contracts():
         "autoComplete=\"email\"",
         "autoComplete=\"current-password\"",
         "aria-label=\"Continue with Google\"",
+    ):
+        assert contract in source
+
+
+def test_study_navigation_transform_supports_extracted_splash_and_is_idempotent(tmp_path):
+    import shutil
+    import subprocess
+    import sys
+
+    root = tmp_path
+    (root / "scripts").mkdir()
+    (root / "frontend" / "src" / "screens" / "onboarding").mkdir(parents=True)
+    shutil.copyfile(
+        ROOT / "scripts" / "apply_study_navigation_polish.py",
+        root / "scripts" / "apply_study_navigation_polish.py",
+    )
+    app = """import SplashScreen from './screens/onboarding/SplashScreen'
+    function readStoredNavigationState() { return null }
+    function App() {
+      const setScreen = (_screen: string) => {}
+      return <SplashScreen setScreen={setScreen} brandline={PREPZA_BRANDLINE} />
+    }
+    // prepza: study-navigation-polish-v2
+    """
+    splash = """export default function SplashScreen({ setScreen, brandline }: { setScreen: (s: 'home' | 'complete-profile' | 'login') => void; brandline: string }) {
+      const [state, setState] = useState<'checking' | 'retry'>('checking')
+      const checkSession = async (attempt = 0): Promise<void> => {
+        setState('checking')
+        try {
+          const me = await api('/me')
+          setScreen(me.university_id ? 'home' : 'complete-profile')
+        } catch (e) {
+          if (e instanceof ApiError && e.status === 401) {
+            setScreen('login')
+            return
+          }
+          if (attempt === 0) {
+            setTimeout(() => checkSession(1), 1200)
+          } else {
+            setState('retry')
+          }
+        }
+      }
+    }
+    """
+    (root / "frontend" / "src" / "App.tsx").write_text(app, encoding="utf-8")
+    module_path = root / "frontend" / "src" / "screens" / "onboarding" / "SplashScreen.tsx"
+    module_path.write_text(splash, encoding="utf-8")
+
+    command = [sys.executable, str(root / "scripts" / "apply_study_navigation_polish.py")]
+    subprocess.run(command, cwd=root, check=True)
+    transformed_app = (root / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+    transformed_module = module_path.read_text(encoding="utf-8")
+    assert "resumeOffline={() =>" in transformed_app
+    assert "const resumeable: Screen[]" in transformed_app
+    assert "resumeOffline()" in transformed_module
+    assert "brandline, resumeOffline" in transformed_module
+    assert "typeof navigator !== 'undefined' && !navigator.onLine" in transformed_module
+
+    subprocess.run(command, cwd=root, check=True)
+    assert (root / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8") == transformed_app
+    assert module_path.read_text(encoding="utf-8") == transformed_module
+
+
+def test_edit_profile_screen_is_owned_by_a_profile_feature_module():
+    assert "import EditProfileScreen from './screens/profile/EditProfileScreen'" in APP
+    assert "case 'edit-profile':" in APP
+    assert "function EditProfileScreen(" not in APP
+
+
+def test_edit_profile_module_preserves_profile_and_avatar_contracts():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "profile" / "EditProfileScreen.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "api<EditProfileMe>('/me')",
+        "api<UniversityOption[]>('/universities')",
+        "api<ProgramOption[]>(",
+        "'/profile/avatar'",
+        "'/profile/avatar/confirm'",
+        "'X-CSRF-Token':csrfToken",
+        "createImageBitmap(file)",
+        "canvas.width = 512",
+        "canvas.height = 512",
+        "'image/webp', 0.82",
+        "blob.size > 512 * 1024",
+        "cacheAvatar(id, confirmed.avatar_url)",
+        "clearCachedAvatar(id)",
+        "method: 'PATCH'",
+        "prepza:academic-context-changed",
+        "setScreen('profile')",
+    ):
+        assert contract in source
+
+
+def test_new_chat_screen_is_owned_by_a_chat_feature_module():
+    assert "import NewChatScreen from './screens/chat/NewChatScreen'" in APP
+    assert "case 'new-chat':" in APP
+    assert "setActiveConversationId={setActiveConversationId}" in APP
+    assert "function NewChatScreen(" not in APP
+
+
+def test_new_chat_module_preserves_search_direct_chat_and_group_creation_contracts():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "chat" / "NewChatScreen.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "api<{ csrf_token: string }>('/me')",
+        "/users/search?q=",
+        "}, 300)",
+        "clearTimeout(t)",
+        "api<{ id: number; reused: boolean }>('/chats', {",
+        "is_group: false",
+        "participant_ids: [userId]",
+        "is_group: true",
+        "participant_ids: selectedIds",
+        "'X-CSRF-Token': csrfToken",
+        "setActiveConversationId(res.id)",
+        "setScreen('chat-detail')",
+        "setMode('new-chat')",
+        "setMode('new-group')",
+        "Create Group",
+        "<Avi",
+    ):
+        assert contract in source
+
+
+def test_student_profile_screen_is_owned_by_the_profile_feature_module():
+    assert "import StudentProfileScreen from './screens/profile/StudentProfileScreen'" in APP
+    assert "case 'student-profile':" in APP
+    assert "function StudentProfileScreen(" not in APP
+
+
+def test_student_profile_module_preserves_follow_privacy_and_message_contracts():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "profile" / "StudentProfileScreen.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "/public-profile",
+        "/follow-summary",
+        "method: 'DELETE'",
+        "method: 'POST'",
+        "'X-CSRF-Token': csrfToken",
+        "is_pending",
+        "is_private",
+        "api<{ id: number; reused: boolean }>('/chats', {",
+        "participant_ids: [targetUserId]",
+        "setActiveConversationId?.(res.id)",
+        "setScreen('chat-detail')",
+        "setScreen('chat-options')",
+        "formatStudyTime(profile.weekly_study_seconds)",
+        "followers_count",
+        "following_count",
+        "documents_count",
+    ):
+        assert contract in source
+
+
+def test_time_studied_screen_is_owned_by_the_gamification_module():
+    assert "import TimeStudiedScreen from './screens/gamification/TimeStudiedScreen'" in APP
+    assert "case 'time-studied':" in APP
+    assert "function TimeStudiedScreen(" not in APP
+
+
+def test_time_studied_module_preserves_period_selection_and_loading_contract():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "gamification" / "TimeStudiedScreen.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "useState<'day' | 'week' | 'month'>('week')",
+        "`/study-time?period=${period}`",
+        "api<StudyTimeResponse>",
+        "if (!cancelled) setData(res)",
+        "if (!cancelled) setError",
+        "return () => { cancelled = true }",
+        "formatStudyTime(data.total_seconds)",
+        "setScreen('profile')",
+    ):
+        assert contract in source
+
+
+def test_share_opportunity_form_is_owned_by_the_opportunities_module():
+    assert "import ShareOppForm from './screens/opportunities/ShareOppForm'" in APP
+    assert "case 'share-opp-form':" in APP
+    assert "function ShareOppForm(" not in APP
+
+
+def test_share_opportunity_form_preserves_existing_local_form_fields_and_navigation():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "opportunities" / "ShareOppForm.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "title: '', org: '', type: 'Internship', deadline: '', location: '', reward: '', desc: '', link: ''",
+        "setScreen('create-modal')",
+        "setScreen('opportunities')",
+        "['Internship','Scholarship','Competition','Job','Event']",
+        "Describe the opportunity, requirements, and how to apply...",
+        "value={form.desc}",
+        "onChange={upd('desc')}",
+    ):
+        assert contract in source
+
+
+def test_study_streak_screen_is_owned_by_the_gamification_module():
+    assert "import StudyStreakScreen from './screens/gamification/StudyStreakScreen'" in APP
+    assert "case 'study-streak':" in APP
+    assert "function StudyStreakScreen(" not in APP
+
+
+def test_study_streak_module_preserves_calendar_loading_navigation_and_milestones():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "gamification" / "StudyStreakScreen.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "api<StreakResponse>('/streak' + (viewMonth ? `?month=${viewMonth}` : ''))",
+        "if (cancelled) return",
+        "return () => { cancelled = true }",
+        "setSelectedDay(isSelected ? null : d)",
+        "setViewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)",
+        "setScreen('profile')",
+        "setScreen('share-sheet')",
+        "milestones.filter(m => m.done)",
+        "formatStudyDuration(d.study_seconds)",
+    ):
+        assert contract in source
+
+
+def test_profile_screen_is_owned_by_the_profile_feature_module():
+    assert "import ProfileScreen from './screens/profile/ProfileScreen'" in APP
+    assert "case 'profile':" in APP
+    assert "function ProfileScreen(" not in APP
+
+
+def test_profile_module_preserves_profile_data_tabs_cache_and_navigation_contracts():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "profile" / "ProfileScreen.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "api<ProfileMe>('/me')",
+        "api<GamificationSummary>('/gamification/summary')",
+        "api<AchievementsResponse>('/achievements')",
+        "api<StudyTimeResponse>('/study-time?period=week')",
+        "api<{ requests: unknown[] }>('/follow-requests')",
+        "api<{ saved: any[] }>('/opportunities/saved')",
+        "api<any>('/study-time?period=week')",
+        "api<any>('/study-time?period=month')",
+        "api<{ documents: HomeDocument[] }>('/documents')",
+        "return () => { cancelled = true }",
+        "['saved','activity','materials']",
+        "setScreen('follow-requests')",
+        "setScreen('edit-profile')",
+        "setScreen('share-sheet')",
+        "setScreen('study-activity')",
+        "setScreen('document-study')",
+        "PROFILE_CACHE.me",
+        "data-prepza-profile-menu",
+        "type ProfileScreenRoute =",
+        "as ProfileScreenRoute",
+    ):
+        assert contract in source
+
+
+def test_document_ready_screen_is_owned_by_the_study_module():
+    assert "import DocReadyScreen from './screens/study/DocReadyScreen'" in APP
+    assert "case 'doc-ready':" in APP
+    assert "function DocReadyScreen(" not in APP
+
+
+def test_document_ready_module_preserves_document_metadata_and_action_destinations():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "study" / "DocReadyScreen.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "api<DocumentDetail>(`/documents/${activeDocumentId}`)",
+        "setScreen(a.dest)",
+        "Document Ready ✓",
+        "Processing Complete!",
+        "Your document is ready to study",
+        "Study with AI",
+        "Ask Questions",
+        "Summarize",
+        "Generate Quiz",
+        "Flashcards",
+        "Create Podcast",
+        "Save to Library",
+        "file_size_bytes",
+        "page_count",
+        "TopBar",
+    ):
+        assert contract in source
+
+
+def test_publish_library_screen_remains_in_the_app_shell_until_a_safe_extraction():
+    # This screen has not been extracted yet. Keep its existing route and implementation
+    # explicit rather than asserting a module that does not exist.
+    assert "case 'publish-library':" in APP
+    assert "function PublishLibraryScreen(" in APP
+    assert "import PublishLibraryScreen from './screens/library/PublishLibraryScreen'" not in APP
+
+
+def test_publish_library_screen_preserves_document_eligibility_rights_and_submission_contract():
+    # The current screen remains inline in App.tsx; assert its real implementation
+    # contracts without pretending the future extraction has happened.
+    for contract in (
+        "api<{ csrf_token: string }>('/me')",
+        "api<{ documents:",
+        "d.status === 'ready' || d.id === activeDocumentId",
+        "api<{ publication_id?: number; status?: string; duplicate?: boolean; published?: boolean; message?: string }>('/library/publish'",
+        "'X-CSRF-Token': csrfToken",
+        "document_id: selectedDocId",
+        "title: title.trim()",
+        "description: desc.trim() || undefined",
+        "material_type: matType",
+        "rightsChecked",
+        "setScreen('create-modal')",
+        "setScreen('upload')",
+        "setScreen('home')",
+        "setScreen('library')",
+        "type PublishableDoc",
+        "EmptyState",
+    ):
+        assert contract in APP
+
+
+
+def test_document_study_hub_screen_is_owned_by_its_study_module():
+    assert "import DocumentStudyHubScreen from './screens/study/DocumentStudyHubScreen'" in APP
+    assert "function DocumentStudyHubScreen(" not in APP
+    assert "case 'document-study':" in APP
+    assert "LoadingView={GenerationLoading}" in APP
+    assert "ErrorView={GenerationError}" in APP
+
+
+def test_document_study_hub_preserves_online_offline_reading_and_material_replay():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "study" /
+        "DocumentStudyHubScreen.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "listSavedStudyHubOffline",
+        "listOfflineGeneratedMaterials",
+        "getSavedStudyHubOffline",
+        "saveStudyHubDocumentOffline",
+        "`/documents/${activeDocumentId}`",
+        "`/documents/${activeDocumentId}/reading`",
+        "prepza-offline-user-id",
+        "prepza-offline-reading:",
+        "prepza-open-material",
+        "setScreen('study-materials')",
+        "setScreen('document-reader')",
+        "setScreen('ai-tutor')",
+        "setSaveOfflineBusy",
+        "setReadingPage",
+        "as DocumentStudyHubScreenTarget",
+    ):
+        assert contract in source
+    assert "as Screen" not in source
+
+
+def test_study_navigation_transform_and_ci_guard_follow_the_extracted_hub_module():
+    script = (ROOT / "scripts" / "apply_study_navigation_polish.py").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "study-navigation-polish.yml").read_text(encoding="utf-8")
+    assert "frontend/src/screens/study/DocumentStudyHubScreen.tsx" in script
+    assert "LoadingView" in script
+    assert "DOC_CACHE" in script
+    assert "frontend/src/screens/study/DocumentStudyHubScreen.tsx" in workflow
+    assert "cp frontend/src/screens/study/DocumentStudyHubScreen.tsx /tmp/DocumentStudyHubScreen.after" in workflow
+    assert "cmp frontend/src/screens/study/DocumentStudyHubScreen.tsx /tmp/DocumentStudyHubScreen.after" in workflow
+    assert "Loading study hub" in workflow
+
+
+def test_document_study_progress_transform_targets_the_extracted_hub_module():
+    script = (ROOT / "scripts" / "apply_document_study_progress.py").read_text(encoding="utf-8")
+    assert "frontend/src/screens/study/DocumentStudyHubScreen.tsx" in script
+    assert "hub_source = patch_study_hub(HUB_MODULE.read_text(encoding='utf-8'))" in script
+    assert "HUB_MODULE.write_text(hub_source, encoding='utf-8')" in script
+
+
+def test_opportunity_screens_are_owned_by_the_opportunities_feature_module():
+    assert "import { OpportunitiesScreen, OppDetailScreen } from './screens/opportunities/OpportunityScreens'" in APP
+    assert "function OpportunitiesScreen(" not in APP
+    assert "function OppDetailScreen(" not in APP
+    assert "case 'opportunities':" in APP
+    assert "case 'opportunity-detail':" in APP
+
+
+def test_opportunity_screens_preserve_feed_filter_save_view_and_share_contracts():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "opportunities" /
+        "OpportunityScreens.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "/api/discovery/feed?placement=opportunities",
+        "/opportunities/saved",
+        "/opportunities?",
+        "prepza:academic-context-changed",
+        "/api/opportunities/",
+        "/opportunities/",
+        "'X-CSRF-Token': csrfToken",
+        "setScreen('opportunity-detail')",
+        "setScreen('home')",
+        "setScreen('share-opp-form')",
+        "setScreen('share-sheet')",
+        "setActiveOpportunityId",
+    ):
+        assert contract in source
+
+
+def test_opportunity_response_types_are_shared_outside_the_app_shell():
+    source = (
+        ROOT / "frontend" / "src" / "types" / "opportunities.ts"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "export type OpportunityOrg",
+        "export type OpportunityPublic",
+        "export type SponsoredCampaign",
+        "opportunity: OpportunityPublic",
+    ):
+        assert contract in source
+
+
+def test_unused_legacy_organisation_portal_is_removed_without_changing_active_portal():
+    assert "function OrganisationPortalScreen(" not in APP
+    assert "import OrgDiscoveryTab from './organisation/OrgDiscoveryTab'" not in APP
+    assert "import PremiumOrganisationPortal from './organisation/PremiumOrganisationPortal'" in APP
+    assert "if (orgPortalMode) return <PremiumOrganisationPortal onExit={() => setOrgPortalMode(false)} />" in APP
+    assert "function readStoredNavigationState()" in APP
+    assert "sessionStorage.getItem('prepza-navigation-state')" in APP
+
+
+def test_opportunity_metadata_helpers_are_shared_by_the_app_and_extracted_screens():
+    assert "import { oppTypeMeta, fmtDeadline } from './lib/opportunities'" in APP
+    screen = (
+        ROOT / "frontend" / "src" / "screens" / "opportunities" /
+        "OpportunityScreens.tsx"
+    ).read_text(encoding="utf-8")
+    assert "import { oppTypeMeta, fmtDeadline } from '../../lib/opportunities'" in screen
+    library = (ROOT / "frontend" / "src" / "lib" / "opportunities.ts").read_text(encoding="utf-8")
+    assert "export const OPP_TYPE_META" in library
+    assert "export function oppTypeMeta" in library
+    assert "export function fmtDeadline" in library
+
+
+def test_flashcards_and_quiz_are_owned_by_the_generated_study_module():
+    assert "import { FlashcardsStudyScreen, QuizStudyScreen } from './screens/study/GeneratedStudyScreens'" in APP
+    assert "function FlashcardsScreen(" not in APP
+    assert "function QuizScreen(" not in APP
+    assert "case 'flashcards':" in APP
+    assert "case 'quiz':" in APP
+
+
+def test_generated_study_screens_keep_offline_generation_and_completion_contracts():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "study" /
+        "GeneratedStudyScreens.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "'/study-time/heartbeat'",
+        "'flashcards'",
+        "'quiz'",
+        "replaySelectedGeneratedMaterialOffline",
+        "getLatestGeneratedMaterialForPath",
+        "/complete",
+        "'X-CSRF-Token': csrfToken",
+        "newly_unlocked_achievements",
+        "setScreen('document-study')",
     ):
         assert contract in source

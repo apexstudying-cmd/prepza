@@ -10,67 +10,90 @@ def replace_mind_map(text: str) -> str:
     return text
 
 
+def _transform_function(text: str, function_name: str, transform) -> str:
+    """Apply a transformation only inside one named top-level screen function."""
+    marker = f"function {function_name}("
+    start = text.find(marker)
+    if start < 0:
+        return text
+    end = text.find("\nfunction ", start + len(marker))
+    if end < 0:
+        end = len(text)
+    block = text[start:end]
+    updated = transform(block)
+    return text[:start] + updated + text[end:]
+
+
 def remove_document_opening_interstitials(text: str) -> str:
-    """Make document study/reader navigation cache-first and never show the
-    old full-screen 'Opening your document' interstitial when returning from a
-    generation screen.
+    """Make the document study hub and native reader cache-first."""
+    def update_hub(block: str) -> str:
+        hub_state = "  const [document, setDocument] = useState<DocumentDetail | null>(null)"
+        hub_cached_state = "  const [document, setDocument] = useState<DocumentDetail | null>(() => activeDocumentId != null ? DOC_CACHE[activeDocumentId] ?? null : null)"
+        if hub_state in block and hub_cached_state not in block:
+            block = block.replace(hub_state, hub_cached_state, 1)
+        block = block.replace(
+            "        setDocument(data)\n        setReadingPage(Math.max(0, progress.page_num || 0))",
+            "        setDocument(data)\n        DOC_CACHE[activeDocumentId] = data\n        setReadingPage(Math.max(0, progress.page_num || 0))",
+            1,
+        )
+        block = block.replace(
+            '  if (loading) return <GenerationLoading label="Opening your document…" />\n  if (error || !document) return <GenerationError error={error || \'Document unavailable.\'} />',
+            '  if (loading && !document) return <GenerationLoading label="Loading study hub…" />\n  if (error || !document) return <GenerationError error={error || \'Document unavailable.\'} />',
+            1,
+        )
+        block = block.replace(
+            '  if (loading) return <LoadingView label="Opening your document…" />\n  if (error || !document) return <ErrorView error={error || \'Document unavailable.\'} />',
+            '  if (loading && !document) return <LoadingView label="Loading study hub…" />\n  if (error || !document) return <ErrorView error={error || \'Document unavailable.\'} />',
+            1,
+        )
+        return block
 
-    The document-study hub and native reader are separate screens, so fixing
-    only the legacy docLoading gate was insufficient. Both screens need to
-    participate in the same DOC_CACHE.
-    """
-    hub_state = "  const [document, setDocument] = useState<DocumentDetail | null>(null)"
-    hub_cached_state = "  const [document, setDocument] = useState<DocumentDetail | null>(() => activeDocumentId != null ? DOC_CACHE[activeDocumentId] ?? null : null)"
-    if hub_state in text and hub_cached_state not in text:
-        text = text.replace(hub_state, hub_cached_state, 1)
+    def update_reader(block: str) -> str:
+        reader_state = "  const [doc, setDoc] = useState<DocumentDetail | null>(null)"
+        reader_cached_state = "  const [doc, setDoc] = useState<DocumentDetail | null>(() => activeDocumentId != null ? DOC_CACHE[activeDocumentId] ?? null : null)"
+        if reader_state in block and reader_cached_state not in block:
+            block = block.replace(reader_state, reader_cached_state, 1)
+        block = block.replace(
+            '  if (loading) return <GenerationLoading label="Opening your document…" />\n  if (error) return <GenerationError error={error} />',
+            '  if (loading && !doc) return <GenerationLoading label="Loading reader…" />\n  if (error) return <GenerationError error={error} />',
+            1,
+        )
+        block = block.replace('Opening your document…', 'Loading…')
+        block = block.replace('Opening your document...', 'Loading…')
+        block = block.replace('Opening your document', 'Loading…')
+        return block
 
-    text = text.replace(
-        "        setDocument(data)\n        setReadingPage(Math.max(0, progress.page_num || 0))",
-        "        setDocument(data)\n        DOC_CACHE[activeDocumentId] = data\n        setReadingPage(Math.max(0, progress.page_num || 0))",
-        1,
-    )
-
-    text = text.replace(
-        '  if (loading) return <GenerationLoading label="Opening your document…" />\n  if (error || !document) return <GenerationError error={error || \'Document unavailable.\'} />',
-        '  if (loading && !document) return <GenerationLoading label="Loading study hub…" />\n  if (error || !document) return <GenerationError error={error || \'Document unavailable.\'} />',
-        1,
-    )
-
-    reader_state = "  const [doc, setDoc] = useState<DocumentDetail | null>(null)"
-    reader_cached_state = "  const [doc, setDoc] = useState<DocumentDetail | null>(() => activeDocumentId != null ? DOC_CACHE[activeDocumentId] ?? null : null)"
-    if reader_state in text and reader_cached_state not in text:
-        text = text.replace(reader_state, reader_cached_state, 1)
-
-    text = text.replace(
-        '  if (loading) return <GenerationLoading label="Opening your document…" />\n  if (error) return <GenerationError error={error} />',
-        '  if (loading && !doc) return <GenerationLoading label="Loading reader…" />\n  if (error) return <GenerationError error={error} />',
-        1,
-    )
-
-    text = text.replace('Opening your document…', 'Loading…')
-    text = text.replace('Opening your document...', 'Loading…')
-    text = text.replace('Opening your document', 'Loading…')
+    # Keep supporting the legacy inline location while the screen is moved
+    # into its feature module. The cache is passed from App so the reader and
+    # study hub continue sharing the same document object.
+    text = _transform_function(text, "DocumentStudyHubScreen", update_hub)
+    hub_module = Path('frontend/src/screens/study/DocumentStudyHubScreen.tsx')
+    if hub_module.exists():
+        module_text = hub_module.read_text(encoding='utf-8')
+        module_text = _transform_function(module_text, "DocumentStudyHubScreen", update_hub)
+        hub_module.write_text(module_text, encoding='utf-8')
+    text = _transform_function(text, "DocumentReaderScreen", update_reader)
     return text
 
 
 def harden_document_navigation(text: str) -> str:
-    old_state = "  const [doc, setDoc] = useState<DocumentDetail | null>(null)\n"
-    new_state = "  const [doc, setDoc] = useState<DocumentDetail | null>(() => activeDocumentId != null ? DOC_CACHE[activeDocumentId] ?? null : null)\n"
-    if old_state in text:
-        text = text.replace(old_state, new_state, 1)
+    """Remove the legacy empty-document interstitial and keep back navigation stable."""
+    def remove_study_interstitial(block: str) -> str:
+        block, _ = re.subn(
+            r"\n\s*// Only pending while there's an active document[\s\S]*?\n\s*const docLoading = activeDocumentId != null && doc === null && !docLoadError\n\s*if \(docLoading\) return <SkeletonDocument \/>\n",
+            "\n",
+            block,
+            count=1,
+        )
+        block = re.sub(
+            r"\n\s*const docLoading = activeDocumentId != null && doc === null && !docLoadError\n\s*if \(docLoading\) return <SkeletonDocument \/>\n",
+            "\n",
+            block,
+            count=1,
+        )
+        return block
 
-    text, _ = re.subn(
-        r"\n\s*// Only pending while there's an active document[\s\S]*?\n\s*const docLoading = activeDocumentId != null && doc === null && !docLoadError\n\s*if \(docLoading\) return <SkeletonDocument />\n",
-        "\n",
-        text,
-        count=1,
-    )
-    text = re.sub(
-        r"\n\s*const docLoading = activeDocumentId != null && doc === null && !docLoadError\n\s*if \(docLoading\) return <SkeletonDocument />\n",
-        "\n",
-        text,
-        count=1,
-    )
+    text = _transform_function(text, "DocumentStudyScreen", remove_study_interstitial)
 
     old_set_screen = """  const setScreen = (s: Screen) => {
     if (s === screen) return
@@ -91,7 +114,7 @@ def harden_document_navigation(text: str) -> str:
     window.history.pushState({ prepzaNav: true }, '')
   }
 """
-    if old_set_screen in text:
+    if old_set_screen in text and new_set_screen not in text:
         text = text.replace(old_set_screen, new_set_screen, 1)
     return text
 
@@ -175,6 +198,79 @@ def harden_offline_startup(text: str) -> str:
     return text
 
 
+
+def harden_extracted_splash_startup(app_text: str) -> str:
+    """Keep offline resume when SplashScreen is owned by its feature module."""
+    splash_path = Path('frontend/src/screens/onboarding/SplashScreen.tsx')
+    if not splash_path.exists():
+        return app_text
+
+    app_call = "<SplashScreen setScreen={setScreen} brandline={PREPZA_BRANDLINE} />"
+    app_call_with_resume = """<SplashScreen
+        setScreen={setScreen}
+        brandline={PREPZA_BRANDLINE}
+        resumeOffline={() => {
+          const stored = readStoredNavigationState()
+          const resumeable: Screen[] = [
+            'home', 'explore', 'chats', 'profile', 'library', 'document-study',
+            'document-reader', 'ai-tutor', 'study-materials', 'podcast-player',
+            'podcast-library', 'flashcards', 'quiz', 'summary', 'mind-map',
+            'opportunities', 'opportunity-detail', 'notifications', 'student-profile',
+            'chat-detail', 'new-chat', 'chat-options', 'settings', 'edit-profile',
+          ]
+          const target = [...(stored?.stack || [])].reverse().find(s => resumeable.includes(s))
+          if (target) {
+            setScreen(target)
+            return true
+          }
+          return false
+        }}
+      />"""
+    if app_call in app_text:
+        app_text = app_text.replace(app_call, app_call_with_resume, 1)
+
+    module = splash_path.read_text(encoding='utf-8')
+    if "resumeOffline: () => boolean" not in module:
+        module = module.replace(
+            "brandline: string })",
+            "brandline: string; resumeOffline: () => boolean })",
+            1,
+        )
+    if "brandline, resumeOffline" not in module:
+        module = module.replace(
+            "{ setScreen, brandline }:",
+            "{ setScreen, brandline, resumeOffline }:",
+            1,
+        )
+
+    marker = "    setState('checking')\n"
+    offline_guard = """    setState('checking')
+    if (typeof navigator !== 'undefined' && !navigator.onLine && resumeOffline()) return
+"""
+    if offline_guard not in module and marker in module:
+        module = module.replace(marker, offline_guard, 1)
+
+    old_error = """      if (attempt === 0) {
+        setTimeout(() => checkSession(1), 1200)
+      } else {
+        setState('retry')
+      }
+"""
+    new_error = """      if (attempt === 0) {
+        if (typeof navigator !== 'undefined' && !navigator.onLine && resumeOffline()) return
+        setTimeout(() => checkSession(1), 1200)
+      } else {
+        if (resumeOffline()) return
+        setState('retry')
+      }
+"""
+    if old_error in module:
+        module = module.replace(old_error, new_error, 1)
+
+    splash_path.write_text(module, encoding='utf-8')
+    return app_text
+
+
 def persist_navigation_across_restarts(text: str) -> str:
     """Navigation state must survive a fully closed PWA process.
 
@@ -198,18 +294,16 @@ PATCH_MARKER = "// prepza: study-navigation-polish-v2"
 
 def main():
     text = APP.read_text(encoding='utf-8')
-    if PATCH_MARKER in text:
-        print('study navigation polish already applied')
-        return
     text = replace_mind_map(text)
     text = harden_document_navigation(text)
     text = remove_document_opening_interstitials(text)
     text = harden_offline_startup(text)
+    text = harden_extracted_splash_startup(text)
     text = persist_navigation_across_restarts(text)
-    text = text.rstrip() + "\n" + PATCH_MARKER + "\n"
+    if PATCH_MARKER not in text:
+        text = text.rstrip() + "\n" + PATCH_MARKER + "\n"
     APP.write_text(text, encoding='utf-8')
     print('study navigation polish applied')
-
 
 if __name__ == '__main__':
     main()

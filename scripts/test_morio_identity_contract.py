@@ -42,9 +42,10 @@ def test_group_mention_and_visible_copy_use_morio():
 
 def test_home_study_screens_and_composer_use_morio():
     app = source("frontend/src/App.tsx")
+    study_hub = source("frontend/src/screens/study/DocumentStudyHubScreen.tsx")
     chat = source("frontend/src/crypto/WhatsAppChatExperience.tsx")
-    assert "Study with Morio" in app
-    assert "Use Morio while this document is your study context." in app
+    assert "Study with Morio" in study_hub
+    assert "Use Morio while this document is your study context." in study_hub
     assert ">Morio</div>" in app
     assert "}>@Morio</button>" in chat
     assert "}>@Ada</button>" not in chat
@@ -90,7 +91,14 @@ def test_home_quick_actions_are_the_approved_five_in_order():
 
 def test_splash_screen_uses_the_canonical_192px_icon():
     app = source("frontend/src/App.tsx")
-    splash = app.split("function SplashScreen", 1)[1].split("// ─── LOGIN", 1)[0]
+    admin_dir = ROOT / "frontend" / "src" / "admin"
+    admin_brand_marks = sum(
+        path.read_text(encoding="utf-8").count('src="/icon-192.png"')
+        for path in admin_dir.glob("*.tsx")
+    ) if admin_dir.exists() else 0
+    splash = source("frontend/src/screens/onboarding/SplashScreen.tsx")
+    assert "from './screens/onboarding/SplashScreen'" in app
+    assert "function SplashScreen" not in app
     assert '<img src="/icon-192.png" alt="Prepza" width={192} height={192}' in splash
     assert "src={logoImg}" not in splash
     # All React app-shell brand marks use the canonical public PNG, not the SVG import.
@@ -101,6 +109,8 @@ def test_splash_screen_uses_the_canonical_192px_icon():
     auth_screens = source("frontend/src/screens/auth/AuthScreens.tsx")
     assert (
         app.count('src="/icon-192.png"')
+        + admin_brand_marks
+        + splash.count('src="/icon-192.png"')
         + profile_screen.count('src="/icon-192.png"')
         + login_screen.count('src="/icon-192.png"')
         + auth_screens.count('src="/icon-192.png"')

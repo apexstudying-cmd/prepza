@@ -44,4 +44,5 @@ def test_gamification_response_types_and_shared_study_time_formatter_are_preserv
     assert "export function formatStudyTime(totalSeconds: number)" in formatter
     assert "type StudyTimeResponse =" not in APP
     assert "function formatStudyTime(" not in APP
-    assert "formatStudyTime(profile.weekly_study_seconds)" in APP
+    profile_screen = (ROOT / "frontend/src/screens/profile/StudentProfileScreen.tsx").read_text(encoding="utf-8")
+    assert "formatStudyTime(profile.weekly_study_seconds)" in profile_screen

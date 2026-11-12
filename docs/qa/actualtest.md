@@ -164,3 +164,193 @@ Evidence on tested code head `f5f8afb34a8d74c742de4b4d33762ec882b05a81`:
 - StudyHub Library Flow [42022943808](https://github.com/apexstudying-cmd/prepza/actions/runs/42022943808) was skipped by workflow conditions and is not counted as a pass.
 
 The verification is scoped to the tested PR head; subsequent PR changes are documentation-only. This extraction does not complete the remaining chat, document study/reader, admin or app-navigation boundaries.
+
+
+## 2026-11-05 — Splash and Edit Profile extraction (PR #77; current PR head)
+
+The existing SplashScreen and EditProfileScreen component bodies were moved into their feature-owned modules. Direct source comparison against base main confirms both bodies are byte-for-byte identical after normalising only module exports, the explicit splash brandline prop, narrower navigation callback types, and the local EditProfileMe response contract. App.tsx now contains only the imports and route composition for these screens.
+
+The Study Navigation prebuild transformer was updated for the new SplashScreen ownership boundary. The app shell supplies the offline-resume callback; SplashScreen does not import App.tsx or duplicate navigation-state parsing. The transform handles both inline legacy and extracted module modes and re-applies idempotently even when the existing marker is already present. The production-build verifier and workflow anchors now inspect the extracted module.
+
+Frontend Build [42030603950](https://github.com/apexstudying-cmd/prepza/actions/runs/42030603950) passed 76 frontend source/module tests, 5 offline Library tests, TypeScript, service-worker validation, production Vite build, and architecture audits. Student Frontend [42030604065], Student Contract [42030603908], Admin Route [42030604002], B2B [42030603900], AI Generation [42030604051], AI Economics [42030604139], Prepza Control API [42030603917], E2EE Security [42030603959], and E2EE Chat [42030604078] passed.
+
+The full Release Browser/Cross-System Regression [42030603969](https://github.com/apexstudying-cmd/prepza/actions/runs/42030603969) passed: production app image; disposable PostgreSQL/Redis; all 43 migration files and controlled SQL ledger; app startup; mobile/tablet responsive browser checks; B2B browser-to-ledger metering; 98/98 disposable PostgreSQL QA tests; online/offline Study Hub and generated-artifact journeys; screenshot upload; and cleanup. StudyHub Library Flow was skipped by workflow conditions and is not counted as passing. Subsequent PR commits update documentation only; no application source changed after the tested code head.
+
+No API, authentication, authorization, database, product-rule, screen-design, or business-logic rewrite was included. The refactor remains incomplete: ChatDetail/Chats, DocumentStudy/Reader, AdminSection, generation flows, Podcast Player, Home/Explore and app-shell boundaries still require dependency mapping and behavior contracts.
+
+
+### New Chat extraction follow-up — PR #77
+
+NewChatScreen now lives in frontend/src/screens/chat/NewChatScreen.tsx (159 lines). App.tsx is 11,440 lines on this branch, down 413 lines from the original 11,853-line baseline. The moved component body was directly compared with base main and matched byte-for-byte after normalising only its module export and narrowed navigation callback type.
+
+The added contract protects the existing 300 ms debounced student search and cleanup, direct chat create/reuse, group-name/member validation and creation, CSRF headers, selected participant state, and chat-detail navigation. The latest Frontend Build [42031983870] passed 78 source/module tests, 5 offline Library tests, TypeScript, service-worker validation, production build, and architecture audits. Student Frontend, Student Contract, Admin Route, B2B, AI, control API, E2EE Chat, and E2EE Security workflows passed on the same code head.
+
+Full Release Browser/Cross-System Regression [42031984075](https://github.com/apexstudying-cmd/prepza/actions/runs/42031984075) passed on the New Chat code head: production app image, disposable PostgreSQL/Redis, all 43 migration files and controlled ledger, mobile/tablet browser checks, B2B browser-to-ledger metering, 98/98 disposable PostgreSQL QA tests, online/offline Study Hub lifecycle and generated-artifact journeys, screenshot upload, and cleanup. Subsequent PR commits update documentation only.
+
+
+### Time Studied and Share Opportunity extractions — PR #77
+
+TimeStudiedScreen is now in frontend/src/screens/gamification/TimeStudiedScreen.tsx (61 lines), and ShareOppForm is now in frontend/src/screens/opportunities/ShareOppForm.tsx (45 lines). Together these remove 94 lines from App.tsx. Both component bodies were compared directly against base main and are byte-for-byte identical after normalising only module exports and narrowed navigation callback types.
+
+Focused contracts cover the existing day/week/month study-time selection, API loading and cancellation, formatted duration, profile navigation, opportunity form fields/category choices, controlled description, and existing back/post navigation. Frontend Build [42034151911](https://github.com/apexstudying-cmd/prepza/actions/runs/42034151911) and Release Browser/Cross-System Regression [42034151448](https://github.com/apexstudying-cmd/prepza/actions/runs/42034151448) are running against the latest code head; their results are pending.
+
+
+### Student Profile extraction follow-up — PR #77
+
+StudentProfileScreen and its PublicProfile/FollowSummary response types now live in frontend/src/screens/profile/StudentProfileScreen.tsx (164 lines). App.tsx is 11,286 lines on this branch, 567 fewer than the 11,853-line baseline. Direct comparison against base main confirms the component body is byte-for-byte identical after normalising only the module export and narrowed callback/back-screen types.
+
+The new contract protects public-profile and follow-summary requests, privacy handling, follow/unfollow and pending states, direct chat creation, chat-options navigation, and the XP/follower/document/study-time summary. The existing App back-screen state was narrowed to the only two values actually used: chat-detail and chats.
+
+Frontend Build [42033518073] passed 80 source/module tests, 5 offline Library tests, TypeScript, service-worker validation, production build, and architecture audits. Student Frontend, Student Contract, Admin Route, B2B, AI, Prepza Control API, and E2EE Chat workflows passed. Full Release Browser/Cross-System Regression [42033518119] and E2EE Security Regression [42033518226] were still running at the time of this note; their success is required before merge.
+
+
+### Study Streak extraction — PR #77
+
+StudyStreakScreen and its local streak response types are now in frontend/src/screens/gamification/StudyStreakScreen.tsx (214 lines), removing 205 lines from App.tsx. The moved component body was compared with base main and matched byte-for-byte after normalising only the module export and callback type. Focused contracts protect month-scoped /streak requests, cancellation, day selection, month navigation, milestone display, duration formatting, and both existing back/share destinations.
+
+The previous CI pass exposed one missing callback destination in the earlier TimeStudiedScreen extraction: the existing share-sheet action had not been included in the narrowed callback type. That type and its test were corrected without changing the component body. Latest Frontend Build [42034876037](https://github.com/apexstudying-cmd/prepza/actions/runs/42034876037) passed on the corrected Study Streak code head: 86 frontend source/module contract tests, 5 offline Library tests, TypeScript, service-worker validation, production Vite build, architecture audits, and launch-wiring verification. Full Release Browser/Cross-System Regression [42034875673](https://github.com/apexstudying-cmd/prepza/actions/runs/42034875673) is still queued/in progress on that same application-code head; release verification remains pending.
+
+
+### Profile screen extraction — PR #77
+
+ProfileScreen now lives in frontend/src/screens/profile/ProfileScreen.tsx (179 lines), with its PROFILE_CACHE moved into the same feature module. Shared ProfileMe and HomeDocument contracts moved to frontend/src/types/profile.ts; GamificationSummary moved to frontend/src/types/gamification.ts. App.tsx retains route dispatch, the existing SkeletonProfile implementation and parent-owned state, passing the skeleton as a component prop.
+
+The ProfileScreen component body was directly compared with base main and is byte-for-byte identical after normalising only its export, explicit SkeletonProfile prop and narrowed route callback type. Source contracts protect the /me, gamification, achievements, study-time, follow-request, saved-opportunity and documents requests; tab selection/cancellation; university/program lookup; cached profile state; and existing navigation. Frontend Build [42036291254](https://github.com/apexstudying-cmd/prepza/actions/runs/42036291254) passed on the ProfileScreen code head: 88 frontend source/module contract tests, 5 offline Library tests, TypeScript, service-worker validation, production build, architecture audits and launch-wiring verification. The first typecheck found that dynamic profile-card destinations were still cast to the App-local Screen type; these are now represented by a local ProfileScreenRoute union with the same destinations. Full Release Browser/Cross-System Regression [42036291297](https://github.com/apexstudying-cmd/prepza/actions/runs/42036291297) and remaining workflows are queued on this code head.
+
+
+### Document Ready extraction — PR #77
+
+DocReadyScreen now lives in frontend/src/screens/study/DocReadyScreen.tsx (73 lines). Its shared DocumentDetail response contract moved to frontend/src/types/documents.ts. App.tsx still owns the route and passes the existing TopBar component into the extracted module. The screen body was compared directly with base main and matches byte-for-byte after normalising only the module export, injected TopBar, and local route-union type. Source contracts protect the document details request, metadata display, error message, and all seven existing study/action destinations. Frontend Build [42036938429](https://github.com/apexstudying-cmd/prepza/actions/runs/42036938429) passed on code head 74b8fac: 90 frontend source/module contract tests, 5 offline Library tests, TypeScript, service-worker validation, production build, architecture audits and launch-wiring verification. Full Release Browser/Cross-System Regression [42036938563](https://github.com/apexstudying-cmd/prepza/actions/runs/42036938563) and remaining workflows are queued on this code head.
+
+
+## 2026-11-09 — Consolidated public-shell route contract (PR #77; pre-verification snapshot)
+
+The public shell route move from the former PR #76 branch has been applied to the consolidated frontend integration branch. `public_shell_routes.py` registers `/`, `/sw.js`, and `/health` with explicit dependencies; `app.py` retains the global Flask entry point and registers the module after `track_last_active` and before academic catalog routes. Added focused test-client contracts cover original paths/methods/endpoint names, index serving, service-worker MIME/cache headers, health SQL probe and safe sweep, limiter exemption, and the 503 failure response.
+
+This paragraph records the state before final CI completed and is superseded by the exact-head verification closeout below. StudyHub Library Flow remains conditional; its skipped run is not counted as a pass.
+
+PR #76 is now closed as superseded, not merged. Its implementation is represented in consolidated PR #77; all verification claims must refer to the final combined PR #77 head.
+
+## 2026-11-09 — Consolidated refactor verification closeout
+
+Verified against the exact PR #77 head `b37cad55f3fb6e389dead1d4ca19df2f31265674` (base `main` at `459c96cd7179810499edbec266e1f5deab3f9d4c`). PR #77 contains 30 changed files (+2,191/−1,236 lines) and remains open, unmerged, and mergeable. On this exact head, 16 GitHub Actions workflows passed: Frontend Build; Study Navigation Polish; Student Frontend Contract; Student Contract Validation; Admin Route Contract; Prepza Control API; Backend Shared Extension Contract; Backend Academic Catalog Route Contract; B2B Contract Validation; AI Generation Architecture; AI Economics Validation; E2EE Chat Validation; E2EE Security Regression; Study Hub Runtime Regression; Kokoro GPU Worker Validation; and Release Browser and Cross-System Regression. (The workflow inventory contains 16 successful runs plus one skipped run.)
+
+Release Browser and Cross-System Regression [run 42581515451](https://github.com/apexstudying-cmd/prepza/actions/runs/42581515451) passed on this exact SHA: production image build; disposable PostgreSQL/Redis startup; Alembic migrations and controlled migration-ledger checks; app startup; mobile/tablet responsive browser checks; B2B browser-to-ledger metering regression; full disposable PostgreSQL QA; online/offline and generated-artifact browser journeys; responsive screenshot upload; and service cleanup. The separate StudyHub Library Flow [run 42581515401](https://github.com/apexstudying-cmd/prepza/actions/runs/42581515401) was skipped by workflow conditions and is not counted as a pass. The failure-log collection step was skipped because the job succeeded.
+
+At this exact PR head, `frontend/src/App.tsx` is 10,745 lines and `app.py` is 10,139 lines. This is a structural refactor, not completion of all repository modularization: both root files remain substantial and further bounded extraction can continue later. No production deployment, live provider verification, or production-database migration is implied by these CI results.
+
+PR #77 remains open and unmerged. These checks verify the integration branch only; `main` does not contain these changes until the PR is merged. Do not merge without the user's explicit approval.
+
+## 2026-11-09 — Admin feature extraction and exact-head verification (PR #77)
+
+The admin feature is now owned by four modules: `frontend/src/admin/AdminPlatform.tsx` (118 lines; navigation shell), `AdminSection.tsx` (1,921 lines; main stateful tabs), `AdminPanels.tsx` (1,251 lines; independent domain panels), and `AdminShared.tsx` (323 lines; shared types and presentation primitives). `App.tsx` imports the platform module and no longer contains the admin feature implementation. The existing section keys, route dispatch, server-side authorization boundary, API requests, CSRF headers, and state/loading/mutation workflows were retained. The Prepza control settings transformer and its workflow were updated to target the extracted AdminSection module; the Morio icon contract now counts brand marks across feature-owned admin modules.
+
+Verified against PR #77 code head `49e2782b911e154fc649f50d4d0356944fe72d1c` (base `main` at `459c96cd7179810499edbec266e1f5deab3f9d4c`). On this exact code head, 16 workflows passed: [Frontend Build run 42593752541](https://github.com/apexstudying-cmd/prepza/actions/runs/42593752541), [Student Frontend Contract run 42593752484](https://github.com/apexstudying-cmd/prepza/actions/runs/42593752484), [Student Contract Validation run 42593752482](https://github.com/apexstudying-cmd/prepza/actions/runs/42593752482), [E2EE Security Regression run 42593752427](https://github.com/apexstudying-cmd/prepza/actions/runs/42593752427), [E2EE Chat Validation run 42593752428](https://github.com/apexstudying-cmd/prepza/actions/runs/42593752428), [B2B Contract Validation run 42593752475](https://github.com/apexstudying-cmd/prepza/actions/runs/42593752475), [AI Generation Architecture run 42593752464](https://github.com/apexstudying-cmd/prepza/actions/runs/42593752464), [AI Economics Validation run 42593752461](https://github.com/apexstudying-cmd/prepza/actions/runs/42593752461), [Admin Route Contract run 42593752415](https://github.com/apexstudying-cmd/prepza/actions/runs/42593752415), [Prepza Control API run 42593752410](https://github.com/apexstudying-cmd/prepza/actions/runs/42593752410), [Backend Shared Extension Contract run 42593752394](https://github.com/apexstudying-cmd/prepza/actions/runs/42593752394), [Backend Academic Catalog Route Contract run 42593752485](https://github.com/apexstudying-cmd/prepza/actions/runs/42593752485), [Study Navigation Polish run 42593752483](https://github.com/apexstudying-cmd/prepza/actions/runs/42593752483), [Study Hub Runtime Regression run 42593752312](https://github.com/apexstudying-cmd/prepza/actions/runs/42593752312), [Kokoro GPU Worker Validation run 42593752320](https://github.com/apexstudying-cmd/prepza/actions/runs/42593752320), and [Release Browser/Cross-System Regression run 42593752604](https://github.com/apexstudying-cmd/prepza/actions/runs/42593752604).
+
+The full release run passed production image build, disposable PostgreSQL/Redis startup, Alembic migrations and controlled migration-ledger checks, app startup, mobile/tablet responsive browser checks, B2B browser-to-ledger metering, full disposable PostgreSQL QA, online/offline and generated-artifact browser journeys, responsive screenshot upload, and service cleanup. Failure-log collection was skipped because the run succeeded. [StudyHub Library Flow run 42593752545](https://github.com/apexstudying-cmd/prepza/actions/runs/42593752545) was skipped by workflow conditions and is not counted as a pass.
+
+At this code head, `frontend/src/App.tsx` is 5,323 lines (down from 8,903 immediately before the admin extraction, 40.2% smaller); `app.py` remains 9,643 lines. This is improved module ownership and navigation, not completion of repository-wide decomposition. The central `AdminSection.tsx` still owns several stateful tabs and needs careful future per-tab decomposition. No production deployment, live provider verification, or production-database migration is implied by these CI results.
+
+PR #77 remains open and unmerged at the time of this evidence. The user has authorized merging only when the exact final PR head passes the required checks; re-check the head SHA before merging. Main does not contain these changes until merge.
+
+## 2026-11-09 — Shop browse UX remediation (PR #77; verification pending)
+
+After the user's end-to-end feedback that Shop does not look or behave like the rest of Prepza, the first browse-focused remediation was committed on the consolidated PR #77 branch. The listing card changed from a clickable `article` to a semantic, named `button`; Shop navigation and back controls now meet a 44px minimum touch target; browse exposes active filters and a one-tap clear action; filtered-empty results are distinct from an empty marketplace; initial browse loading now has reserved-space skeleton cards; and the header follows the shared Prepza navy/gold shell pattern.
+
+A focused `tests/test_shop_ux_contract.py` covers these source-level expectations and has been added to the Frontend Build test command. Existing browse-cache privacy and request sequencing code is retained. The KES 100/30-day seller fee, manual renewal, provider-authoritative payment verification, no-buyer-checkout rule, seller contact, moderation endpoints and existing API payloads were not intentionally changed.
+
+**Verification state:** No GitHub Actions workflow run or commit status has been returned for the current PR head after these Shop changes. The earlier admin/refactor code head `49e2782b911e154fc649f50d4d0356944fe72d1c` had 16 passing workflows including the full release regression, but that result does not verify the later Shop changes. The new Shop UX contract, TypeScript/build, phone/tablet screenshots and buyer/seller/admin journeys remain pending on the final head. Do not close the Shop UX or release gate yet.
+
+## 2026-11-09 — Shop responsive screenshot review and follow-up (PR #77)
+
+Responsive screenshots from the first refreshed Shop run are available in artifact [prepza-mobile-responsive-screenshots](https://github.com/apexstudying-cmd/prepza/actions/runs/42594995289). The screenshots show the navy/gold header and filters fitting phone and tablet widths without horizontal overflow. They also exposed a one-result grid issue: `auto-fill` kept an unused column, leaving the only listing card narrow. The four 155px Shop listing/skeleton grids now use `auto-fit` to let a single result fill the available width.
+
+The first browser run `42594995289` failed in `scripts/test_browser_mobile_responsive.py` because its text locator still expected the old Shop header tagline. The header refresh had split that copy into a shorter title line and a separate direct-contact statement, and it replaced the visible back text with explicit accessible names. The browser test was updated to assert the new copy and `Back to Home` / `Back to Shop` controls. This run did not reach the later create/payment and stale-cache checks; it is not a full Shop end-to-end pass.
+
+The listing editor is now a semantic form with native required-field validation and one submit handler. Shop buttons keep `type="button"` by default; only the listing-save action is `type="submit"`. Source contracts now cover the form, touch targets, semantic navigation, and responsive single-result grid behavior.
+
+**Current verification:** Full Release Browser/Cross-System Regression run [42595814104](https://github.com/apexstudying-cmd/prepza/actions/runs/42595814104) was started against code head `91ae94195bd21be3142a9216a44bebcea78bc18e`; it was still in progress at this documentation update. Frontend Build and the other PR workflows were queued/in progress on that same code head. These results must be refreshed after the final documentation commits; do not mark Shop UX verified until the final code head has passing Frontend Build and release regression with screenshots.
+
+### Frontend Build result for Shop UX code head
+
+Frontend Build [run 42595814116](https://github.com/apexstudying-cmd/prepza/actions/runs/42595814116) passed on code head `91ae94195bd21be3142a9216a44bebcea78bc18e`: 112 frontend/source-contract tests passed, 5 offline Library regression tests passed, the functional-wiring and ORM/schema drift audits passed, TypeScript completed, service-worker JavaScript validation passed, and the production frontend build passed. This includes the new Shop UX contracts for semantic cards/navigation, filters/empty states, touch targets, responsive single-result grids, and native listing-form validation.
+
+The full Release Browser/Cross-System Regression [run 42595814104](https://github.com/apexstudying-cmd/prepza/actions/runs/42595814104) was still in progress after disposable services and Alembic/migration-ledger checks passed; browser and full database QA stages had not all completed at this note. The successful Frontend Build does not substitute for those runtime checks.
+
+### Responsive browser result — code head `91ae94195bd21be3142a9216a44bebcea78bc18e`
+
+In Release Browser run `42595814104`, the mobile/tablet responsive browser step completed successfully after the Shop header locator updates. This confirms the test reached the refreshed Shop route and completed the existing phone-small, phone-standard and tablet-portrait responsive journey without the earlier stale-copy timeout. The run then advanced to B2B browser-to-ledger metering; full PostgreSQL QA and online/offline generated-artifact journeys were still pending. Final release status remains open until the entire run completes.
+
+### Full disposable PostgreSQL QA result — code head `91ae94195bd21be3142a9216a44bebcea78bc18e`
+
+The full disposable PostgreSQL QA suite in Release Browser run `42595814104` completed successfully after the phone/tablet browser and B2B browser-to-ledger steps passed. The final online/offline and generated-artifact browser journeys were still in progress at this update, followed by screenshot upload and service cleanup. Do not call the overall release regression passed until those remaining steps complete.
+
+## 2026-11-09 — Full refactor/Shop browser regression milestone
+
+Release Browser and Cross-System Regression [run 42595814104](https://github.com/apexstudying-cmd/prepza/actions/runs/42595814104) passed on code head `91ae94195bd21be3142a9216a44bebcea78bc18e`. It completed the production app image build, disposable PostgreSQL/Redis startup, Alembic migrations, controlled migration-ledger checks, app startup, phone-small/phone-standard/tablet-portrait browser checks, B2B browser-to-ledger metering, full disposable PostgreSQL QA, online/offline and generated-artifact browser journeys, responsive screenshot upload, and cleanup. Frontend Build [run 42595814116](https://github.com/apexstudying-cmd/prepza/actions/runs/42595814116) passed 112 source/transform tests, 5 offline Library tests, audits, TypeScript and production build. The other 15 PR workflows on this exact code head passed; StudyHub Library Flow was skipped and is not counted as a pass.
+
+A further screenshot review then found that the fixed global bottom navigation could obscure lower Shop content on the shortest phone viewport. Shop now reserves safe-area-aware bottom scroll space, and the responsive browser test scrolls the seller's `Save & publish` action into view and checks that it clears the fixed nav. This is a new code change after `91ae941`; the follow-up Frontend Build and Release Browser runs on code head `d1a5fd8adb49aff443f7578d861b5cf7c7014d65` are queued. The successful `91ae941` run does not verify that later bottom-nav fix.
+
+### Bottom-navigation clearance Frontend Build — code head `d1a5fd8adb49aff443f7578d861b5cf7c7014d65`
+
+Frontend Build [run 42596828203](https://github.com/apexstudying-cmd/prepza/actions/runs/42596828203) passed on the follow-up Shop code: 114 frontend/source-contract tests, 5 offline Library tests, functional-wiring and ORM/schema audits, TypeScript, service-worker validation and production build. The new contract verifies safe-area-aware bottom padding; the Shop form submit action is now checked by the responsive browser journey for clearance above the fixed global navigation. Release Browser run [42596828231](https://github.com/apexstudying-cmd/prepza/actions/runs/42596828231) is queued on the same code head and must complete before the bottom-navigation fix is called browser-verified.
+
+### Bottom-nav browser assertion harness correction
+
+Release Browser run `42596828231` reached the updated responsive Shop flow and captured the listing form after scrolling. Its screenshots show the `Save & publish` and Cancel actions fully above the fixed global nav on phone-small. The job then failed in the new assertion because Playwright's `bounding_box()` returns `x/y/width/height`, not `top/bottom`; this was a test-harness KeyError on all three viewports, not an overlap assertion failure. The browser check now compares `y + height` with the nav's `y`. Follow-up run on code head `76fcff95c025536ab5e7f6270184d411d92271bd` is pending; do not count the bottom-nav check as passed until that run completes.
+
+### Playwright bounds correction Frontend Build
+
+Frontend Build [run 42597710544](https://github.com/apexstudying-cmd/prepza/actions/runs/42597710544) passed on code head `76fcff95c025536ab5e7f6270184d411d92271bd`: 114 frontend/source-contract tests, 5 offline Library tests, audits, TypeScript, service-worker validation and production build. This validates the code and corrected test syntax; the responsive browser check is still pending in Release Browser run `42597710733`.
+
+### Bottom-nav clearance responsive pass — code head `76fcff95c025536ab5e7f6270184d411d92271bd`
+
+Release Browser run [42597710733](https://github.com/apexstudying-cmd/prepza/actions/runs/42597710733) passed the phone-small, phone-standard and tablet-portrait responsive browser step. The corrected Playwright assertion completed on all three viewports and confirmed the listing editor's `Save & publish` action can be scrolled fully above the fixed global navigation. Production image build, disposable PostgreSQL/Redis startup, Alembic migration and controlled migration-ledger checks also passed. B2B metering, full disposable PostgreSQL QA and online/offline generated-artifact journeys remained in progress at this update.
+
+## 2026-11-09 — AdminSection controller/view split
+
+The admin render layer is now decomposed: `AdminSection.tsx` is 172 lines; `useAdminSectionController.ts` is 934 lines and owns the original state/effects/API/CSRF/mutation logic; `AdminSectionCoreViews.tsx` is 783 lines; and `AdminSectionPlatformViews.tsx` is 368 lines. The view components receive typed `Pick<AdminSectionController, ...>` props and do not import the API client. The controller hook remains unconditional, preserving the previous state/effect lifetime when switching admin tabs.
+
+Focused source-contract tests passed in Frontend Build run `42599305452` (118 source/transform tests and 5 offline Library tests passed). TypeScript then reported two `AdminPayment` type references missing from the new core view module. I added the missing type-only import in commit `82b792a`. Prepza Control API [run 42599433232](https://github.com/apexstudying-cmd/prepza/actions/runs/42599433232) and Backend Shared Extension Contract [run 42599433202](https://github.com/apexstudying-cmd/prepza/actions/runs/42599433202) passed on the controller/view split. **The exact current head still needs a fresh TypeScript/Frontend Build pass**; do not count the admin view split as fully CI-verified yet.
+
+### Bottom-navigation Shop regression complete — code head `76fcff95c025536ab5e7f6270184d411d92271bd`
+
+Release Browser and Cross-System Regression [run 42597710733](https://github.com/apexstudying-cmd/prepza/actions/runs/42597710733) passed all steps on this code head: production image build; disposable PostgreSQL/Redis; Alembic and controlled migration-ledger checks; app startup; phone-small/phone-standard/tablet-portrait responsive journeys including the Shop form action vs fixed bottom-nav assertion; B2B browser-to-ledger regression; full disposable PostgreSQL QA; online/offline and generated-artifact browser journeys; responsive screenshot upload; cleanup. Frontend Build [run 42597710544](https://github.com/apexstudying-cmd/prepza/actions/runs/42597710544) passed 114 frontend/source-contract tests, 5 offline Library tests, audits, TypeScript and production build. The 15 other workflows on that code head passed; StudyHub Library Flow was skipped by workflow conditions and is not counted as a pass.
+
+This verifies the responsive Shop browse/create-form slice and bottom-nav clearance, not every buyer/seller/admin screen. The deeper Shop flow audit (detail, Saved/My Listings, in-app seller contact, report and moderation) remains a follow-up. The later AdminSection view split is after this tested code head and still needs a fresh Frontend Build/TypeScript pass.
+
+
+## 2026-11-09 — AdminSection controller/view split exact-head verification
+
+The AdminSection split is verified on code head `82b792a64aeec6af70e38e508c44afca33666c1e`. Frontend Build [run 42599433294](https://github.com/apexstudying-cmd/prepza/actions/runs/42599433294) passed, including source contracts, TypeScript and the production build. Release Browser and Cross-System Regression [run 42599433357](https://github.com/apexstudying-cmd/prepza/actions/runs/42599433357) passed its complete job: production image build; disposable PostgreSQL/Redis; Alembic and controlled migration-ledger checks; app startup; phone-small, phone-standard and tablet-portrait browser checks; B2B browser-to-ledger metering; full disposable PostgreSQL QA; online/offline generated-artifact journeys; screenshot upload; and cleanup. The complete workflow inventory has 16 successful workflows and one skipped StudyHub Library Flow workflow, which is not counted as a pass.
+
+The current PR #77 head is `7d6fa6545c8c4bb666a7690e62752eee8ca209e1`. Commits after the tested application-code head contain documentation updates, a comment-only workflow clarification, and no runtime application-code changes. PR #77 remains open and unmerged. This does not verify the remaining end-to-end Shop detail, Saved/My Listings, seller-contact, report and moderation journeys, nor live external providers or production release gates.
+
+
+## 2026-11-11 — Admin domain-panel extraction — code head `99796c39e81f2ed79949e9b492b31a5541de5d8b`
+
+Frontend Build [run 43001624586](https://github.com/apexstudying-cmd/prepza/actions/runs/43001624586) passed. The source-transform/boundary step passed 120 tests, including the new Admin domain-panel boundary contract and updated legacy Admin ownership contract. The offline Library regression passed 5 tests. Functional-wiring and ORM/schema audits passed, TypeScript passed, service-worker JavaScript validation passed, and the production Vite build completed successfully. The first attempt on the prior code head failed because an older contract expected component implementations to live directly in `AdminPanels.tsx`; the test was updated to validate the compatibility barrel and the new owning modules. The corrected exact-head Frontend Build is green.
+
+At the time of this note, Release Browser and Cross-System Regression [run 43001624499](https://github.com/apexstudying-cmd/prepza/actions/runs/43001624499) had not completed. Do not count this refactor as full release-regression verified until that run and the other relevant PR workflows complete. PR #77 remains open and unmerged.
+
+
+## 2026-11-11 — Exact-head Release Browser/Cross-System Regression passed
+
+Release Browser and Cross-System Regression [run 43001889849](https://github.com/apexstudying-cmd/prepza/actions/runs/43001889849) passed on exact PR #77 head `949530b97fea9df8557eddbd408f2c667130c511`. The job built the production image; started disposable PostgreSQL/Redis; passed Alembic and controlled migration-ledger checks; passed phone-small (360x800), phone-standard (390x844), and tablet-portrait (768x1024) browser checks; passed B2B browser-to-ledger metering; passed the full disposable PostgreSQL QA suite; passed online/offline Study Hub and generated-artifact journeys; uploaded 12 responsive screenshots (artifact [prepza-mobile-responsive-screenshots](https://github.com/apexstudying-cmd/prepza/actions/runs/43001889849/artifacts/13845874778)); and cleaned up disposable services/volumes. Frontend Build [run 43001890115](https://github.com/apexstudying-cmd/prepza/actions/runs/43001890115) also passed on the same exact head. Of 17 workflows on the head, 16 succeeded and StudyHub Library Flow was skipped by workflow conditions; the skipped workflow is not counted as a pass. This verifies the PR branch, not production deployment or live provider behavior.
+
+The screenshot artifact was downloaded and inspected. It confirms the Shop browse and listing-editor layouts at phone/tablet sizes, including fixed-bottom-navigation clearance. It does not prove Shop visual consistency or all buyer/seller/admin journeys: detail, Saved/My Listings, seller contact, reporting and moderation still need a dedicated browser walkthrough. Shop remains in progress; live Paystack and R2 provider behavior remains unverified. PR #77 remains open and unmerged.
+
+
+## 2026-11-11 — Podcast Player extraction and Shop role journeys — exact PR #77 head
+
+Exact code head: `76a435d91db27ca09292e20d16c31ec2b34c9884` (PR #77; base `459c96cd7179810499edbec266e1f5deab3f9d4c`). PR #77 remains open and unmerged.
+
+- Podcast Player now lives in `frontend/src/screens/podcast/PodcastPlayerScreen.tsx` (349 lines) with explicit props for the existing app-owned API, offline cache, navigation and activity callbacks. `frontend/src/App.tsx` is 5,034 lines and `app.py` is 9,643 lines at this head. This is a behavior-preserving extraction; it does not finish backend modularization.
+- Offline fix: when the browser is offline, the player checks the account-scoped cached audio Blob before consulting a service-worker-cached `ready` descriptor. The descriptor's `audio_url` can still point at the network and is not itself a playable offline asset.
+- Release logs confirm podcast activity-credit continuation while hidden, no credit while paused, 12 canonical generated-material GETs cached with server-side private ownership, zero generation POSTs during offline replay, actual cached podcast descriptor + Blob playback offline, and successful reopen after reload.
+- Shop visual pass aligns the header/tab hierarchy and listing card typography/image proportions with Prepza's Home language while preserving 44px targets, existing navigation/API and the KES 100 per 30-day seller fee.
+- New real-browser Shop journey verifies buyer browse/detail/save/Saved/report/in-app contact/WhatsApp visibility; seller My listings/pause/mark-sold/paid-form disclosure; and admin approve/reject/report resolution/payment-review notes and allow-retry. The moderation approval fixture uses a synthetic uploaded-photo key; no live R2 upload or Paystack transaction is implied.
+
+Frontend Build [run 43023202179](https://github.com/apexstudying-cmd/prepza/actions/runs/43023202179) passed on this exact head. Release Browser and Cross-System Regression [run 43023202418](https://github.com/apexstudying-cmd/prepza/actions/runs/43023202418) passed the production image build, disposable PostgreSQL/Redis, Alembic and controlled ledger, phone/tablet browser checks, Shop role journeys, B2B browser-to-ledger, 99 disposable PostgreSQL QA tests, online/offline Study Hub and generated-artifact journeys, screenshot upload and service cleanup. Sixteen workflows succeeded; StudyHub Library Flow was skipped by workflow conditions and is not counted as a pass. Responsive/Shop screenshots: [artifact 13855748767](https://github.com/apexstudying-cmd/prepza/actions/runs/43023202418/artifacts/13855748767).
+
+Shop remains IN_PROGRESS because live Paystack sandbox and real R2 object/header checks remain unverified. The overall release remains BLOCKED. PR #77 remains unmerged; no deployment, live payment or production-database migration was performed.

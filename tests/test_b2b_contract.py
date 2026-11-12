@@ -103,13 +103,11 @@ def test_placement_admin_does_not_define_authoritative_rates():
     assert "Canonical B2B pricing" in frontend
     assert "Canonical Pricing tab" in frontend
 
-def test_organisation_portal_uses_backend_billing_plan_source():
-    source = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
-    assert "Object.entries((billing?.plans || {})" in source
-    assert "const orgPlans = Object.entries((billing?.plans || {})" in source
-    assert "monthly_fee_kes: 2500" not in source
-    assert "monthly_fee_kes: 7500" not in source
-    assert "monthly_fee_kes: 15000" not in source
+def test_active_organisation_portal_uses_backend_billing_plan_source():
+    source = Path("frontend/src/organisation/PremiumOrganisationPortal.tsx").read_text(encoding="utf-8")
+    assert "/portal/dashboard" in source
+    assert "tier={dash?.plan?.plan_code}" in source
+    assert "monthly_fee_kes" not in source
 
 
 def test_b2b_refund_balance_does_not_double_count_funding():

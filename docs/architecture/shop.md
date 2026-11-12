@@ -424,3 +424,33 @@ Do not charge a professional camera/laptop retailer KES 100 for each of dozens o
 Possible pilot hypotheses, not current prices: Starter KES 500/month for up to 10 active items; Growth KES 1,000/month for up to 30 active items; Business/custom for larger inventories, bulk editing and shop analytics. These amounts are deliberately hypotheses to test with local sellers, not claims about market averages. A shop plan should avoid double-charging for covered listings and should clearly state what happens when the subscription lapses. Do not implement the tiers until seller interviews, willingness-to-pay tests, and unit-economics review support them.
 
 Competitor context checked 27 October 2026: Jiji's official billing policy describes optional paid promotion, and its Pro Sales FAQ describes pay-per-click promotion; Jumia's official 2026 commission sheet lists category-based commissions including 8% for laptops; Soko Moja publishes seller plans with active-listing limits; Deal Zote publishes listing-credit bundles. These are different products and should be treated as design references, not direct apples-to-apples pricing benchmarks. Sources: [Jiji billing policy](https://jiji.co.ke/billing-policy.html), [Jiji Pro Sales](https://jiji.co.ke/faq/141), [Jumia commissions 2026](https://vendorhub.jumia.co.ke/commissions-2026-sheet/), [Soko Moja plans](https://sokomoja.africa/subscriptions), [Deal Zote listing fees](https://www.dealzote.co.ke/support?page=listing_fees).
+
+## 16. 9 November 2026 — user-reported UX mismatch reopened
+
+The user reports that the current Shop visual design and end-to-end journey do not match the expected Prepza experience. Treat this as an open product-quality issue even though earlier mocked-provider and responsive code checks passed. Those checks do not establish user acceptance of the visual hierarchy or end-to-end flow.
+
+Next audit must compare the live implementation screen-by-screen with `docs/ux/SHOP_UX_UI_STANDARD.md` and `docs/qa/SHOP_USER_FLOW.md`. Initial source inspection found a standalone inline `ui` style object, clickable non-keyboard-operable listing `article` cards, compact nav controls, no one-tap clear-filters/active-filter state, no distinct filtered-empty state, and text-only browse loading. Validate each finding on phone/tablet screenshots before implementation. Preserve the KES 100 per-item-per-30-day seller fee, manual renewal, direct buyer/seller contact, no buyer checkout/escrow, server-authoritative ownership/payment/moderation, and existing Shop API contracts.
+
+## 17. 9 November 2026 — first Shop browse UX remediation (verification pending)
+
+The first source-level fixes now address several concrete findings from the audit:
+
+- Listing cards are semantic `button` controls with accessible names, so keyboard users can open a listing without relying on a clickable `article`.
+- Shop navigation pills and the back control meet a 44px minimum touch target and use the same navy/gold shell pattern as the My Study screen.
+- Browse shows whether filters are active and offers a one-tap clear action. A no-match state is distinct from a genuinely empty marketplace and explains how to recover.
+- Initial browse loading reserves card space with skeletons; the loading state is reachable while the first browse request is in flight, and request failures still retain the existing stale-cache behavior.
+- Added `tests/test_shop_ux_contract.py` and wired it into the Frontend Build source-contract test command.
+
+This does not yet prove the Shop matches the whole Prepza design system or that its end-to-end user experience is acceptable. The existing inline style object remains; the shared theme CSS variables continue to provide light/dark page/card/text/border tokens. Complete phone/tablet screenshots and buyer/seller/admin runtime journeys before closing the UX gate. Preserve all existing Shop API, KES 100/30-day seller fee, manual renewal, provider verification, moderation, and no-buyer-checkout rules.
+
+## 18. 9 November 2026 — responsive screenshot findings and form semantics
+
+Review of the responsive screenshots from Release Browser run `42594995289` confirmed the refreshed navy/gold Shop header fits the phone and tablet widths without horizontal overflow. It also exposed a genuine layout defect: with one result, `auto-fill` reserved unused grid columns and left the only listing card narrow against a large empty area. Browse, My Listings, Saved and skeleton grids now use `auto-fit` so the remaining card expands to the available width.
+
+The same pass found the listing editor was rendered as a `section`, so its `required` attributes did not participate in native browser form validation. It is now a real form with one `onSubmit` path and an explicit submit button; other Shop buttons retain the default non-submit type. Existing save/upload/payment calls and server-side validation remain authoritative.
+
+The first browser run failed because the responsive test still expected the previous Shop tagline and old back-button accessible names after the header refresh. The test now targets the new visible copy and explicit `Back to Home` / `Back to Shop` names. This was a stale test selector, not evidence of an API/payment regression. The updated browser journey and exact current head still require a passing release run and screenshots.
+
+## 19. 9 November 2026 — fixed bottom-navigation clearance (verified)
+
+The successful phone-small screenshot from run `42595814104` exposed another issue after the single-result grid fix: the app's fixed global bottom navigation could cover the lower part of a tall Shop card or listing form at shorter phone heights. The Shop content wrapper now reserves `104px + env(safe-area-inset-bottom)` beneath its scrollable content. The responsive browser journey scrolls the listing form's `Save & publish` action into view and asserts that its bottom edge is above the global navigation. Frontend Build `42597710544` passed the safe-area source contract, TypeScript and production build; Release Browser `42597710733` passed the corrected assertion on phone-small, phone-standard and tablet-portrait. This closes the responsive bottom-nav issue. The broader buyer/seller/admin UI journey remains open for detail, Saved/My Listings, in-app contact, report and moderation screens.

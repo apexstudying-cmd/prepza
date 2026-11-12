@@ -8,12 +8,19 @@ runpy.run_path(str(ROOT / 'tools' / 'apply_study_generation_polish.py'))
 
 APP = ROOT / 'frontend' / 'src' / 'App.tsx'
 GEN = ROOT / 'frontend' / 'src' / 'generation' / 'GenerationScreens.tsx'
-IMPORT = "import { PodcastGenerationScreen, FlashcardsGenerationScreen, SummaryGenerationScreen } from './generation/GenerationScreens'\n"
+STUDY = ROOT / 'frontend' / 'src' / 'screens' / 'study' / 'GeneratedStudyScreens.tsx'
+IMPORT = "import { FlashcardsGenerationScreen, SummaryGenerationScreen } from './generation/GenerationScreens'\n"
 STUDY_IMPORT = "import { PracticeQuestionsGenerationScreen, MindMapGenerationScreen } from './generation/StudyGenerationScreensClean'\n"
+GENERATED_STUDY_IMPORT = "import { FlashcardsGenerationScreen } from '../../generation/GenerationScreens'\nimport { PracticeQuestionsGenerationScreen } from '../../generation/StudyGenerationScreensClean'\n"
 
 text = APP.read_text(encoding='utf-8')
 original_text = text
 gen_text = GEN.read_text(encoding='utf-8')
+study_text = STUDY.read_text(encoding='utf-8')
+original_study_text = study_text
+if GENERATED_STUDY_IMPORT not in study_text:
+    first_import = study_text.find('\n', study_text.find('import '))
+    study_text = study_text[: first_import + 1] + GENERATED_STUDY_IMPORT + study_text[first_import + 1 :]
 # GenerationScreens.tsx is already the current source-of-truth implementation.
 # Do not rewrite it during every build; repeated text transforms were producing
 # transient TypeScript syntax corruption in CI.
@@ -63,14 +70,8 @@ base_style = "colorScheme: 'var(--prepza-generation-color-scheme, light)', flex:
 text = text.replace(base_style, scroll_style)
 
 replacements = [
-    ('// ─── PODCAST PLAYER', '// ─── SUMMARY', '''// ─── PODCAST PLAYER
-function PodcastPlayerScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
-  return <div style={{ colorScheme: 'var(--prepza-generation-color-scheme, light)', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><PodcastGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
-}
-
-'''),
     ('// ─── FLASHCARDS', '// ─── QUIZ', '''// ─── FLASHCARDS
-function FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+function FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: StudyMaterialScreenTarget) => void; activeDocumentId: number | null }) {
   return <div style={{ colorScheme: 'var(--prepza-generation-color-scheme, light)', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><FlashcardsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
 }
 
@@ -84,17 +85,32 @@ function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen)
 ]
 
 for start_marker, end_marker, replacement in replacements:
-    start = text.find(start_marker)
+    is_study_flashcards = end_marker == '// ─── QUIZ'
+    target = study_text if is_study_flashcards else text
+    aliases = ('// ─── FLASHCARDS',) if start_marker == '// ─── PODCAST PLAYER' else ()
+    start = target.find(start_marker)
     if start < 0:
+        for alias in aliases:
+            start = target.find(alias)
+            if start >= 0:
+                start_marker = alias
+                break
+    if start < 0:
+        if start_marker == '// ─── FLASHCARDS' and 'FlashcardsStudyScreen' in target:
+            continue
         raise SystemExit(f'missing start marker: {start_marker}')
-    end = text.find(end_marker, start + len(start_marker))
+    end = target.find(end_marker, start + len(start_marker))
     if end < 0:
         raise SystemExit(f'missing end marker: {end_marker}')
-    current = text[start:end]
+    current = target[start:end]
     if 'GenerationScreen' not in current:
-        text = text[:start] + replacement + text[end:]
+        target = target[:start] + replacement + target[end:]
+    if is_study_flashcards:
+        study_text = target
+    else:
+        text = target
 
-text = text.replace(
+study_text = study_text.replace(
     "return <PracticeQuestionsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />",
     "return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><PracticeQuestionsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>"
 )
@@ -103,32 +119,32 @@ text = text.replace(
     "return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><MindMapGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>"
 )
 
-def replace_section(start_marker: str, replacement: str, aliases: tuple[str, ...] = ()):
-    global text
+def replace_section(source: str, start_marker: str, replacement: str, aliases: tuple[str, ...] = ()):
     markers = (start_marker,) + aliases
     start = -1
     marker_used = None
     for marker in markers:
-        pos = text.find(marker)
+        pos = source.find(marker)
         if pos >= 0 and (start < 0 or pos < start):
             start, marker_used = pos, marker
     if start < 0:
-        return
-    match = re.search(r'// ─── [^\n]+', text[start + len(marker_used):])
+        return source
+    match = re.search(r'// ─── [^\n]+', source[start + len(marker_used):])
     if not match:
         raise SystemExit(f'missing end section marker after: {marker_used}')
     end = start + len(marker_used) + match.start()
-    current = text[start:end]
+    current = source[start:end]
     if 'GenerationScreen' not in current:
-        text = text[:start] + replacement + text[end:]
+        source = source[:start] + replacement + source[end:]
+    return source
 
-replace_section('// ─── QUIZ', '''// ─── QUIZ
-function QuizScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+study_text = replace_section(study_text, '// ─── QUIZ', '''// ─── QUIZ
+function QuizScreen({ setScreen, activeDocumentId }: { setScreen: (s: StudyMaterialScreenTarget) => void; activeDocumentId: number | null }) {
   return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><PracticeQuestionsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
 }
 
 ''')
-replace_section('// ─── MIND MAP', '''// ─── MIND MAP
+text = replace_section(text, '// ─── MIND MAP', '''// ─── MIND MAP
 function MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
   return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><MindMapGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
 }
@@ -157,5 +173,10 @@ text = text.replace('Opening document', '')
 if 'function ExploreScreen(' in original_text and 'function ExploreScreen(' not in text:
     raise SystemExit('generation UI transformation removed the ExploreScreen component definition')
 
+# PodcastPlayerScreen is an extracted feature module. Preserve its implementation;
+# the legacy App.tsx generation transform must never overwrite it.
+
 APP.write_text(text, encoding='utf-8')
+if study_text != original_study_text:
+    STUDY.write_text(study_text, encoding='utf-8')
 print('Generation UI build transformation applied.')
