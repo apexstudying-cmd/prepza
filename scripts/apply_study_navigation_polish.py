@@ -2,6 +2,7 @@ from pathlib import Path
 import re
 
 APP = Path('frontend/src/App.tsx')
+READER_MODULE = Path('frontend/src/screens/study/DocumentReaderScreen.tsx')
 
 
 def replace_mind_map(text: str) -> str:
@@ -72,7 +73,12 @@ def remove_document_opening_interstitials(text: str) -> str:
         module_text = hub_module.read_text(encoding='utf-8')
         module_text = _transform_function(module_text, "DocumentStudyHubScreen", update_hub)
         hub_module.write_text(module_text, encoding='utf-8')
-    text = _transform_function(text, "DocumentReaderScreen", update_reader)
+    if READER_MODULE.exists():
+        reader_text = READER_MODULE.read_text(encoding='utf-8')
+        reader_text = _transform_function(reader_text, "DocumentReaderScreen", update_reader)
+        READER_MODULE.write_text(reader_text, encoding='utf-8')
+    else:
+        text = _transform_function(text, "DocumentReaderScreen", update_reader)
     return text
 
 

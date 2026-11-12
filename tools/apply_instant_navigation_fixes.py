@@ -3,6 +3,7 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / 'frontend' / 'src' / 'App.tsx'
+READER_MODULE = ROOT / 'frontend' / 'src' / 'screens' / 'study' / 'DocumentReaderScreen.tsx'
 
 text = APP.read_text(encoding='utf-8')
 original = text
@@ -63,13 +64,15 @@ text = text.replace(
 # Remove the reader loading gate inside the reader component only. The earlier
 # navigation-polish transform may express this gate as GenerationLoading rather
 # than SkeletonDocument, so matching one exact generated line is not safe.
-reader_start = text.find('function DocumentReaderScreen(')
+reader_path = READER_MODULE if READER_MODULE.exists() else APP
+reader_text = READER_MODULE.read_text(encoding='utf-8') if READER_MODULE.exists() else text
+reader_start = reader_text.find('function DocumentReaderScreen(')
 if reader_start < 0:
     raise SystemExit('Instant navigation patch: DocumentReaderScreen not found')
-reader_end = text.find('\n// ───', reader_start)
+reader_end = reader_text.find('\n// ───', reader_start)
 if reader_end < 0:
-    reader_end = len(text)
-reader = text[reader_start:reader_end]
+    reader_end = len(reader_text)
+reader = reader_text[reader_start:reader_end]
 reader_before = reader
 reader = re.sub(
     r"\n\s*if \(loading(?: && !doc)?\) return <(?:GenerationLoading|SkeletonDocument)[^\n]*\n",
@@ -97,12 +100,17 @@ reader = re.sub(
 reader = reader.replace('Opening your document…', 'Loading…')
 reader = reader.replace('Opening your document...', 'Loading…')
 reader = reader.replace('Opening your document', 'Loading…')
-if reader == reader_before:
-    raise SystemExit('Instant navigation patch: reader loading gate not found')
-text = text[:reader_start] + reader + text[reader_end:]
+if reader != reader_before:
+    reader_text = reader_text[:reader_start] + reader + reader_text[reader_end:]
+if not READER_MODULE.exists():
+    text = reader_text
 
-if text == original:
-    raise SystemExit('Instant navigation patch made no changes')
+if text == original and (not READER_MODULE.exists() or reader_text == READER_MODULE.read_text(encoding='utf-8')):
+    print('Instant navigation and reader transient-state fixes already applied.')
+    raise SystemExit(0)
 
-APP.write_text(text, encoding='utf-8')
+if text != original:
+    APP.write_text(text, encoding='utf-8')
+if READER_MODULE.exists() and reader_text != READER_MODULE.read_text(encoding='utf-8'):
+    READER_MODULE.write_text(reader_text, encoding='utf-8')
 print('Instant navigation and reader transient-state fixes applied and verified.')

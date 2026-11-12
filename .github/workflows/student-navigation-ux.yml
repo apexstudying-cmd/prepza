@@ -43,6 +43,7 @@ jobs:
       - name: Verify patches are deterministic
         run: |
           cp frontend/src/App.tsx /tmp/App.after
+          cp frontend/src/screens/study/DocumentReaderScreen.tsx /tmp/DocumentReaderScreen.after
           cp app.py /tmp/app.after
           python3 scripts/apply_student_navigation_ux_v4.py
           python3 scripts/apply_student_navigation_ux_v5.py
@@ -56,6 +57,7 @@ jobs:
           python3 scripts/apply_study_flow_cleanup.py
           python3 scripts/apply_ai_route_decorator_fix.py
           cmp frontend/src/App.tsx /tmp/App.after
+          cmp frontend/src/screens/study/DocumentReaderScreen.tsx /tmp/DocumentReaderScreen.after
           cmp app.py /tmp/app.after
 
       - name: Verify study-flow security and navigation anchors
@@ -123,6 +125,8 @@ jobs:
           grep -F '/documents/${activeDocumentId}/reading' frontend/src/App.tsx
           grep -F "setScreen('podcast-library')" frontend/src/App.tsx
           grep -F "p.status === 'approved' && p.document_id" frontend/src/App.tsx
+          grep -F "import DocumentReaderScreen from './screens/study/DocumentReaderScreen'" frontend/src/App.tsx
+          grep -F "case 'document-reader': return <DocumentReaderScreen" frontend/src/App.tsx
           grep -F "'document-reader'" frontend/src/App.tsx
 
       - name: Verify reading progress migration
@@ -158,6 +162,6 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add frontend/src/App.tsx app.py migrations/add_document_reading_progress.sql scripts/apply_student_navigation_ux_v4.py scripts/apply_student_navigation_ux_v5.py scripts/apply_navigation_screen_cleanup.py scripts/apply_document_study_progress.py scripts/apply_document_reader.py scripts/apply_student_study_access.py scripts/apply_published_material_entry.py scripts/apply_document_reader_v2.py scripts/apply_published_material_replay.py scripts/apply_study_flow_cleanup.py scripts/apply_ai_route_decorator_fix.py .github/workflows/student-navigation-ux.yml
+          git add frontend/src/App.tsx frontend/src/screens/study/DocumentReaderScreen.tsx app.py migrations/add_document_reading_progress.sql scripts/apply_student_navigation_ux_v4.py scripts/apply_student_navigation_ux_v5.py scripts/apply_navigation_screen_cleanup.py scripts/apply_document_study_progress.py scripts/apply_document_reader.py scripts/apply_student_study_access.py scripts/apply_published_material_entry.py scripts/apply_document_reader_v2.py scripts/apply_published_material_replay.py scripts/apply_study_flow_cleanup.py scripts/apply_ai_route_decorator_fix.py .github/workflows/student-navigation-ux.yml
           git commit -m 'feat: complete student study navigation'
           git push origin HEAD:ux/student-navigation-study-flow

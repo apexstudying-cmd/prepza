@@ -2,6 +2,7 @@ from pathlib import Path
 
 APP = Path('frontend/src/App.tsx')
 HUB_MODULE = Path('frontend/src/screens/study/DocumentStudyHubScreen.tsx')
+READER_MODULE = Path('frontend/src/screens/study/DocumentReaderScreen.tsx')
 API = Path('frontend/src/lib/appApi.ts')
 
 
@@ -26,7 +27,7 @@ def patch_study_hub(s):
 
 
 def patch_native_reader(s):
-    marker = "function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {"
+    marker = "function DocumentReaderScreen("
     start = s.find(marker)
     if start < 0:
         raise SystemExit('native reader function anchor not found')
@@ -99,9 +100,13 @@ def main():
         hub_source = patch_study_hub(HUB_MODULE.read_text(encoding='utf-8'))
     else:
         s = patch_study_hub(s)
-    s = patch_native_reader(s)
+    reader_source = None
+    if READER_MODULE.exists():
+        reader_source = patch_native_reader(READER_MODULE.read_text(encoding='utf-8'))
+    else:
+        s = patch_native_reader(s)
     api_source = patch_offline_reading_gate(api_source)
-    verified_source = s + (hub_source or '')
+    verified_source = s + (hub_source or '') + (reader_source or '')
     required = [
         'const [readingPage, setReadingPage] = useState(0)',
         'const [readerUserId, setReaderUserId] = useState<number | null>(null)',
@@ -115,6 +120,8 @@ def main():
     APP.write_text(s)
     if hub_source is not None:
         HUB_MODULE.write_text(hub_source, encoding='utf-8')
+    if reader_source is not None:
+        READER_MODULE.write_text(reader_source, encoding='utf-8')
     API.write_text(api_source)
     print('document study progress patch applied and verified.')
 
