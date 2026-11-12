@@ -6,6 +6,7 @@ from auth_guards import login_required, require_admin, require_csrf
 from app_factory import create_app
 from extensions import db
 from user_models import User
+from academic_models import University, Program
 
 
 def _new_app(monkeypatch) -> Flask:
@@ -35,7 +36,7 @@ def test_login_required_and_csrf_guards_fail_closed_and_allow_valid_session(monk
 def test_admin_guard_checks_persisted_role_and_suspension_state(monkeypatch) -> None:
     app = _new_app(monkeypatch)
     with app.app_context():
-        db.create_all()
+        db.metadata.create_all(bind=db.engine, tables=[University.__table__, Program.__table__, User.__table__])
         ordinary = User(email="ordinary@example.test", password_hash="x", is_admin=False)
         admin = User(email="admin@example.test", password_hash="x", is_admin=True)
         suspended = User(email="suspended@example.test", password_hash="x", is_admin=True, is_suspended=True)
@@ -54,4 +55,4 @@ def test_admin_guard_checks_persisted_role_and_suspension_state(monkeypatch) -> 
         assert protected() == ("ok", 200)
 
     with app.app_context():
-        db.drop_all()
+        db.metadata.drop_all(bind=db.engine, tables=[User.__table__, Program.__table__, University.__table__])
