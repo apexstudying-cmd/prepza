@@ -100,10 +100,7 @@ study_text = study_text.replace(
     "return <PracticeQuestionsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />",
     "return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><PracticeQuestionsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>"
 )
-text = text.replace(
-    "return <MindMapGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />",
-    "return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><MindMapGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>"
-)
+# Summary and Mind Map route wrappers are committed in GeneratedStudyScreens.tsx.
 
 def replace_section(source: str, start_marker: str, replacement: str, aliases: tuple[str, ...] = ()):
     markers = (start_marker,) + aliases
