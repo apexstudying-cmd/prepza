@@ -12,6 +12,11 @@ on:
       - 'tests/test_admin_domain_panels_boundaries.py'
       - 'tests/test_podcast_player_module_contract.py'
       - 'tools/apply_generation_ui_build.py'
+      - 'scripts/apply_home_architecture_v2.py'
+      - 'scripts/apply_home_architecture.py'
+      - 'scripts/apply_explore_architecture.py'
+      - 'scripts/apply_shop_frontend.py'
+      - 'scripts/test_morio_identity_contract.py'
       - '.github/workflows/frontend-build.yml'
 
 permissions:
