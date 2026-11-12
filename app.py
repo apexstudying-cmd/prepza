@@ -294,6 +294,7 @@ from social_models import (
     PROFILE_VISIBILITY_VALUES, WHO_CAN_MESSAGE_VALUES, WHO_CAN_FOLLOW_VALUES,
     CONTENT_REPORT_TARGET_TYPES, CONTENT_REPORT_REASONS,
     CONTENT_REPORT_STATUSES, CONTENT_REPORT_ACTIONS,
+    ORGANISATION_VERIFICATION_STATUSES,
 )
 from opportunity_models import (
     Organisation, OrganisationMember, Opportunity, Ambassador, Referral,
