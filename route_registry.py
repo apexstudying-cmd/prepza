@@ -49,7 +49,7 @@ def register_account_billing_routes(
     StudyTimeLog: Any,
     ContentItem: Any,
     paystack_request: Any,
-) -> tuple[dict[str, Any], dict[str, Any]]:
+) -> tuple[Any, Any]:
     """Register authentication, admin operations and student billing routes."""
     from auth_otp import register_email_otp
     from admin_operations import register_admin_operations
