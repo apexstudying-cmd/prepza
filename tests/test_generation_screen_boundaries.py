@@ -22,8 +22,8 @@ def test_active_summary_and_mind_map_routes_are_study_module_owned() -> None:
 def test_generated_material_route_wrappers_preserve_shell_layout_and_navigation() -> None:
     assert "export function SummaryStudyScreen(" in SCREENS
     assert "export function MindMapStudyScreen(" in SCREENS
-    assert "setScreen('share-sheet')" in SCREENS
-    assert "setScreen('document-study')" in SCREENS
+    assert "setScreen('share-sheet')" in GENERATION
+    assert "setScreen('document-study')" in STUDY_GENERATION
     assert "var(--prepza-generation-color-scheme, light)" in SCREENS
     assert "var(--prepza-generation-page, #F8F9FC)" in SCREENS
     assert "WebkitOverflowScrolling: 'touch'" in SCREENS
