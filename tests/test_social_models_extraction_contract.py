@@ -8,7 +8,7 @@ from social_models import (
     Notification, NotificationPreference, UserWarning,
     CONTENT_REPORT_ACTIONS, CONTENT_REPORT_REASONS, CONTENT_REPORT_STATUSES,
     CONTENT_REPORT_TARGET_TYPES, PROFILE_VISIBILITY_VALUES,
-    WHO_CAN_FOLLOW_VALUES, WHO_CAN_MESSAGE_VALUES,
+    WHO_CAN_FOLLOW_VALUES, WHO_CAN_MESSAGE_VALUES, ORGANISATION_VERIFICATION_STATUSES,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -59,6 +59,7 @@ def test_social_uniqueness_and_moderation_vocabulary_are_preserved() -> None:
     assert PROFILE_VISIBILITY_VALUES == {"public", "private"}
     assert WHO_CAN_MESSAGE_VALUES == {"everyone", "followers"}
     assert WHO_CAN_FOLLOW_VALUES == {"everyone", "approval_required"}
+    assert ORGANISATION_VERIFICATION_STATUSES == ("pending", "verified", "rejected")
     assert CONTENT_REPORT_TARGET_TYPES == ("group_post", "group_post_comment", "user")
     assert CONTENT_REPORT_STATUSES == ("pending", "dismissed", "actioned")
     assert CONTENT_REPORT_ACTIONS == ("dismissed", "removed", "warned")
