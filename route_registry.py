@@ -73,7 +73,7 @@ def register_account_billing_routes(
 def register_public_shell_route(app: Any, db: Any, limiter: Any, sweep_expired_opportunities: Any) -> None:
     from public_shell_routes import register_public_shell_routes
 
-    register_public_shell_routes(app, db, limiter, lambda: sweep_expired_opportunities())
+    register_public_shell_routes(app, db, limiter, sweep_expired_opportunities)
 
 
 def register_academic_catalog_route(app: Any, University: Any, Program: Any) -> None:
