@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/backup_postgres.py'
+      - 'scripts/test_existing_database_migration.py'
       - 'alembic/**'
       - 'schema/local_baseline.sql'
       - '.github/workflows/postgres-backup-restore.yml'
@@ -12,6 +13,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/backup_postgres.py'
+      - 'scripts/test_existing_database_migration.py'
       - 'alembic/**'
       - 'schema/local_baseline.sql'
       - '.github/workflows/postgres-backup-restore.yml'
@@ -70,8 +72,12 @@ jobs:
             echo "The prior revision unexpectedly already contains document_content.material_id"
             exit 1
           fi
+      - name: Seed document and generated-material preservation fixture
+        run: python scripts/test_existing_database_migration.py --phase seed
       - name: Upgrade existing database to current head
         run: python -m alembic upgrade head
+      - name: Verify document/material preservation, schema and Shop/streak relationships
+        run: python scripts/test_existing_database_migration.py --phase verify
       - name: Verify preserved data and new schema
         run: |
           DB_URL="postgresql://prepza:prepza@127.0.0.1:5432/prepza"
