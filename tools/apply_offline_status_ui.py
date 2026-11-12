@@ -11,9 +11,12 @@ if '<OfflineStatusBanner />' in text:
     raise SystemExit(0)
 
 if IMPORT not in text:
-    anchor = next((line for line in text.splitlines(True) if line.startswith("import {") and "joinRealtimeChat" in line and "from './crypto/chatRealtime'" in line), "")
-    if not anchor:
-        raise SystemExit('Offline status UI: realtime chat import anchor missing')
+    # Offline status is app-shell UI, not chat behavior. Anchor it to the
+    # persistent call overlay import so extracting ChatDetail cannot break
+    # this unrelated prebuild transformation.
+    anchor = "import CallExperience from './crypto/CallExperience'\\n"
+    if anchor not in text:
+        raise SystemExit('Offline status UI: app-shell call overlay import anchor missing')
     text = text.replace(anchor, anchor + IMPORT, 1)
 
 start = text.find('export default function App')
