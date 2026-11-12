@@ -70,15 +70,16 @@ def register_account_billing_routes(
     return student_order_helpers, student_subscription_helpers
 
 
-def register_public_and_academic_routes(
-    app: Any, db: Any, limiter: Any, University: Any, Program: Any, sweep_expired_opportunities: Any,
-) -> None:
+def register_public_shell_route(app: Any, db: Any, limiter: Any, sweep_expired_opportunities: Any) -> None:
     from public_shell_routes import register_public_shell_routes
+
+    register_public_shell_routes(app, db, limiter, lambda: sweep_expired_opportunities())
+
+
+def register_academic_catalog_route(app: Any, University: Any, Program: Any) -> None:
     from academic_catalog_routes import register_academic_catalog_routes
 
-    register_public_shell_routes(app, db, limiter, sweep_expired_opportunities)
     register_academic_catalog_routes(app, University, Program)
-
 
 def register_notification_feature_routes(app: Any, db: Any, Notification: Any, require_csrf: Any) -> None:
     from notification_routes import register_notification_routes
@@ -123,6 +124,15 @@ def register_control_feature_routes(
         app, db, SystemSetting, User, Document, DocumentContent,
         GeneratedMaterial, log_admin_action, limiter,
     )
+
+
+def register_admin_reconciled_routes(app: Any) -> None:
+    """Load the separated admin route modules after their shared dependencies exist."""
+    import admin_reconciled_core_a  # noqa: F401 - decorator registration
+    import admin_reconciled_core_b  # noqa: F401 - decorator registration
+    import admin_reconciled_opportunities  # noqa: F401 - decorator registration
+    import admin_reconciled_organisation  # noqa: F401 - decorator registration
+    import admin_reconciled_ambassadors  # noqa: F401 - decorator registration
 
 
 def register_runtime_feature_routes(
