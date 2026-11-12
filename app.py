@@ -22,11 +22,11 @@ from request_observability import scrub_sentry_event
 import ai_service
 import document_pipeline
 import podcast_audio
-import kokoro_control
 from pywebpush import webpush, WebPushException
 from urllib.parse import urlencode
 from extensions import db
 from app_factory import create_app
+from route_registry import register_foundation_routes
 from auth_otp import register_email_otp
 
 load_dotenv()
@@ -57,23 +57,7 @@ def add_security_headers(response):
         response.headers["Cache-Control"] = "no-store, private, max-age=0"
         response.headers["Pragma"] = "no-cache"
     return response
-kokoro_control.register(app)
-from usage_billing import register_usage_billing
-register_usage_billing(app, db)
-from ai_economics import register_ai_economics
-register_ai_economics(app, db)
-from organisation_billing import register_organisation_billing
-register_organisation_billing(app, db)
-from discovery_billing import register_discovery
-register_discovery(app, db)
-from b2b_campaign_finance import register_b2b_campaign_finance
-register_b2b_campaign_finance(app, db)
-from b2b_admin_routes import register_b2b_admin_routes
-register_b2b_admin_routes(app, db)
-from b2b_campaign_payments import register_b2b_campaign_payments
-register_b2b_campaign_payments(app, db)
-from b2b_organisation_portal import register_b2b_organisation_portal
-register_b2b_organisation_portal(app, db)
+register_foundation_routes(app, db)
 
 # Offline chat retries need a server-side idempotency record. The client keeps
 # one stable UUID for a queued send; this table lets a retry return the
