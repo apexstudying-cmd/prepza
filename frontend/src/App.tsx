@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, type ChangeEvent } from 'react'
 
 import { api, ApiError } from './lib/appApi'
-import { N, useTheme, currentThemeMode, DARK_THEME } from './theme/theme'
+import { N, useTheme } from './theme/theme'
 import { Ic } from './ui/icons'
 import Avi from './ui/Avi'
 import CompleteProfileScreen from './screens/onboarding/CompleteProfileScreen'
@@ -24,6 +24,7 @@ import AITutorScreen from './screens/tutor/AITutorScreen'
 import type { Achievement, AchievementsResponse } from './types/achievements'
 import type { Screen } from './types/navigation'
 import { useAppNavigation } from './navigation/useAppNavigation'
+import AppShell from './navigation/AppShell'
 import { XPProgressScreen } from './screens/gamification/ProgressScreens'
 // Screen implementations are feature-owned; this file keeps the existing route dispatch and shared app state.
 import TimeStudiedScreen from './screens/gamification/TimeStudiedScreen'
@@ -59,7 +60,6 @@ import Pill from './ui/Pill'
 import { subscribeToPush, unsubscribeFromPush } from './lib/pushNotifications'
 import type { UniversityOption, ProgramOption } from './types/academic'
 import { resetChatRealtime } from './crypto/chatRealtime'
-import CallExperience from './crypto/CallExperience'
 import WhatsAppChatExperience from './crypto/WhatsAppChatExperience'
 import { getOfflineStudyDocumentUrlByContentHash, getSavedStudyHubOffline, listSavedStudyHubOffline, saveStudyHubDocumentOffline, saveUploadedFileOffline } from './offline/studyHubOffline'
 import { cacheGeneratedAudioOffline, getCachedGeneratedAudioUrl, getGeneratedMaterialOffline, getLatestGeneratedMaterialForPath, listOfflineGeneratedMaterials, saveGeneratedMaterialOffline, setOfflineUserId } from './offline/generatedMaterials'
@@ -69,7 +69,6 @@ import PremiumOrganisationPortal from './organisation/PremiumOrganisationPortal'
 import B2BFinanceAdmin from './admin/B2BFinanceAdmin'
 import AdminPlatform from './admin/AdminPlatform'
 import { PAYMENT_STATUS_META } from './admin/AdminPlatform'
-import StudentOnboarding from './StudentOnboarding'
 import StudyShareSheet from './share/StudyShareSheet'
 import StudyActivityScreen from './StudyActivityScreen'
 import { cacheAvatar, getCachedAvatar, clearCachedAvatar } from './offline/avatarCache'
@@ -803,58 +802,6 @@ function TopBar({ title, onBack, setScreen, rightEl }: { title?: string; onBack?
 // A document is the student's study home: read it, ask Morio about it, replay
 // existing materials, or create a new material. Generation remains owned by
 // the existing material screens/reusable-generation backend.
-function BottomNav({ active, setScreen, unreadChats = 0, exploreAttention = false, setExploreAttention }: { active: Screen; setScreen: (s: Screen) => void; unreadChats?: number; exploreAttention?: boolean; setExploreAttention?: (value: boolean) => void }) {
-  const isHome = ['home','ai-tutor','opportunities','opportunity-detail','podcast-player','podcast-library','flashcards','quiz','summary','upload','processing','doc-ready','document-study','study-materials','share-sheet','share-opp-form','edu-upload-form','notifications','library','mind-map','document-reader'].includes(active)
-  const isExp = active === 'explore' || active === 'student-profile'
-  const isChat = active === 'chats' || active === 'chat-detail' || active === 'new-chat' || active === 'chat-options'
-  const isProf = active === 'profile' || active === 'settings' || active === 'edit-profile'
-  const tabs = [
-    { key: 'home' as Screen, icon: Ic.home, label: 'Home', hit: isHome },
-    { key: 'explore' as Screen, icon: Ic.explore, label: 'Explore', hit: isExp },
-    { key: 'create-modal' as Screen, icon: Ic.plus, label: 'Create', hit: false },
-    { key: 'chats' as Screen, icon: Ic.chat, label: 'Chats', hit: isChat },
-    { key: 'profile' as Screen, icon: Ic.person, label: 'Profile', hit: isProf },
-  ]
-  return (
-    <div role="navigation" aria-label="Primary navigation" style={{ background: N.navy, borderTop: '1px solid rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', paddingBottom: 6, flexShrink: 0 }}>
-      {tabs.map((tab) => {
-        const isCta = tab.key === 'create-modal'
-        const badge = tab.key === 'chats' ? unreadChats : 0
-        const attention = tab.key === 'explore' && exploreAttention
-        const handleClick = () => {
-          if (tab.key === 'explore') {
-            localStorage.setItem('prepza-last-explore-opportunity-id', localStorage.getItem('prepza-latest-explore-opportunity-id') || '0')
-            setExploreAttention?.(false)
-          }
-          setScreen(tab.key)
-        }
-        return (
-          <button type="button" key={tab.key} onClick={handleClick} aria-label={tab.label} aria-current={tab.hit ? 'page' : undefined} style={{ flex: 1, minWidth: 44, minHeight: 44, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: 'none', border: 'none', cursor: 'pointer', padding: isCta ? '0 0 4px' : '8px 0 4px', position: 'relative' }}>
-            {isCta ? (
-              <>
-                <div aria-hidden="true" style={{ width: 50, height: 50, borderRadius: '50%', background: `linear-gradient(135deg,${N.gold},${N.goldL})`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: -22, boxShadow: '0 4px 18px rgba(201,168,76,.55)' }}>
-                  <div style={{ color: N.navy }}>{Ic.plus()}</div>
-                </div>
-                <span style={{ fontSize: 11, fontWeight: 700, color: N.gold, fontFamily: 'Plus Jakarta Sans' }}>Create</span>
-              </>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                {tab.hit && <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 18, height: 2, background: N.gold, borderRadius: 2 }} />}
-                <div style={{ position: 'relative', color: tab.hit ? N.gold : 'rgba(255,255,255,.70)' }}>
-                  {tab.icon()}
-                  {badge > 0 && <span aria-label={`${badge} unread messages`} style={{ position: 'absolute', top: -7, right: -10, minWidth: 17, height: 17, padding: '0 4px', borderRadius: 99, background: '#C94C4C', color: '#fff', fontSize: 9, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `2px solid ${N.navy}` }}>{badge > 99 ? '99+' : badge}</span>}
-                  {attention && <span aria-label="New opportunities" style={{ position: 'absolute', top: -5, right: -5, width: 8, height: 8, borderRadius: '50%', background: N.goldL, border: `2px solid ${N.navy}`, boxShadow: '0 0 0 4px rgba(232,201,126,.12)' }} />}
-                </div>
-                <span style={{ fontSize: 11, fontWeight: tab.hit ? 800 : 600, color: tab.hit ? N.gold : 'rgba(255,255,255,.70)', fontFamily: 'Plus Jakarta Sans' }}>{tab.label}</span>
-              </div>
-            )}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
 // ─── LOADING SYSTEM ───────────────────────────────────────────────────────────
 
 function Sk({ w, h = 14, r = 8, dark, style: sx }: { w?: string | number; h?: number; r?: number; dark?: boolean; style?: React.CSSProperties }) {
@@ -2982,9 +2929,6 @@ export default function App() {
   if (orgPortalMode) return <PremiumOrganisationPortal onExit={() => setOrgPortalMode(false)} />
 
   // Bottom navigation belongs to the primary app surfaces. Detail/immersive flows must own the full viewport so the global nav does not compete with their back/close controls.
-  const noNav: Screen[] = ['splash','login','forgot-password','signup','check-email','complete-profile','reset-password','verify-confirm','upload-share-choice','processing','doc-ready','document-study','document-reader','ai-tutor','flashcards','quiz','podcast-player','podcast-library','summary','opportunity-detail','share-sheet','settings','student-profile','notifications','library','mind-map','new-chat','chat-detail','chat-options','edit-profile','payment','payment-success','payment-failure','payment-history','publish-library','xp-progress','study-streak','study-activity','achievements','time-studied','followers','following','follow-requests','group-detail','group-create']
-  const darkHomeIndicator: Screen[] = ['processing','splash','login']
-
   const renderScreen = () => {
     switch (screen) {
       case 'ambassador': return <AmbassadorScreen setScreen={setScreen} />
@@ -3060,46 +3004,18 @@ export default function App() {
     }
   }
 
-  const isDark = ['splash','login','processing'].includes(screen)
-  const callEnabled = !['splash','login','forgot-password','signup','check-email','complete-profile','reset-password','verify-confirm'].includes(screen)
-
   return (
-    <>
-      <style>{`
-        html[data-prepza-theme="dark"] [style*="color: rgb(11, 20, 55)"],
-        html[data-prepza-theme="dark"] [style*="color:#0B1437"],
-        html[data-prepza-theme="dark"] [style*="color: #0B1437"] { color: #F5F6FA !important; }
-        html[data-prepza-theme="dark"] [style*="color: rgb(55, 65, 81)"],
-        html[data-prepza-theme="dark"] [style*="color:#374151"],
-        html[data-prepza-theme="dark"] [style*="color: #374151"] { color: #D7DBE5 !important; }
-        html[data-prepza-theme="dark"] [style*="color: rgb(107, 114, 128)"],
-        html[data-prepza-theme="dark"] [style*="color:#6B7280"],
-        html[data-prepza-theme="dark"] [style*="color: #6B7280"] { color: #9AA3B8 !important; }
-        html[data-prepza-theme="dark"] [style*="color: rgb(156, 163, 175)"],
-        html[data-prepza-theme="dark"] [style*="color:#9CA3AF"],
-        html[data-prepza-theme="dark"] [style*="color: #9CA3AF"] { color: #AEB7C7 !important; }
-        html[data-prepza-theme="dark"] [style*="color: rgb(17, 24, 39)"],
-        html[data-prepza-theme="dark"] [style*="color:#111827"],
-        html[data-prepza-theme="dark"] [style*="color: #111827"] { color: #F5F6FA !important; }
-      `}</style>
-      <div style={{ width: '100%', height: '100dvh', background: isDark ? N.navy : (currentThemeMode === 'dark' ? DARK_THEME.pageBg : N.bg), display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {/* Content */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        {renderScreen()}
-      <StudentOnboarding screen={screen} setScreen={setScreen} />
-      {callEnabled && <CallExperience userId={null} />}
-      </div>
-      {/* Bottom nav */}
-      {!noNav.includes(screen) && <BottomNav active={screen} setScreen={setScreen} unreadChats={unreadChats} exploreAttention={exploreAttention} setExploreAttention={setExploreAttention} />}
-      {/* Real admins only - hidden for everyone else, on top of every
-          /admin/* route already being server-side gated via @require_admin. */}
-      {isAdmin && (
-        <button onClick={() => setAdminMode(true)} style={{ position: 'fixed', bottom: 10, right: 10, color: 'rgba(255,255,255,0.18)', fontSize: 10, fontFamily: 'Plus Jakarta Sans', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 99, padding: '3px 12px', cursor: 'pointer', letterSpacing: '0.5px', zIndex: 200 }}>
-          ⚙ Admin Platform
-        </button>
-      )}
-      </div>
-    </>
+    <AppShell
+      screen={screen}
+      setScreen={setScreen}
+      unreadChats={unreadChats}
+      exploreAttention={exploreAttention}
+      setExploreAttention={setExploreAttention}
+      isAdmin={isAdmin}
+      onOpenAdmin={() => setAdminMode(true)}
+    >
+      {renderScreen()}
+    </AppShell>
   )
 }
 function friendlyGenerationError(error: unknown): string {
