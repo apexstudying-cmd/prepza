@@ -6,6 +6,8 @@ on:
       - 'app.py'
       - 'app_factory.py'
       - 'route_registry.py'
+      - 'observability_models.py'
+      - 'security_models.py'
       - 'db_runtime.py'
       - 'extensions.py'
       - 'academic_models.py'
@@ -20,7 +22,8 @@ on:
       - 'tests/test_learning_models_extraction_contract.py'
       - 'tests/test_backend_extensions_contract.py'
       - 'tests/test_app_factory_contract.py'
-      - 'tests/test_backend_route_registry_contract.py'
+      - 'tests/test_backend_route_registry_contract.py tests/test_backend_model_boundaries.py'
+      - 'tests/test_backend_model_boundaries.py'
       - '.github/workflows/backend-extension-contract.yml'
   push:
     branches: [main]
@@ -28,6 +31,8 @@ on:
       - 'app.py'
       - 'app_factory.py'
       - 'route_registry.py'
+      - 'observability_models.py'
+      - 'security_models.py'
       - 'db_runtime.py'
       - 'extensions.py'
       - 'academic_models.py'
@@ -53,7 +58,7 @@ jobs:
       - name: Install focused backend test dependencies
         run: python -m pip install pytest Flask==3.1.3 Flask-Limiter==4.1.1 Flask-SQLAlchemy==3.1.1 SQLAlchemy==2.0.51 psycopg2-binary==2.9.12
       - name: Compile shared extension modules and Flask entry point
-        run: python -m py_compile app.py app_factory.py route_registry.py db_runtime.py extensions.py academic_models.py learning_models.py study_models.py document_models.py library_models.py
+        run: python -m py_compile app.py app_factory.py route_registry.py observability_models.py security_models.py db_runtime.py extensions.py academic_models.py learning_models.py study_models.py document_models.py library_models.py
       - name: Run shared extension contract tests
         env:
           PYTHONPATH: .
