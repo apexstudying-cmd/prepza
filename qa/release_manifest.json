@@ -42,7 +42,7 @@
         },
         {
           "kind": "database_model",
-          "path": "app.py",
+          "path": "study_models.py",
           "anchors": [
             "class StudyTimeLog",
             "class StudyStreak"
@@ -139,7 +139,7 @@
       "layers": [
         {
           "kind": "backend_model",
-          "path": "app.py",
+          "path": "study_models.py",
           "anchors": [
             "class StudyStreak"
           ]
@@ -617,7 +617,7 @@
       "layers": [
         {
           "kind": "database_model",
-          "path": "app.py",
+          "path": "document_models.py",
           "anchors": [
             "class DocumentPageText"
           ]
