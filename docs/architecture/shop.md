@@ -454,3 +454,12 @@ The first browser run failed because the responsive test still expected the prev
 ## 19. 9 November 2026 — fixed bottom-navigation clearance (verified)
 
 The successful phone-small screenshot from run `42595814104` exposed another issue after the single-result grid fix: the app's fixed global bottom navigation could cover the lower part of a tall Shop card or listing form at shorter phone heights. The Shop content wrapper now reserves `104px + env(safe-area-inset-bottom)` beneath its scrollable content. The responsive browser journey scrolls the listing form's `Save & publish` action into view and asserts that its bottom edge is above the global navigation. Frontend Build `42597710544` passed the safe-area source contract, TypeScript and production build; Release Browser `42597710733` passed the corrected assertion on phone-small, phone-standard and tablet-portrait. This closes the responsive bottom-nav issue. The broader buyer/seller/admin UI journey remains open for detail, Saved/My Listings, in-app contact, report and moderation screens.
+
+
+## 20. 12 November 2026 — current-main journey and migration evidence
+
+The dedicated buyer/seller/admin browser journeys passed on exact current main `0f393bd011d6047915cbb12a15acac87f21102c0` in Release Browser [run 43171345717](https://github.com/apexstudying-cmd/prepza/actions/runs/43171345717). The job also passed phone-small, phone-standard and tablet-portrait responsive checks, B2B browser-to-ledger regression, 99 disposable PostgreSQL QA tests and online/offline generated-artifact journeys.
+
+The separate PostgreSQL Backup Restore Rehearsal [run 43171200015](https://github.com/apexstudying-cmd/prepza/actions/runs/43171200015) passed both existing-database migration/data preservation and PostgreSQL 17 custom-format backup/restore on commit `73276018786bdaf007396c514fa0f358145138a7`. The migration reached Alembic head `20261030_shared_study_streak` and preserved the seeded document/material; the restored database matched the 116 public-table count, Alembic revision and sentinel data. This was disposable CI only.
+
+These results close the populated-database migration and backup/restore rehearsals as separate gates. Real Paystack sandbox checkout/webhooks and R2 object/header operations remain NOT_TESTED pending safe staging credentials, and the final one-SHA combined release regression remains open. Shop stays IN_PROGRESS; the classifieds fee, manual renewal, direct seller contact and no-buyer-checkout rules remain unchanged.

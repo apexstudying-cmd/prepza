@@ -1,6 +1,6 @@
 # Prepza Shop — End-to-End User Flow
 
-**Status:** Buyer/seller/admin browser journeys and responsive visual review passed on exact PR #77 code head `3fcc2b3`; Paystack/R2 provider verification and release certification remain open.
+**Status:** Buyer/seller/admin browser journeys and responsive checks passed on current main `0f393bd011d6047915cbb12a15acac87f21102c0` (Release Browser 43171345717); Paystack/R2 provider verification and same-SHA release certification remain open.
 **Last updated:** 12 November 2026.
 **Commercial rule:** KES 100 per item per manually renewed 30-day listing period, including the first listing.
 **Payment boundary:** Prepza collects only the seller's listing fee. Buyers pay and arrange handover directly with sellers; there is no buyer checkout, cart, escrow, or seller payout flow.
@@ -100,4 +100,12 @@ The release browser passed phone-small, phone-standard and tablet-portrait respo
 
 Sixteen screenshots in artifact [13856133486](https://github.com/apexstudying-cmd/prepza/actions/runs/43024634046/artifacts/13856133486) were inspected, including Home and Shop at phone/tablet widths, listing editor, stale-cache views, buyer Saved/reported detail, seller listing detail and admin moderation. The visual review confirms a more consistent navy/gold shell, compact underline tabs, familiar white-card surfaces, 124px listing image/placeholder height, legible listing hierarchy and responsive bottom-navigation clearance. It is not a student usability study.
 
-The admin browser fixture uses a synthetic uploaded-photo object-key reference; it does not exercise real R2. The disposable payment tests use mocked Paystack responses; they do not exercise real sandbox checkout/webhooks. Keep the Shop gate IN_PROGRESS until safe staging credentials verify Paystack and R2, and until the populated-database migration rehearsal covers current Alembic head 20261030_shared_study_streak. No buyer checkout/cart/escrow/payout or automatic recurring seller fee was introduced.
+The admin browser fixture uses a synthetic uploaded-photo object-key reference; it does not exercise real R2. The disposable payment tests use mocked Paystack responses; they do not exercise real sandbox checkout/webhooks. The populated-database migration and custom-format backup/restore now pass in run 43171200015 through Alembic head `20261030_shared_study_streak`; the full role journey also passed on current main in run 43171345717. Keep the Shop gate IN_PROGRESS until safe staging credentials verify Paystack and R2 and the final combined release candidate is tested on one SHA. No buyer checkout/cart/escrow/payout or automatic recurring seller fee was introduced.
+
+## 10. 12 November 2026 — current-main and database verification update
+
+Release Browser [run 43171345717](https://github.com/apexstudying-cmd/prepza/actions/runs/43171345717) passed the buyer, seller and admin journeys on exact current main `0f393bd011d6047915cbb12a15acac87f21102c0`, along with phone-small, phone-standard and tablet-portrait responsive checks. The workflow uploaded current screenshots in artifact [13922288483](https://github.com/apexstudying-cmd/prepza/actions/runs/43171345717/artifacts/13922288483). The reviewed 16-image visual reference remains artifact [13856133486](https://github.com/apexstudying-cmd/prepza/actions/runs/43024634046/artifacts/13856133486).
+
+The existing-database migration and PostgreSQL 17 custom-format backup/restore rehearsal passed in [run 43171200015](https://github.com/apexstudying-cmd/prepza/actions/runs/43171200015) on commit `73276018786bdaf007396c514fa0f358145138a7`. It preserved a seeded document and generated material while upgrading to `20261030_shared_study_streak`, then restored a 116-public-table backup into a separate disposable database and verified the Alembic revision and sentinel data. This closes the separate migration and backup/restore gates, but not the final one-SHA combined release gate.
+
+Real Paystack sandbox checkout/webhooks and R2 object/header operations remain NOT_TESTED pending safe staging credentials. The KES 100 per item per manually renewed 30-day fee, direct seller contact, moderation and no-buyer-checkout model remain unchanged. Keep Shop IN_PROGRESS and release BLOCKED.
