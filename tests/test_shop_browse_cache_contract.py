@@ -31,7 +31,7 @@ def test_browse_cache_writes_sanitized_snapshots_and_falls_back_for_same_query()
     catch_end = source.index("\n  }\n  const loadMine", catch_start)
     catch_block = source[catch_start:catch_end]
 
-    assert "if (!cached) throw cause" in catch_block
+    assert "if (!cached) {\n        setLoading(false)\n        throw cause\n      }" in catch_block
     assert "setListings(filterCurrentListings(cached.listings))" in catch_block
     assert "Showing recently viewed listings. Reconnect to refresh availability and status." in catch_block
 
