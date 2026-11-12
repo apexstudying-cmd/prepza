@@ -1,6 +1,6 @@
 # Prepza Shop — End-to-End User Flow
 
-**Status:** Buyer/seller/admin browser journeys and responsive checks passed on current main `0f393bd011d6047915cbb12a15acac87f21102c0` (Release Browser 43171345717); Paystack/R2 provider verification and same-SHA release certification remain open.
+**Status:** Buyer/seller/admin browser journeys and responsive checks passed on runtime code head `0f393bd011d6047915cbb12a15acac87f21102c0` (Release Browser 43171345717); current main `09bd1d82910d83797da2303a9f42afbd1739fbfe` is documentation-only; Paystack/R2 provider verification and same-SHA release certification remain open.
 **Last updated:** 12 November 2026.
 **Commercial rule:** KES 100 per item per manually renewed 30-day listing period, including the first listing.
 **Payment boundary:** Prepza collects only the seller's listing fee. Buyers pay and arrange handover directly with sellers; there is no buyer checkout, cart, escrow, or seller payout flow.
@@ -104,7 +104,7 @@ The admin browser fixture uses a synthetic uploaded-photo object-key reference; 
 
 ## 10. 12 November 2026 — current-main and database verification update
 
-Release Browser [run 43171345717](https://github.com/apexstudying-cmd/prepza/actions/runs/43171345717) passed the buyer, seller and admin journeys on exact current main `0f393bd011d6047915cbb12a15acac87f21102c0`, along with phone-small, phone-standard and tablet-portrait responsive checks. The workflow uploaded current screenshots in artifact [13922288483](https://github.com/apexstudying-cmd/prepza/actions/runs/43171345717/artifacts/13922288483). The reviewed 16-image visual reference remains artifact [13856133486](https://github.com/apexstudying-cmd/prepza/actions/runs/43024634046/artifacts/13856133486).
+Release Browser [run 43171345717](https://github.com/apexstudying-cmd/prepza/actions/runs/43171345717) passed the buyer, seller and admin journeys on exact runtime code head `0f393bd011d6047915cbb12a15acac87f21102c0` (current main `09bd1d82910d83797da2303a9f42afbd1739fbfe` is documentation-only), along with phone-small, phone-standard and tablet-portrait responsive checks. The workflow uploaded current screenshots in artifact [13922288483](https://github.com/apexstudying-cmd/prepza/actions/runs/43171345717/artifacts/13922288483). The reviewed 16-image visual reference remains artifact [13856133486](https://github.com/apexstudying-cmd/prepza/actions/runs/43024634046/artifacts/13856133486).
 
 The existing-database migration and PostgreSQL 17 custom-format backup/restore rehearsal passed in [run 43171200015](https://github.com/apexstudying-cmd/prepza/actions/runs/43171200015) on commit `73276018786bdaf007396c514fa0f358145138a7`. It preserved a seeded document and generated material while upgrading to `20261030_shared_study_streak`, then restored a 116-public-table backup into a separate disposable database and verified the Alembic revision and sentinel data. This closes the separate migration and backup/restore gates, but not the final one-SHA combined release gate.
 

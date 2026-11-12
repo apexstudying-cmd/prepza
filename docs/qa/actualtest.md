@@ -409,12 +409,12 @@ The overall release remains **BLOCKED**. The populated-database migration/backup
 
 ## 2026-11-12 — current-main post-merge verification and populated-database migration
 
-Current main is `0f393bd011d6047915cbb12a15acac87f21102c0`; the repository had no open PRs at verification time.
+The latest verified runtime code head is `0f393bd011d6047915cbb12a15acac87f21102c0`; current main is documentation-only commit `09bd1d82910d83797da2303a9f42afbd1739fbfe`. The repository had no open PRs at verification time.
 
 - **Frontend Build:** [run 43171345722](https://github.com/apexstudying-cmd/prepza/actions/runs/43171345722) passed 124 source/transform tests, 5 offline Library tests, functional-wiring and ORM/schema audits, TypeScript, service-worker validation and production Vite build.
 - **Release Browser/Cross-System Regression:** [run 43171345717](https://github.com/apexstudying-cmd/prepza/actions/runs/43171345717) passed on the exact current main SHA. The job built the production image, started disposable PostgreSQL/Redis, applied Alembic and controlled SQL-ledger migrations, started the app, passed phone-small (360x800), phone-standard (390x844) and tablet-portrait (768x1024), passed Shop buyer/seller/admin browser journeys and B2B browser-to-ledger checks, passed 99 disposable PostgreSQL QA tests (3536 warnings), passed online/offline Study Hub and generated-artifact journeys, uploaded screenshots (artifact [13922288483](https://github.com/apexstudying-cmd/prepza/actions/runs/43171345717/artifacts/13922288483)), and cleaned up disposable services.
 - **Release QA Trace:** [run 43171345768](https://github.com/apexstudying-cmd/prepza/actions/runs/43171345768) passed all 11 feature traces with 0 failures and 0 warnings on the exact current main SHA. The previous trace attempt on 732760 failed because three manifest entries still looked for extracted study models in `app.py`; commit 0f393 updates `qa/release_manifest.json` to point at `study_models.py` and `document_models.py`, and the rerun is green.
-- **Current push workflow inventory:** all 13 observed push-triggered workflows on 0f393 completed successfully. This statement does not count conditional or PR-only workflows as passes.
+- **Current push workflow inventory:** 13 observed push-triggered workflows on runtime head 0f393 completed successfully; after the documentation-only 09bd1d commit, all 12 push-triggered workflows completed successfully again. Conditional or PR-only workflows are not counted as passes.
 
 ### Populated-database migration and backup/restore
 

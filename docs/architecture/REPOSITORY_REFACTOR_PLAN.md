@@ -487,7 +487,7 @@ Remaining architecture work: ChatDetail/Chats (E2EE/realtime), DocumentStudy/Rea
 
 ## 2026-11-12 — current-main architecture reconciliation
 
-Current main is `0f393bd011d6047915cbb12a15acac87f21102c0`. The verified source sizes remain `frontend/src/App.tsx` at 5,034 lines and `app.py` at 9,643 lines. The Admin boundary is complete as a structural extraction: `AdminSection.tsx` is a 172-line dispatcher, `useAdminSectionController.ts` owns the 934-line state/effect/API controller, the core/platform render-only views are 783/368 lines, and the growth/domain panels are 531/728 lines. The controller stays unconditional so section changes preserve its state/effect lifetime. Podcast Player is module-owned at 349 lines. These are ownership improvements, not a claim that the whole frontend/backend refactor is complete.
+Current main is documentation-only commit `09bd1d82910d83797da2303a9f42afbd1739fbfe`; the runtime code snapshot remains `0f393bd011d6047915cbb12a15acac87f21102c0`. The verified source sizes remain `frontend/src/App.tsx` at 5,034 lines and `app.py` at 9,643 lines. The Admin boundary is complete as a structural extraction: `AdminSection.tsx` is a 172-line dispatcher, `useAdminSectionController.ts` owns the 934-line state/effect/API controller, the core/platform render-only views are 783/368 lines, and the growth/domain panels are 531/728 lines. The controller stays unconditional so section changes preserve its state/effect lifetime. Podcast Player is module-owned at 349 lines. These are ownership improvements, not a claim that the whole frontend/backend refactor is complete.
 
 The current route switch was checked before choosing the next screen boundary:
 
