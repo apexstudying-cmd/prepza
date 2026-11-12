@@ -28,10 +28,20 @@ from extensions import db
 from user_models import User
 from core_models import ContentItem, Payment, SystemSetting, ViewProgress
 from app_factory import create_app
-from route_registry import register_foundation_routes
+from route_registry import (
+    register_foundation_routes,
+    register_account_billing_routes,
+    register_public_shell_route,
+    register_academic_catalog_route,
+    register_notification_feature_routes,
+    register_opportunity_feature_routes,
+    register_chat_feature_routes,
+    register_control_feature_routes,
+    register_admin_reconciled_routes,
+    register_runtime_feature_routes,
+)
 from observability_models import RequestObservabilityEvent
 from security_models import AuditLog, PushSubscription, UserKey
-from auth_otp import register_email_otp
 
 load_dotenv()
 
@@ -1273,24 +1283,23 @@ def require_csrf(f):
         return f(*args, **kwargs)
     return decorated
 
-# Email OTP / SES authentication service.
-register_email_otp(app, db, User, SystemSetting, require_admin, require_csrf, limiter)
-from admin_operations import register_admin_operations
-register_admin_operations(app, db, require_admin)
-from infrastructure_monitoring import register_infrastructure_monitoring
-register_infrastructure_monitoring(
-    app, db, require_admin, SystemSetting, User, DocumentContent,
-    AiUsageLog, Payment, StudyActivityLog, StudyTimeLog
+# Register account, admin operations and student billing routes after core helpers exist.
+_student_order_helpers, _student_subscription_billing = register_account_billing_routes(
+    app,
+    db,
+    User=User,
+    SystemSetting=SystemSetting,
+    require_admin=require_admin,
+    require_csrf=require_csrf,
+    limiter=limiter,
+    DocumentContent=DocumentContent,
+    AiUsageLog=AiUsageLog,
+    Payment=Payment,
+    StudyActivityLog=StudyActivityLog,
+    StudyTimeLog=StudyTimeLog,
+    ContentItem=ContentItem,
+    paystack_request=paystack_request,
 )
-
-
-_student_order_helpers = register_student_orders(app, db, Payment, ContentItem, User, require_csrf)
-
-from student_subscription_billing import register_student_subscription_billing
-_student_subscription_billing = register_student_subscription_billing(
-    app, db, Payment, User, require_csrf, require_admin, paystack_request
-)
-
 
 def get_content_prices():
     """
@@ -1695,16 +1704,14 @@ def track_last_active():
     return None
 
 
-from public_shell_routes import register_public_shell_routes
-register_public_shell_routes(app, db, limiter, lambda: _sweep_expired_opportunities_safe())
+register_public_shell_route(app, db, limiter, lambda: _sweep_expired_opportunities_safe())
 
 
 # ---------- Auth routes ----------
 
 # Keep the public academic catalog routes at their original registration
 # position, after the University/Program model declarations and health route.
-from academic_catalog_routes import register_academic_catalog_routes
-register_academic_catalog_routes(app, University, Program)
+register_academic_catalog_route(app, University, Program)
 
 
 @app.route("/signup", methods=["POST"])
@@ -6994,8 +7001,7 @@ def get_public_profile(target_user_id):
 
 # ---------- Notifications ----------
 
-from notification_routes import register_notification_routes
-register_notification_routes(app, db, Notification, require_csrf)
+register_notification_feature_routes(app, db, Notification, require_csrf)
 
 
 def get_or_create_notification_prefs(user_id):
@@ -8657,11 +8663,7 @@ def confirm_chat_attachment(conversation_id,attachment_id):
     attachment.status="ready"; db.session.commit()
     return jsonify({"attachment_id":attachment.id,"status":"ready"}),200
 
-try:
-    from opportunity_runtime import register_opportunity_runtime
-    register_opportunity_runtime(app, db, Opportunity, Organisation, User, OrganisationMember, require_csrf)
-except Exception as exc:
-    app.logger.exception("Opportunity runtime registration failed: %s", exc)
+register_opportunity_feature_routes(app, db, Opportunity, Organisation, User, OrganisationMember, require_csrf)
 
 @app.get("/admin/system/storage")
 def admin_system_storage():
@@ -8687,15 +8689,7 @@ def admin_system_storage():
 # Register the split chat modules only after the base models/helpers/routes
 # above exist. They add group membership management, E2EE key envelopes,
 # and read-receipt/message metadata hooks without circular imports.
-try:
-    from e2ee_chat_models import create_e2ee_models
-    ConversationKeyEnvelope = create_e2ee_models(db)
-    from e2ee_chat_routes import register_e2ee_chat_routes
-    register_e2ee_chat_routes(app,db,Conversation,ConversationParticipant,User,ConversationKeyEnvelope)
-    import chat_group_routes  # noqa: F401 - decorator registration
-    import chat_interactions  # noqa: F401 - before/after hook registration
-except Exception as exc:
-    app.logger.exception("Chat runtime registration failed: %s", exc)
+register_chat_feature_routes(app, db, Conversation, ConversationParticipant, User)
 
 
 # ---------- Audit Logging ----------
@@ -8826,49 +8820,28 @@ def admin_list_audit_logs():
 
     return jsonify({"page": page, "logs": result})
 
-# Register the protected developer control API only after all base models/routes exist.
-from prepza_control import register_control_routes
-
-register_control_routes(
-    app,
-    db,
-    SystemSetting,
-    User,
-    Document,
-    DocumentContent,
-    GeneratedMaterial,
-    log_admin_action,
-    limiter,
-)
+register_control_feature_routes(app, db, SystemSetting, User, Document, DocumentContent, GeneratedMaterial, log_admin_action, limiter)
 
 # Register the reconciled admin runtime after all base models/helpers exist.
 # These modules were deliberately kept separate from app.py during the admin
-# recovery work so the current student/AI/realtime runtime is not overwritten.
-import admin_reconciled_core_a  # noqa: F401 - decorator registration
-import admin_reconciled_core_b  # noqa: F401 - decorator registration
-import admin_reconciled_opportunities  # noqa: F401 - decorator registration
-import admin_reconciled_organisation  # noqa: F401 - decorator registration
-import admin_reconciled_ambassadors  # noqa: F401 - decorator registration
+# recovery work sregister_admin_reconciled_routes(app)
 import opportunity_expiry_runtime  # noqa: F401 - decorator registration
 from opportunity_expiry_runtime import _sweep_expired_opportunities_safe
 
 
-
-# Register routes that must exist during application construction. Keeping
-# registration here avoids a secondary entrypoint adding routes after Flask
-# has already served its first request.
-from offline_activity_routes import register_offline_activity_routes
-from e2ee_production_hardening import register_e2ee_production_hardening
-
-register_offline_activity_routes(app, db)
-register_e2ee_production_hardening(app, db, Conversation, ConversationParticipant)
-
-# Register Shop only after the core user, payment and chat models are available.
-from shop_marketplace import register_shop_routes
-register_shop_routes(app, db, User, Payment, Conversation, ConversationParticipant, limiter, create_paystack_transaction, sync_paystack_payment_status)
-
-from study_retrieval_routes import register_study_retrieval_routes
-register_study_retrieval_routes(app, db, login_required, require_csrf)
-
-from request_observability import register_request_observability
-register_request_observability(app, db, require_admin, RequestObservabilityEvent)
+# Register late-bound routes after models and payment/session helpers exist.
+register_runtime_feature_routes(
+    app,
+    db,
+    Conversation=Conversation,
+    ConversationParticipant=ConversationParticipant,
+    User=User,
+    Payment=Payment,
+    limiter=limiter,
+    create_paystack_transaction=create_paystack_transaction,
+    sync_paystack_payment_status=sync_paystack_payment_status,
+    login_required=login_required,
+    require_csrf=require_csrf,
+    require_admin=require_admin,
+    RequestObservabilityEvent=RequestObservabilityEvent,
+)
