@@ -2359,3 +2359,27 @@ The new `scripts/test_browser_shop_journeys.py` is wired into the release workfl
 Frontend Build [43023202179](https://github.com/apexstudying-cmd/prepza/actions/runs/43023202179) and exact-head Release Browser/Cross-System Regression [43023202418](https://github.com/apexstudying-cmd/prepza/actions/runs/43023202418) passed on `76a435d91db27ca09292e20d16c31ec2b34c9884). Release job: production image, disposable migrations/ledger, responsive phone/tablet, buyer/seller/admin Shop journeys, B2B browser-to-ledger, 99 PostgreSQL tests, online/offline lifecycle and generated-artifact replay, screenshot upload and cleanup. Podcast evidence includes `cached podcast descriptor and actual audio Blob open offline` and `Podcast survives reload and reopens from its cached Blob`. Sixteen of 17 workflows succeeded; StudyHub Library Flow was skipped. Artifact [13855748767](https://github.com/apexstudying-cmd/prepza/actions/runs/43023202418/artifacts/13855748767).
 
 Live Paystack sandbox and R2 object/header verification remain open; Shop release status stays IN_PROGRESS and overall release BLOCKED. PR #77 remains open/unmerged. No live payment, deployment, paid service, or production data operation was performed.
+
+
+## 2026-11-12 — Consolidated architecture merge and Shop role journeys
+
+PR #77 was deliberately kept as one consolidated integration rather than splitting the remaining refactor into several small PRs. After the exact code head 3fcc2b3fbd9605c14c22a6b587475a779d559150 passed the frontend build and full release-browser regression, it was squash-merged to main as 48a11afa5ca9b582d656cd83030f5dfefc87e22f.
+
+### What the final boundary looks like
+
+- App.tsx remains the composition root, but it is now 5,034 lines rather than the earlier 8,903-line checkpoint before the Admin extraction. This is a structural ownership improvement, not a claim that the repository's total LOC fell by the same amount.
+- Admin's dispatcher, controller and render-only views are separated. AdminSection.tsx is 172 lines; useAdminSectionController.ts is 934; core/platform views are 783/368; growth/domain panels are 531/728. The controller hook remains unconditional so switching sections does not reset the original state/effect lifetime. The compatibility barrel preserves the existing Admin panel imports.
+- Podcast Player is a 349-line feature module. The offline player now prefers its account-scoped cached audio Blob before accepting a service-worker ready descriptor that may still contain a remote URL. This protects actual offline playback and reload recovery.
+- Backend public-shell routes and selected Learning, Study, Document and Library model declarations have feature-owned modules. app.py remains 9,643 lines; the global Flask app and many routes/services are not yet decomposed.
+
+### What the Shop pass taught us
+
+Responsive layout checks alone did not prove that Shop felt like the rest of Prepza. The final visual pass used compact underline tabs rather than standalone rounded section pills, a shorter 124px listing image/placeholder, clearer title/price/metadata hierarchy, existing navy/gold tokens, white card surfaces and the existing fixed global navigation. We inspected the 16-image [artifact 13856133486](https://github.com/apexstudying-cmd/prepza/actions/runs/43024634046/artifacts/13856133486) at phone and tablet widths, including buyer Saved/reported, seller and admin moderation screens.
+
+The dedicated browser journey now checks three distinct roles instead of treating a successful browse page as end-to-end evidence. Buyer verifies detail, save/Saved, report and direct contact. Seller verifies My Listings, pause/sold and the KES 100/30-day paid form. Admin verifies approve/reject, report resolution and payment-review handling. The admin fixture uses a synthetic uploaded-photo reference, and the payment tests use mocks; these are not real R2 or Paystack provider tests.
+
+### Verification and what remains
+
+Frontend Build [43024634109](https://github.com/apexstudying-cmd/prepza/actions/runs/43024634109) passed 124 source/transform contracts, 5 offline Library tests, audits, TypeScript, service-worker validation and production build. Release Browser [43024634046](https://github.com/apexstudying-cmd/prepza/actions/runs/43024634046) passed production-image and disposable database setup, Alembic/ledger, phone/tablet, all Shop role journeys, B2B, 99 PostgreSQL tests, offline/generated-material replay, screenshots and cleanup. Sixteen of 17 applicable workflows succeeded; StudyHub Library Flow was skipped.
+
+The next architecture work must remain bounded and behavior-preserving: ChatDetail/Chats, DocumentStudy/Reader, generation flows, Home/Explore and app-shell orchestration. Backend app.py still needs careful route/service/model extraction. Release work remains blocked by the current-head populated-database migration/backup-restore rehearsal, Paystack/SES/OpenAI/R2/audio-GPU provider checks, page-text migration/backfill and human citation review, external Sentry delivery/request-ID propagation, and the known B2B viewability limitation. No production changes or paid provider operations were performed.

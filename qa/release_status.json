@@ -1,14 +1,14 @@
 {
   "version": 1,
-  "last_verified_date": "2026-10-29",
-  "last_verified_commit": "546727dc1d6846599963af2355a80586a80ef6d6",
+  "last_verified_date": "2026-11-12",
+  "last_verified_commit": "3fcc2b3fbd9605c14c22a6b587475a779d559150",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
     {
       "id": "database_alembic",
       "status": "PASS",
-      "evidence": "74-case disposable PostgreSQL/Alembic QA; fresh bootstrap verified"
+      "evidence": "Release Browser and Cross-System Regression run 43024634046 passed on exact PR #77 code head 3fcc2b3fbd9605c14c22a6b587475a779d559150: production image built; disposable PostgreSQL/Redis started; Alembic migrations and controlled SQL migration ledger applied; app started. This proves fresh disposable bootstrap, not a populated production database upgrade."
     },
     {
       "id": "authentication_session_csrf",
@@ -68,7 +68,7 @@
     {
       "id": "mobile_responsive_visual",
       "status": "PASS",
-      "evidence": "GitHub Actions Release Browser and Cross-System Regression run 40502457332 passed on runtime commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015 (2026-10-27). Mobile/tablet checks passed at phone-small 360x800, phone-standard 390x844, and tablet portrait 768x1024 with no horizontal overflow or page errors; responsive screenshots were uploaded."
+      "evidence": "Release Browser run 43024634046 passed phone-small (360x800), phone-standard (390x844), and tablet-portrait (768x1024). Shop/Home responsive screenshots were uploaded in artifact 13856133486 and visually reviewed; Shop now uses the Prepza navy/gold shell, compact underline tabs, consistent white-card surfaces, 124px listing image treatment, and clearer price/title/meta hierarchy. This is screenshot review, not a student usability study."
     },
     {
       "id": "storage_backup_restore",
@@ -78,22 +78,22 @@
     {
       "id": "cross_system_journeys",
       "status": "PASS",
-      "evidence": "GitHub Actions Release Browser and Cross-System Regression run 40502457332 passed on runtime commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015 (2026-10-27): B2B browser-to-ledger journey, full disposable PostgreSQL QA suite, and online/offline generated-artifact browser journeys all passed. This remains separate from live external-provider verification."
+      "evidence": "Release Browser and Cross-System Regression run 43024634046 passed on exact code head 3fcc2b3fbd9605c14c22a6b587475a779d559150: B2B browser-to-ledger regression, 99 disposable PostgreSQL QA tests, online/offline Study Hub lifecycle and generated-artifact replay, responsive browser checks, screenshot upload, and disposable-service cleanup. The dedicated Shop buyer/seller/admin browser journeys also passed in this run."
     },
     {
       "id": "ci_release_workflows",
       "status": "PASS",
-      "evidence": "Current-main commit 546727dc1d6846599963af2355a80586a80ef6d6 passed GitHub Actions AI economics validation (run 40880817272: 81 tests and AI job recovery invariants), Release Browser and Cross-System Regression (run 40880817228), Frontend Build (40880817388), Screen Loading Audit (40880817448), Realtime Runtime Regression (40880817279), E2EE Security Regression (40880817247), Student Frontend Contract (40880817237), Student contract validation (40880817411), Admin Route Contract (40880817408), B2B contract validation (40880817231), Chat UX Contract (40880817527), and Kokoro GPU worker validation (40880817229). The browser run built the production image, started disposable PostgreSQL/Redis, applied migrations and the controlled SQL ledger rehearsal, passed responsive phone/tablet, B2B browser-to-ledger, full disposable PostgreSQL QA and online/offline generated-artifact journeys, uploaded screenshots, and removed disposable services/volumes. No production deployment performed."
+      "evidence": "On exact PR #77 code head 3fcc2b3fbd9605c14c22a6b587475a779d559150, 16 applicable GitHub Actions workflows succeeded: Frontend Build (43024634109), Release Browser/Cross-System Regression (43024634046), Study Navigation Polish, Student Frontend Contract, Student Contract Validation, Admin Route Contract, Prepza Control API, Backend Shared Extension Contract, Backend Academic Catalog Route Contract, B2B Contract Validation, AI Generation Architecture, AI Economics Validation, E2EE Chat Validation, E2EE Security Regression, Study Hub Runtime Regression, and Kokoro GPU Worker Validation. StudyHub Library Flow (43024633871) was conditionally skipped and is not counted as a pass. PR #77 was squash-merged to main as 48a11afa5ca9b582d656cd83030f5dfefc87e22f; the recorded CI evidence is from the exact pre-merge code head, not a separate post-merge run."
     },
     {
       "id": "existing_database_migration",
-      "status": "PASS",
-      "evidence": "GitHub Actions PostgreSQL Backup Restore Rehearsal run 40712703724 passed on commit 959d4ed0ef7fe00733ac64d21ab15232a5beda7a (2026-10-28). The populated database was upgraded from 20261005_chat_attach_source_doc through Alembic head 20261029_shop_period_payment; existing document data was preserved; the Shop listing/saved/report tables and six payment/expiry-related columns were verified. The backup/restore job also passed in the same run."
+      "status": "IN_PROGRESS",
+      "evidence": "The populated-database upgrade/backup rehearsal last passed through Alembic revision 20261029_shop_period_payment in run 40712703724. The current application head includes 20261030_shared_study_streak; rerun the populated-database upgrade and backup/restore rehearsal through that exact current head before freeze. No production database was modified."
     },
     {
       "id": "clean_full_regression",
       "status": "NOT_TESTED",
-      "evidence": "Current-main exact-SHA validation on 546727dc1d6846599963af2355a80586a80ef6d6: AI economics/retrieval/observability run 40880817272 passed 81 focused tests plus Python compilation and AI job recovery invariants; Release Browser and Cross-System Regression run 40880817228 passed responsive, migration-ledger, B2B browser-to-ledger, full disposable PostgreSQL QA, and online/offline generated-artifact journeys. Realtime, E2EE, frontend build, student/admin/B2B/chat/screen-loading and Kokoro workflows also passed on the same SHA. This gate remains NOT_TESTED because the final release-candidate checklist still requires explicit disposition of external-provider gates and a single recorded consolidation of backup/restore plus all release regressions; older backup/restore evidence is not represented as having run on this SHA."
+      "evidence": "The exact PR #77 code head 3fcc2b3fbd9605c14c22a6b587475a779d559150 passed Frontend Build run 43024634109 and Release Browser/Cross-System Regression run 43024634046, including disposable migrations/ledger, responsive checks, Shop role journeys, B2B metering, 99 PostgreSQL QA tests, and online/offline generated-artifact replay. This final gate remains NOT_TESTED until the populated-database migration plus backup/restore is rerun through current Alembic head 20261030_shared_study_streak and all staging/provider dispositions are recorded together. The PR was squash-merged as 48a11afa5ca9b582d656cd83030f5dfefc87e22f; no separate post-merge run is claimed."
     },
     {
       "id": "b2b_monetization_integrity",
@@ -103,7 +103,7 @@
     {
       "id": "shop_marketplace",
       "status": "IN_PROGRESS",
-      "evidence": "User-approved contract: KES 100 per item for every manually renewed 30-day period including the first; no free first listing, no automatic recurring charge, no buyer checkout or Prepza-held purchase funds. Browse snapshots remain tab-memory-only, query-keyed, sanitized, mutation-invalidated and protected against superseded writes. Shop image uploads specify private one-day immutable Cache-Control and 24-hour presigned GET URLs; provider-side headers/object operations remain unverified. On exact PR #77 code head 76a435d91db27ca09292e20d16c31ec2b34c9884, Frontend Build run 43023202179 and Release Browser/Cross-System Regression run 43023202418 passed. The release run includes phone/tablet responsive checks, the dedicated buyer browse/detail/save/Saved/report/contact, seller My Listings/pause/sold/paid-form, and admin approve/reject/report/payment-review browser journeys, B2B browser-to-ledger, 99 disposable PostgreSQL QA tests and online/offline generated-artifact replay. Screenshot artifact 13855748767 was uploaded and reviewed. Gate remains IN_PROGRESS: real Paystack sandbox checkout/webhooks and R2 object/header operations are not verified; the current populated-database migration rehearsal must also be rerun for Alembic head 20261030_shared_study_streak. PR #77 is open/unmerged and does not update main release certification."
+      "evidence": "The approved classifieds contract remains KES 100 per item for each manually renewed 30-day period including the first; no free first listing, automatic recurring charge, buyer checkout/cart/escrow, or seller payout; buyers contact sellers through Prepza chat or WhatsApp. On exact code head 3fcc2b3fbd9605c14c22a6b587475a779d559150, Release Browser run 43024634046 passed buyer browse/detail/save/Saved/report/contact, seller My Listings/pause/sold/paid-form disclosure, and admin approve/reject/report/payment-review journeys. The same run passed 99 disposable PostgreSQL QA tests covering fee enforcement, mocked Paystack verification/idempotency, expiry/renewal, ownership and moderation. Sixteen screenshots were uploaded and reviewed (artifact 13856133486). Gate remains IN_PROGRESS: real Paystack sandbox checkout/webhooks and real R2 object/header operations are NOT_TESTED; current populated-database migration rehearsal also remains pending."
     },
     {
       "id": "payment_recovery_idempotency",
@@ -123,7 +123,7 @@
     {
       "id": "documentation_audit",
       "status": "IN_PROGRESS",
-      "evidence": "Updated release tracker and engineering execution notes against current-main commit 546727dc1d6846599963af2355a80586a80ef6d6. Current-SHA AI economics validation run 40880817272 passed 81 tests and recovery invariants; Release Browser and Cross-System Regression run 40880817228 passed all steps. Release manifest now traces the shared page-index consistency predicate and partial/stale-index regression test. Gate remains IN_PROGRESS until the controlled staging/provider dispositions and final clean regression are recorded."
+      "evidence": "Release and architecture documentation were reconciled after PR #77 was squash-merged to main as 48a11afa5ca9b582d656cd83030f5dfefc87e22f. Exact tested PR code head 3fcc2b3fbd9605c14c22a6b587475a779d559150 passed Frontend Build 43024634109 and Release Browser 43024634046; Shop role journeys and screenshot review are recorded. This gate remains IN_PROGRESS because current-head populated-database migration, external providers, retrieval backfill/citation review, and external monitoring delivery/propagation remain open."
     },
     {
       "id": "vps_or_render_deployment",
@@ -170,6 +170,6 @@
     "Monitoring access needed: configure/verify Sentry project notification rules or other external paging, and verify browser/provider X-Request-ID propagation; do not claim outbound paging is active until delivery is observed.",
     "After staging/provider gates are verified or explicitly dispositioned, run and record the final clean release-candidate regression on one SHA, including backup/restore, migration, realtime, E2EE/calling, responsive browser and offline artifact journeys. Keep release BLOCKED until the tracker rule is satisfied."
   ],
-  "current_main_commit": "22908be974f543ae26c72a231a3d8379cd0bfd47",
-  "verification_note": "Updated 2026-10-29: AI economics/retrieval/observability validation passed on commit 22908be9 (run 40876090377), covering page citations, prompt-injection handling, synthetic Recall@5/Precision@5/MRR@5, exact-cohort access, source-change invalidation, HTTP correlation, automatic alert threshold logging, opt-in Sentry dispatch, and Sentry event scrubbing. Full responsive/B2B/disposable-PostgreSQL/online-offline browser regression passed on the same commit (run 40876090212), including controlled SQL migration-ledger rehearsal, mobile/tablet checks, full disposable PostgreSQL QA, generated-artifact offline journeys, and Sentry scrubber wiring. Release remains BLOCKED: SQL migrations have only been applied in disposable CI, existing-document backfill and representative real-course citation review are pending, Sentry project notification rules/production delivery are unverified, and external Paystack/SES/OpenAI/R2/audio-GPU verification remains NOT_TESTED. The 400-user load test remains DEFERRED. No live payments or billable GPU workloads without explicit approval."
+  "current_main_commit": "48a11afa5ca9b582d656cd83030f5dfefc87e22f",
+  "verification_note": "Updated 2026-11-12. Main now contains consolidated PR #77 as squash commit 48a11afa5ca9b582d656cd83030f5dfefc87e22f; the exact pre-merge code head 3fcc2b3fbd9605c14c22a6b587475a779d559150 passed Frontend Build run 43024634109 (124 frontend/source-transform contracts, 5 offline Library tests, functional/schema audits, TypeScript, service-worker validation and production Vite build) and Release Browser/Cross-System Regression run 43024634046 (production image, disposable PostgreSQL/Redis, Alembic/SQL ledger, phone/tablet, Shop buyer/seller/admin browser journeys, B2B browser-to-ledger, 99 PostgreSQL QA tests, online/offline Study Hub and generated artifacts, screenshot upload and cleanup). Sixteen of 17 applicable workflows succeeded; StudyHub Library Flow was skipped. The PR's code is merged, but the recorded CI is exact pre-merge-head evidence; no post-merge CI is claimed. Release remains BLOCKED: populated-database migration/backup restore must be repeated through 20261030_shared_study_streak; Paystack sandbox, SES, bounded real OpenAI, R2 and audio/GPU provider checks are not verified; document page-text migration/backfill and representative citation review remain pending; Sentry delivery/request-ID propagation remains pending; B2B viewability still has a client-observed 1.5-second limitation. No production deployment, live payment, purchase, or billable GPU work was performed."
 }

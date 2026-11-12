@@ -1,7 +1,7 @@
 # Prepza Shop — End-to-End User Flow
 
-**Status:** Implementation in progress; not release-certified.
-**Last updated:** 11 November 2026.
+**Status:** Buyer/seller/admin browser journeys and responsive visual review passed on exact PR #77 code head `3fcc2b3`; Paystack/R2 provider verification and release certification remain open.
+**Last updated:** 12 November 2026.
 **Commercial rule:** KES 100 per item per manually renewed 30-day listing period, including the first listing.
 **Payment boundary:** Prepza collects only the seller's listing fee. Buyers pay and arrange handover directly with sellers; there is no buyer checkout, cart, escrow, or seller payout flow.
 
@@ -89,4 +89,15 @@ The approval fixture uses a synthetic object-key reference solely to exercise th
 
 **Exact PR #77 evidence:** code head `76a435d91db27ca09292e20d16c31ec2b34c9884`; Frontend Build [run 43023202179](https://github.com/apexstudying-cmd/prepza/actions/runs/43023202179); Release Browser and Cross-System Regression [run 43023202418](https://github.com/apexstudying-cmd/prepza/actions/runs/43023202418). The release job passed production-image build, migrations/ledger, responsive phone/tablet checks, all three Shop role journeys, B2B browser-to-ledger, 99 PostgreSQL tests and online/offline generated-artifact replay. Screenshot artifact: [13855748767](https://github.com/apexstudying-cmd/prepza/actions/runs/43023202418/artifacts/13855748767). Sixteen of 17 workflows succeeded; StudyHub Library Flow was skipped and is not counted as a pass.
 
-Paystack sandbox and real R2 operations/cache headers remain unverified pending safe staging credentials. Keep the Shop release gate IN_PROGRESS and the overall release BLOCKED. PR #77 remains open and unmerged; no production deployment or purchase was performed.
+Paystack sandbox and real R2 operations/cache headers remain unverified pending safe staging credentials. Keep the Shop release gate IN_PROGRESS and the overall release BLOCKED. PR #77 has since been squash-merged to main as `48a11afa5ca9b582d656cd83030f5dfefc87e22f`; no production deployment or purchase was performed.
+
+
+## 9. 12 November 2026 — merged exact-head browser and screenshot verification
+
+The consolidated PR #77 was squash-merged to main as 48a11afa5ca9b582d656cd83030f5dfefc87e22f after exact code-head 3fcc2b3fbd9605c14c22a6b587475a779d559150 passed [Frontend Build 43024634109](https://github.com/apexstudying-cmd/prepza/actions/runs/43024634109) and [Release Browser/Cross-System Regression 43024634046](https://github.com/apexstudying-cmd/prepza/actions/runs/43024634046).
+
+The release browser passed phone-small, phone-standard and tablet-portrait responsive checks, the dedicated buyer/seller/admin Shop journeys, B2B browser-to-ledger metering, 99 disposable PostgreSQL QA tests, online/offline Study Hub and generated-artifact replay, screenshot upload and cleanup. Buyer verifies detail, seller contact, save/Saved, report and Prepza chat. Seller verifies My Listings, pause, mark sold and the KES 100/30-day fee disclosure. Admin verifies approve/reject, report resolution and payment-review notes/retry handling.
+
+Sixteen screenshots in artifact [13856133486](https://github.com/apexstudying-cmd/prepza/actions/runs/43024634046/artifacts/13856133486) were inspected, including Home and Shop at phone/tablet widths, listing editor, stale-cache views, buyer Saved/reported detail, seller listing detail and admin moderation. The visual review confirms a more consistent navy/gold shell, compact underline tabs, familiar white-card surfaces, 124px listing image/placeholder height, legible listing hierarchy and responsive bottom-navigation clearance. It is not a student usability study.
+
+The admin browser fixture uses a synthetic uploaded-photo object-key reference; it does not exercise real R2. The disposable payment tests use mocked Paystack responses; they do not exercise real sandbox checkout/webhooks. Keep the Shop gate IN_PROGRESS until safe staging credentials verify Paystack and R2, and until the populated-database migration rehearsal covers current Alembic head 20261030_shared_study_streak. No buyer checkout/cart/escrow/payout or automatic recurring seller fee was introduced.

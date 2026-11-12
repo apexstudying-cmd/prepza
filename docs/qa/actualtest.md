@@ -354,3 +354,55 @@ Exact code head: `76a435d91db27ca09292e20d16c31ec2b34c9884` (PR #77; base `459c9
 Frontend Build [run 43023202179](https://github.com/apexstudying-cmd/prepza/actions/runs/43023202179) passed on this exact head. Release Browser and Cross-System Regression [run 43023202418](https://github.com/apexstudying-cmd/prepza/actions/runs/43023202418) passed the production image build, disposable PostgreSQL/Redis, Alembic and controlled ledger, phone/tablet browser checks, Shop role journeys, B2B browser-to-ledger, 99 disposable PostgreSQL QA tests, online/offline Study Hub and generated-artifact journeys, screenshot upload and service cleanup. Sixteen workflows succeeded; StudyHub Library Flow was skipped by workflow conditions and is not counted as a pass. Responsive/Shop screenshots: [artifact 13855748767](https://github.com/apexstudying-cmd/prepza/actions/runs/43023202418/artifacts/13855748767).
 
 Shop remains IN_PROGRESS because live Paystack sandbox and real R2 object/header checks remain unverified. The overall release remains BLOCKED. PR #77 remains unmerged; no deployment, live payment or production-database migration was performed.
+
+
+## 2026-11-12 — PR #77 merged; exact-head architecture and Shop verification
+
+The consolidated architecture/Shop integration [PR #77](https://github.com/apexstudying-cmd/prepza/pull/77) was squash-merged to main as [48a11afa5ca9b582d656cd83030f5dfefc87e22f](https://github.com/apexstudying-cmd/prepza/commit/48a11afa5ca9b582d656cd83030f5dfefc87e22f). The exact PR code head tested before merge was 3fcc2b3fbd9605c14c22a6b587475a779d559150, based on main 459c96cd7179810499edbec266e1f5deab3f9d4c. This records pre-merge exact-head CI; no separate post-merge CI result is claimed.
+
+### Frontend Build
+
+[Frontend Build run 43024634109](https://github.com/apexstudying-cmd/prepza/actions/runs/43024634109) passed on exact code head:
+- 124 frontend/source-transform/module-boundary tests passed.
+- 5 offline Library regression tests passed.
+- Functional-wiring and ORM/schema drift audits passed.
+- TypeScript typecheck passed.
+- Service-worker JavaScript validation passed.
+- Production Vite build passed.
+
+### Release Browser and Cross-System Regression
+
+[Release Browser run 43024634046](https://github.com/apexstudying-cmd/prepza/actions/runs/43024634046) passed on the same exact code head:
+- Production application image built; disposable PostgreSQL and Redis started.
+- Alembic migrations and the controlled SQL migration ledger were applied to disposable PostgreSQL; app startup passed.
+- Phone-small (360x800), phone-standard (390x844), and tablet-portrait (768x1024) browser checks passed.
+- Dedicated Shop buyer, seller and admin browser journeys passed.
+- B2B browser-to-ledger metering regression passed.
+- Full disposable PostgreSQL QA passed: **99 passed, 0 failed** (3,536 warnings).
+- Online/offline Study Hub lifecycle and generated-artifact replay passed, including cached podcast audio Blob playback/reload and zero generation POSTs during offline replay.
+- Responsive screenshots uploaded; disposable services/volumes cleaned up.
+
+The workflow inventory for the exact code head contained 16 successful workflows: Frontend Build, Release Browser/Cross-System Regression, Study Navigation Polish, Student Frontend Contract, Student Contract Validation, Admin Route Contract, Prepza Control API, Backend Shared Extension Contract, Backend Academic Catalog Route Contract, B2B Contract Validation, AI Generation Architecture, AI Economics Validation, E2EE Chat Validation, E2EE Security Regression, Study Hub Runtime Regression, and Kokoro GPU Worker Validation. StudyHub Library Flow was conditionally skipped and is not counted as a pass.
+
+### Shop browser journeys and visual review
+
+The release log confirms:
+- **Buyer:** browse and open listing detail, save the listing, verify it in Saved, report with details, and contact the seller.
+- **Seller:** open My Listings, inspect an owned listing, pause it, mark it sold, and reach the paid listing form with the KES 100/30-day disclosure.
+- **Admin:** approve and reject listings, resolve a buyer report, and document payment review before allowing retry.
+
+The Shop admin approval fixture uses a synthetic uploaded-photo object-key reference to exercise the moderation rule; it does not prove a real R2 upload. Paystack is mocked in the disposable PostgreSQL tests. Neither the browser fixture nor the mocked provider tests count as real Paystack/R2 provider verification.
+
+The [16-image screenshot artifact 13856133486](https://github.com/apexstudying-cmd/prepza/actions/runs/43024634046/artifacts/13856133486) was downloaded and inspected. It includes Home and Shop at phone/tablet sizes, the listing editor, stale-cache states, buyer Saved/reported detail, seller listing detail and admin moderation. The pass confirms responsive composition, the Prepza navy/gold header and underline-tab hierarchy, familiar white-card surfaces, listing-card image proportions and fixed bottom navigation. It is not a student usability study or final visual sign-off.
+
+### Current architecture snapshot and limits
+
+On merged main 48a11afa5ca9b582d656cd83030f5dfefc87e22f:
+- frontend/src/App.tsx: **5,034 lines**.
+- app.py: **9,643 lines**.
+- Admin: AdminSection.tsx 172 lines; useAdminSectionController.ts 934; AdminSectionCoreViews.tsx 783; AdminSectionPlatformViews.tsx 368; AdminGrowthPanels.tsx 531; AdminDomainPanels.tsx 728; AdminPanels.tsx remains a compatibility barrel.
+- PodcastPlayerScreen.tsx: 349 lines, with offline cached-Blob replay retained.
+
+The frontend architecture refactor is materially advanced but not complete. ChatDetail/Chats, DocumentStudy/Reader, generation flows, Home/Explore and app-shell orchestration remain high-coupling areas. Backend route/service/model decomposition remains open.
+
+The overall release remains **BLOCKED**. The populated-database migration/backup-restore rehearsal must be repeated through Alembic head 20261030_shared_study_streak; Paystack sandbox and R2 object/header checks need safe staging credentials; document page-text migration/backfill and representative citation review remain open; Sentry delivery and request-ID propagation need verification; B2B viewability retains its client-observed 1.5-second limitation. No production deployment, live payment, purchase, new paid service, or billable GPU work was performed.

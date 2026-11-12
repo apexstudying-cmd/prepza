@@ -119,3 +119,12 @@ The Shop browse screen has a tab-memory browse snapshot with a five-minute fresh
 - [Shop architecture and business contract](../architecture/shop.md)
 - [Engineering execution tracker](../NEXT_STEPS.md)
 - [Release gate evidence](../../qa/release_status.json)
+
+
+## Implementation update — 12 November 2026
+
+The final consolidated PR #77 code head 3fcc2b3fbd9605c14c22a6b587475a779d559150 passed Frontend Build [43024634109](https://github.com/apexstudying-cmd/prepza/actions/runs/43024634109) and Release Browser/Cross-System Regression [43024634046](https://github.com/apexstudying-cmd/prepza/actions/runs/43024634046), then was squash-merged to main as 48a11afa5ca9b582d656cd83030f5dfefc87e22f.
+
+The visual pass uses compact underline section tabs in the existing navy/gold Shop shell, familiar white card surfaces, 124px listing image/placeholder height, clearer price/title/metadata hierarchy and the existing 44px touch targets. The 16-image responsive/role screenshot artifact [13856133486](https://github.com/apexstudying-cmd/prepza/actions/runs/43024634046/artifacts/13856133486) was reviewed at phone-small, phone-standard and tablet-portrait, including browse, listing form, stale-cache, buyer Saved/reported, seller and admin moderation states. The release workflow also passed the dedicated buyer/seller/admin browser journeys and 99 disposable PostgreSQL QA tests.
+
+This closes the current screenshot consistency and automated role-journey checks, not a student usability study or live provider verification. Paystack sandbox checkout/webhooks and R2 upload/read/head/delete plus actual response headers remain NOT_TESTED without safe staging credentials. Keep Shop IN_PROGRESS and the overall release BLOCKED until provider and current-head populated-database migration gates are closed.
