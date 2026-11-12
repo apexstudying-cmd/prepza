@@ -12,6 +12,7 @@ import fitz  # PyMuPDF - used to rasterize + watermark view-only Q&A pages
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from flask import request, jsonify, session, Response, send_from_directory, redirect
+from flask_limiter.util import get_remote_address
 from sqlalchemy import func, or_, and_, text
 from threading import Lock, Thread
 from sqlalchemy.exc import IntegrityError
