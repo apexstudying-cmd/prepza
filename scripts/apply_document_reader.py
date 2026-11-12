@@ -30,7 +30,7 @@ if reader_module.exists():
     import_line = "import DocumentStudyHubScreen from './screens/study/DocumentStudyHubScreen'"
     module_import = "import DocumentReaderScreen from './screens/study/DocumentReaderScreen'"
     if module_import not in front:
-        front = rep(front, import_line, import_line + "\\n" + module_import, 'reader module import')
+        front = rep(front, import_line, import_line + "\n" + module_import, 'reader module import')
     if "case 'document-reader': return <DocumentReaderScreen" not in front:
         front = rep(front, "      case 'document-reader': return <DocumentStudyScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />", "      case 'document-reader': return <DocumentReaderScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />", 'reader route')
 marker = '// ─── AI TUTOR ─────────────────────────────────────────────────────────────────\n'
