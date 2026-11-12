@@ -23,12 +23,9 @@ def main() -> None:
         "import CompleteProfileScreen from './screens/onboarding/CompleteProfileScreen'\\nimport ShopScreen from './shop/ShopScreen'\\n",
         "ShopScreen import",
     )
-    text = replace_once(
-        text,
-        "  | 'home' | 'explore' | 'create-modal' | 'chats' | 'profile'\\n",
-        "  | 'home' | 'explore' | 'create-modal' | 'chats' | 'profile'\\n  | 'shop'\\n",
-        "Shop screen union",
-    )
+    screen_types = (ROOT / 'frontend' / 'src' / 'types' / 'navigation.ts').read_text(encoding='utf-8')
+    if "'shop'" not in screen_types:
+        raise SystemExit('Shop frontend patch: shared Screen union does not include shop')
     old_actions = """            {[
               { icon: Ic.upload('w-6 h-6'), label: 'Upload', action: () => setScreen('upload') },
               { icon: Ic.book('w-6 h-6'), label: 'My Study', action: () => setScreen('study-materials') },
