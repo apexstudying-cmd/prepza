@@ -94,6 +94,7 @@ def test_splash_screen_uses_the_canonical_192px_icon():
         for path in admin_dir.glob("*.tsx")
     ) if admin_dir.exists() else 0
     splash = source("frontend/src/screens/onboarding/SplashScreen.tsx")
+    home = source("frontend/src/screens/home/HomeScreen.tsx")
     assert "from './screens/onboarding/SplashScreen'" in app
     assert "function SplashScreen" not in app
     assert '<img src="/icon-192.png" alt="Prepza" width={192} height={192}' in splash
@@ -106,6 +107,7 @@ def test_splash_screen_uses_the_canonical_192px_icon():
     auth_screens = source("frontend/src/screens/auth/AuthScreens.tsx")
     assert (
         app.count('src="/icon-192.png"')
+        + home.count('src="/icon-192.png"')
         + admin_brand_marks
         + splash.count('src="/icon-192.png"')
         + profile_screen.count('src="/icon-192.png"')
