@@ -11,7 +11,6 @@ import boto3
 import fitz  # PyMuPDF - used to rasterize + watermark view-only Q&A pages
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
-from functools import wraps
 from flask import request, jsonify, session, Response, send_from_directory, redirect
 from sqlalchemy import func, or_, and_, text
 from threading import Lock, Thread
@@ -26,6 +25,7 @@ from pywebpush import webpush, WebPushException
 from urllib.parse import urlencode
 from extensions import db
 from user_models import User
+from auth_guards import _admin_authorization_failure, _is_admin_surface, login_required, require_admin, require_csrf
 from core_models import ContentItem, Payment, SystemSetting, ViewProgress
 from app_factory import create_app
 from route_registry import (
@@ -1194,39 +1194,6 @@ def sync_paystack_payment_status(reference):
     return payment
 
 
-def _admin_authorization_failure():
-    """Return a server-side denial response for the privileged admin surface."""
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    user = db.session.get(User, user_id)
-    if not user or not user.is_admin or user.is_suspended:
-        return jsonify({"error": "Forbidden"}), 403
-
-    return None
-
-
-def require_admin(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        denied = _admin_authorization_failure()
-        if denied:
-            return denied
-        return f(*args, **kwargs)
-    return decorated
-
-
-
-def _is_admin_surface(path):
-    return (
-        path == "/admin"
-        or path.startswith("/admin/")
-        or path == "/api/admin"
-        or path.startswith("/api/admin/")
-    )
-
-
 @app.before_request
 def enforce_admin_surface_security():
     """
@@ -1256,32 +1223,6 @@ def enforce_admin_surface_security():
 
     return None
 
-
-def login_required(f):
-    """Require an authenticated Prepza session for protected routes."""
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        user_id = session.get("user_id")
-        if not user_id:
-            return jsonify({"error": "Not logged in"}), 401
-        return f(*args, **kwargs)
-    return decorated
-
-
-def require_csrf(f):
-    """
-    Requires a valid X-CSRF-Token header matching this session's token.
-    Only meaningful for endpoints that also check session["user_id"] -
-    this does not replace login checks, it supplements them.
-    """
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        provided = request.headers.get("X-CSRF-Token")
-        expected = session.get("csrf_token")
-        if not provided or not expected or not hmac.compare_digest(provided, expected):
-            return jsonify({"error": "Missing or invalid CSRF token"}), 403
-        return f(*args, **kwargs)
-    return decorated
 
 # Register account, admin operations and student billing routes after core helpers exist.
 _student_order_helpers, _student_subscription_billing = register_account_billing_routes(
