@@ -78,3 +78,45 @@ def test_foundation_route_registry_preserves_registration_order_and_blueprint(mo
     assert "kokoro_control" in app.blueprints
     assert any(rule.rule == "/internal/kokoro/jobs/claim" for rule in app.url_map.iter_rules())
     assert len(list(app.url_map.iter_rules())) == 10
+
+
+def test_app_delegates_later_feature_registration_groups_to_the_registry() -> None:
+    expected_calls = (
+        "_student_order_helpers, _student_subscription_billing = register_account_billing_routes(",
+        "register_public_and_academic_routes(",
+        "register_notification_feature_routes(",
+        "register_opportunity_feature_routes(",
+        "register_chat_feature_routes(",
+        "register_control_feature_routes(",
+        "register_runtime_feature_routes(",
+    )
+    positions = [APP_SOURCE.index(item) for item in expected_calls]
+    assert positions == sorted(positions)
+    for function_name in (
+        "register_account_billing_routes",
+        "register_public_and_academic_routes",
+        "register_notification_feature_routes",
+        "register_opportunity_feature_routes",
+        "register_chat_feature_routes",
+        "register_control_feature_routes",
+        "register_runtime_feature_routes",
+    ):
+        assert f"def {function_name}(" in REGISTRY_SOURCE
+
+    for direct_call in (
+        "register_email_otp(app",
+        "register_admin_operations(app",
+        "register_infrastructure_monitoring(",
+        "register_public_shell_routes(app",
+        "register_academic_catalog_routes(app",
+        "register_notification_routes(app",
+        "register_opportunity_runtime(app",
+        "register_e2ee_chat_routes(app",
+        "register_control_routes(",
+        "register_offline_activity_routes(app",
+        "register_e2ee_production_hardening(app",
+        "register_shop_routes(app",
+        "register_study_retrieval_routes(app",
+        "register_request_observability(app",
+    ):
+        assert direct_call not in APP_SOURCE
