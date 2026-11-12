@@ -14,7 +14,7 @@ REGISTRY_SOURCE = (ROOT / "route_registry.py").read_text(encoding="utf-8")
 
 
 def test_app_delegates_foundation_route_registration_in_original_order() -> None:
-    assert "from route_registry import register_foundation_routes" in APP_SOURCE
+    assert "from route_registry import (" in APP_SOURCE
     assert "register_foundation_routes(app, db)" in APP_SOURCE
     assert "register_usage_billing(app, db)" not in APP_SOURCE
     assert "register_ai_economics(app, db)" not in APP_SOURCE
@@ -52,7 +52,6 @@ def test_foundation_route_registry_preserves_registration_order_and_blueprint(mo
 
     for module_name, function_name, label in module_specs:
         module = ModuleType(module_name)
-
         if module_name == "kokoro_control":
             def register(target_app, label=label):
                 order.append(label)
@@ -69,7 +68,6 @@ def test_foundation_route_registry_preserves_registration_order_and_blueprint(mo
                     view_func=lambda: "",
                 )
             setattr(module, function_name, register)
-
         monkeypatch.setitem(sys.modules, module_name, module)
 
     register_foundation_routes(app, object())
@@ -80,27 +78,33 @@ def test_foundation_route_registry_preserves_registration_order_and_blueprint(mo
     assert len(list(app.url_map.iter_rules())) == 10
 
 
-def test_app_delegates_later_feature_registration_groups_to_the_registry() -> None:
+def test_app_delegates_all_later_route_registrations_to_registry_in_order() -> None:
     expected_calls = (
         "_student_order_helpers, _student_subscription_billing = register_account_billing_routes(",
-        "register_public_and_academic_routes(",
+        "register_public_shell_route(",
+        "register_academic_catalog_route(",
         "register_notification_feature_routes(",
         "register_opportunity_feature_routes(",
         "register_chat_feature_routes(",
         "register_control_feature_routes(",
+        "register_admin_reconciled_routes(app)",
         "register_runtime_feature_routes(",
     )
     positions = [APP_SOURCE.index(item) for item in expected_calls]
     assert positions == sorted(positions)
-    for function_name in (
+
+    expected_functions = (
         "register_account_billing_routes",
-        "register_public_and_academic_routes",
+        "register_public_shell_route",
+        "register_academic_catalog_route",
         "register_notification_feature_routes",
         "register_opportunity_feature_routes",
         "register_chat_feature_routes",
         "register_control_feature_routes",
+        "register_admin_reconciled_routes",
         "register_runtime_feature_routes",
-    ):
+    )
+    for function_name in expected_functions:
         assert f"def {function_name}(" in REGISTRY_SOURCE
 
     for direct_call in (
