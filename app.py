@@ -12,12 +12,10 @@ import fitz  # PyMuPDF - used to rasterize + watermark view-only Q&A pages
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from functools import wraps
-from flask import Flask, request, jsonify, session, Response, send_from_directory, redirect
+from flask import request, jsonify, session, Response, send_from_directory, redirect
 from sqlalchemy import func, or_, and_, text
 from threading import Lock, Thread
 from sqlalchemy.exc import IntegrityError
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 from request_observability import scrub_sentry_event
@@ -27,7 +25,8 @@ import podcast_audio
 import kokoro_control
 from pywebpush import webpush, WebPushException
 from urllib.parse import urlencode
-from extensions import db, init_extensions
+from extensions import db
+from app_factory import create_app
 from auth_otp import register_email_otp
 
 load_dotenv()
@@ -45,11 +44,7 @@ if sentry_dsn:
         before_send=scrub_sentry_event,  # Never forward request payloads or direct user identifiers
     )
 
-app = Flask(__name__, static_folder="frontend/dist", static_url_path="")
-limiter = Limiter(get_remote_address, app=app, default_limits=["200 per hour"], storage_uri=os.environ.get("REDIS_URL", "memory://"), storage_options={"socket_connect_timeout": 2, "socket_timeout": 2} if os.environ.get("REDIS_URL") else {})
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY")
+app, limiter = create_app()
 
 
 @app.after_request
@@ -62,12 +57,6 @@ def add_security_headers(response):
         response.headers["Cache-Control"] = "no-store, private, max-age=0"
         response.headers["Pragma"] = "no-cache"
     return response
-app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
-app.config["SESSION_COOKIE_SECURE"] = True
-app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-
-init_extensions(app)
 kokoro_control.register(app)
 from usage_billing import register_usage_billing
 register_usage_billing(app, db)
