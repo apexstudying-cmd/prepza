@@ -25,6 +25,23 @@ export default function AppShell({ screen, setScreen, unreadChats, exploreAttent
 
   return (
     <>
+      <style>{`
+        html[data-prepza-theme="dark"] [style*="color: rgb(11, 20, 55)"],
+        html[data-prepza-theme="dark"] [style*="color:#0B1437"],
+        html[data-prepza-theme="dark"] [style*="color: #0B1437"] { color: #F5F6FA !important; }
+        html[data-prepza-theme="dark"] [style*="color: rgb(55, 65, 81)"],
+        html[data-prepza-theme="dark"] [style*="color:#374151"],
+        html[data-prepza-theme="dark"] [style*="color: #374151"] { color: #D7DBE5 !important; }
+        html[data-prepza-theme="dark"] [style*="color: rgb(107, 114, 128)"],
+        html[data-prepza-theme="dark"] [style*="color:#6B7280"],
+        html[data-prepza-theme="dark"] [style*="color: #6B7280"] { color: #9AA3B8 !important; }
+        html[data-prepza-theme="dark"] [style*="color: rgb(156, 163, 175)"],
+        html[data-prepza-theme="dark"] [style*="color:#9CA3AF"],
+        html[data-prepza-theme="dark"] [style*="color: #9CA3AF"] { color: #AEB7C7 !important; }
+        html[data-prepza-theme="dark"] [style*="color: rgb(17, 24, 39)"],
+        html[data-prepza-theme="dark"] [style*="color:#111827"],
+        html[data-prepza-theme="dark"] [style*="color: #111827"] { color: #F5F6FA !important; }
+      `}</style>
 
       <div style={{ width: '100%', height: '100dvh', background: isDark ? N.navy : (currentThemeMode === 'dark' ? DARK_THEME.pageBg : N.bg), display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
