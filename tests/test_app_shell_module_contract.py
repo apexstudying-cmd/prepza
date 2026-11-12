@@ -27,9 +27,8 @@ def test_app_shell_owns_theme_chrome_and_global_overlays() -> None:
         "CallExperience",
         "BottomNav",
         "noNav.includes(screen)",
-        "screen === 'splash'",
-        "screen === 'login'",
-        "screen === 'processing'",
+        "['splash', 'login', 'processing'].includes(screen)",
+        "['splash', 'login', 'forgot-password', 'signup', 'check-email', 'complete-profile', 'reset-password', 'verify-confirm'].includes(screen)",
     ):
         assert contract in SHELL_TEXT
 
