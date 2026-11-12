@@ -8765,8 +8765,8 @@ def admin_list_audit_logs():
 register_control_feature_routes(app, db, SystemSetting, User, Document, DocumentContent, GeneratedMaterial, log_admin_action, limiter)
 
 # Register the reconciled admin runtime after all base models/helpers exist.
-# These modules were deliberately kept separate from app.py during the admin
-# recovery work sregister_admin_reconciled_routes(app)
+# The feature modules attach their routes to the existing Flask app.
+register_admin_reconciled_routes(app)
 import opportunity_expiry_runtime  # noqa: F401 - decorator registration
 from opportunity_expiry_runtime import _sweep_expired_opportunities_safe
 
