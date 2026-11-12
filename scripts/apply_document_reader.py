@@ -25,6 +25,14 @@ app = rep(app, heartbeat_old, heartbeat_new, 'heartbeat binding')
 APP.write_text(app)
 
 front = FRONT.read_text()
+reader_module = Path('frontend/src/screens/study/DocumentReaderScreen.tsx')
+if reader_module.exists():
+    import_line = "import DocumentStudyHubScreen from './screens/study/DocumentStudyHubScreen'"
+    module_import = "import DocumentReaderScreen from './screens/study/DocumentReaderScreen'"
+    if module_import not in front:
+        front = rep(front, import_line, import_line + "\\n" + module_import, 'reader module import')
+    if "case 'document-reader': return <DocumentReaderScreen" not in front:
+        front = rep(front, "      case 'document-reader': return <DocumentStudyScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />", "      case 'document-reader': return <DocumentReaderScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />", 'reader route')
 marker = '// ─── AI TUTOR ─────────────────────────────────────────────────────────────────\n'
 component = r'''// ─── NATIVE DOCUMENT READER ──────────────────────────────────────────────────
 function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
@@ -76,7 +84,8 @@ function DocumentReaderScreen({ setScreen, activeDocumentId }: { setScreen: (s: 
 }
 
 '''
-if 'function DocumentReaderScreen(' not in front: front = rep(front, marker, component + marker, 'reader component')
-front = rep(front, "      case 'document-reader': return <DocumentStudyScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />", "      case 'document-reader': return <DocumentReaderScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />", 'reader route')
+if not reader_module.exists():
+    if 'function DocumentReaderScreen(' not in front: front = rep(front, marker, component + marker, 'reader component')
+    front = rep(front, "      case 'document-reader': return <DocumentStudyScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />", "      case 'document-reader': return <DocumentReaderScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />", 'reader route')
 FRONT.write_text(front)
 print('document reader patch applied')
