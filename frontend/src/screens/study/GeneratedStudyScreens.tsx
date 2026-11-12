@@ -8,7 +8,7 @@ import { FlashcardsGenerationScreen, SummaryGenerationScreen } from '../../gener
 import { PracticeQuestionsGenerationScreen, MindMapGenerationScreen } from '../../generation/StudyGenerationScreensClean'
 
 type StudyMaterialScreenTarget = 'document-study'
-type GeneratedMaterialRoute = 'document-study' | 'share-sheet'
+type GeneratedMaterialRoute = 'document-study'
 type GeneratedMaterialScreenProps = { setScreen: (screen: GeneratedMaterialRoute) => void; activeDocumentId: number | null }
 
 type CompletionResponse = { xp_awarded: number; newly_unlocked_achievements: string[] }
