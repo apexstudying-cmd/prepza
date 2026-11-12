@@ -22,6 +22,8 @@ import { FlashcardsStudyScreen, QuizStudyScreen, SummaryStudyScreen, MindMapStud
 import AchievementsScreen from './screens/gamification/AchievementsScreen'
 import AITutorScreen from './screens/tutor/AITutorScreen'
 import type { Achievement, AchievementsResponse } from './types/achievements'
+import type { Screen } from './types/navigation'
+import { useAppNavigation } from './navigation/useAppNavigation'
 import { XPProgressScreen } from './screens/gamification/ProgressScreens'
 // Screen implementations are feature-owned; this file keeps the existing route dispatch and shared app state.
 import TimeStudiedScreen from './screens/gamification/TimeStudiedScreen'
@@ -471,19 +473,6 @@ function GenerationLoading({ label }: { label: string }) {
 
 // ─── Icon helpers ─────────────────────────────────────────────────────────────
 // ─── Types ────────────────────────────────────────────────────────────────────
-type Screen =
-  | 'splash' | 'login' | 'forgot-password' | 'signup' | 'check-email' | 'complete-profile' | 'reset-password' | 'verify-confirm'
-  | 'home' | 'explore' | 'create-modal' | 'chats' | 'profile'
-  | 'upload-share-choice'
-  | 'chat-detail' | 'upload' | 'processing' | 'doc-ready' | 'document-study'
-  | 'ai-tutor' | 'flashcards' | 'quiz' | 'podcast-player' | 'podcast-library' | 'summary'
-  | 'opportunities' | 'opportunity-detail' | 'share-opp-form' | 'edu-upload-form'
-  | 'settings' | 'student-profile' | 'share-sheet'
-  | 'notifications' | 'library' | 'mind-map' | 'new-chat' | 'chat-options' | 'edit-profile'
-  | 'subscription' | 'payment' | 'payment-success' | 'payment-failure' | 'payment-history'
-  | 'publish-library' | 'xp-progress' | 'study-streak' | 'achievements' | 'study-materials' | 'document-reader'
-  | 'followers' | 'following' | 'follow-requests' | 'group-detail' | 'group-create' | 'ambassador' | 'time-studied' | 'study-activity'
-
 // ─── Kenyan Data ──────────────────────────────────────────────────────────────
 // USER mock constant removed (Chunk 14 sweep) - screens now derive display name/initials from GET /me
 
@@ -2616,73 +2605,20 @@ function PaymentHistoryScreen({ setScreen }: { setScreen: (s: Screen) => void })
 
 // ─── ADMIN PLATFORM ───────────────────────────────────────────────────────────
 
-function readStoredNavigationState(): {
-  stack: Screen[]
-  activeConversationId: number | null
-  activeDocumentId: number | null
-  activeGroupId: number | null
-  activeProfileUserId: number | null
-  activeOpportunityId: number | null
-} | null {
-  try {
-    const raw = sessionStorage.getItem('prepza-navigation-state')
-    if (!raw) return null
-    const value = JSON.parse(raw)
-    if (!value || !Array.isArray(value.stack) || value.stack.length === 0) return null
-    return value
-  } catch {
-    return null
-  }
-}
-
 export default function App() {
-  const storedNavigation = readStoredNavigationState()
-  // Real navigation history instead of a flat useState<Screen>. setScreen(x)
-  // still means "go to x" everywhere - none of the ~100 existing call sites
-  // need to change, since it now pushes onto a stack instead of replacing a
-  // single value. Every push also does a browser history.pushState, and a
-  // popstate listener (fired by Android's hardware back button, browser
-  // back, or a PWA back gesture) pops our stack to match. That's what stops
-  // Android's back button from falling through and closing the app - there's
-  // now always a real history entry for it to consume. Swapping the many
-  // hardcoded "back" buttons (onClick={() => setScreen('specific-screen')})
-  // over to a real goBack() so they return to the ACTUAL previous screen is
-  // a separate, screen-by-screen pass - not done here.
-  const [screenStack, setScreenStack] = useState<Screen[]>(() => storedNavigation?.stack || ['splash'])
-  const screen = screenStack[screenStack.length - 1]
-
-  const setScreen = (s: Screen) => {
-    if (s === screen) return
-    setScreenStack(stack => {
-      const ancestorIndex = stack.lastIndexOf(s)
-      return ancestorIndex >= 0 ? stack.slice(0, ancestorIndex + 1) : [...stack, s]
-    })
-    window.history.pushState({ prepzaNav: true }, '')
-  }
-
-  const resetNavigation = (target: Screen) => {
-    if (target === 'login') resetChatRealtime()
-    setScreenStack([target])
-    window.history.replaceState({ prepzaNav: true }, window.location.pathname)
-  }
+  const { storedNavigation, screenStack, screen, setScreen, resetNavigation } = useAppNavigation({
+    onResetToLogin: resetChatRealtime,
+  })
 
   useEffect(() => {
-    window.history.replaceState({ prepzaNav: true }, window.location.pathname)
-    const onPopState = () => {
-      setScreenStack(stack => (stack.length > 1 ? stack.slice(0, -1) : stack))
-    }
     const onPageShow = (event: PageTransitionEvent) => {
       if (!event.persisted) return
       api('/me').catch((e) => {
         if (e instanceof ApiError && e.status === 401) resetNavigation('login')
       })
     }
-    window.addEventListener('popstate', onPopState)
     window.addEventListener('pageshow', onPageShow)
-    return () => {
-      window.removeEventListener('popstate', onPopState)
-      window.removeEventListener('pageshow', onPageShow)
-    }
+    return () => window.removeEventListener('pageshow', onPageShow)
   }, [])
 
   useEffect(() => {
