@@ -79,3 +79,10 @@ def test_e2ee_lifecycle_validator_targets_the_extracted_route_module() -> None:
     validator = (ROOT / "scripts/validate_e2ee_lifecycle.py").read_text(encoding="utf-8")
     assert "frontend/src/screens/chat/ChatDetailScreen.tsx" in validator
     assert '"function ChatDetailScreen"' not in validator
+
+
+def test_app_shell_offline_status_transform_does_not_depend_on_chat_imports() -> None:
+    transform = (ROOT / "tools/apply_offline_status_ui.py").read_text(encoding="utf-8")
+    assert "import CallExperience from './crypto/CallExperience'" in transform
+    assert "joinRealtimeChat" not in transform
+    assert "Offline status is app-shell UI, not chat behavior" in transform
