@@ -20,7 +20,7 @@ type ChatDetailScreenProps = {
 }
 
 const CHAT_DRAFTS: Record<number, string> = {}
-function getChatDraft(conversationId: number | null): string {
+export function getChatDraft(conversationId: number | null): string {
   if (conversationId == null) return ''
   if (Object.prototype.hasOwnProperty.call(CHAT_DRAFTS, conversationId)) return CHAT_DRAFTS[conversationId]
   try {
