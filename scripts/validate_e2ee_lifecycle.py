@@ -79,7 +79,7 @@ def main() -> None:
     require(
         "frontend/src/App.tsx",
         "import ChatDetailScreen, { getChatDraft } from './screens/chat/ChatDetailScreen'",
-        "case 'chat-detail':", "setScreen('chat-options')",
+        "case 'chat-detail':",
     )
     require(
         "frontend/src/screens/chat/ChatDetailScreen.tsx",
