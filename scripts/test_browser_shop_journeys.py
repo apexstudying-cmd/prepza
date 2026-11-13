@@ -202,6 +202,18 @@ def main() -> int:
                         f"received status={chat_payload.get('status')!r}"
                     )
                 conversation_id = int(chat_payload["id"])
+                buyer_page.wait_for_function(
+                    """expected => {
+                      const state = JSON.parse(sessionStorage.getItem('prepza-navigation-state') || '{}')
+                      return Number(state.activeConversationId) === Number(expected)
+                    }""",
+                    arg=conversation_id,
+                    timeout=10000,
+                )
+                navigation_state = buyer_page.evaluate(
+                    "JSON.parse(sessionStorage.getItem('prepza-navigation-state') || '{}')"
+                )
+                print(f"ChatDetail navigation state after contact: {navigation_state!r}")
                 buyer_page.get_by_role("button", name="Chat options").wait_for(
                     state="visible", timeout=15000
                 )
