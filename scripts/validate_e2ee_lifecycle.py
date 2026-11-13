@@ -77,8 +77,16 @@ def main() -> None:
         "fetchUserPublicKey", "`/keys/${userId}`", "Peer encryption key is not available yet",
     )
     require(
-        "frontend/src/App.tsx", "function ChatDetailScreen",
-        "/chats/${conversationId}/messages", "/chats/${conversationId}/attachments", "setScreen('chat-options')",
+        "frontend/src/App.tsx",
+        "import ChatDetailScreen, { getChatDraft } from './screens/chat/ChatDetailScreen'",
+        "case 'chat-detail':", "setScreen('chat-options')",
+    )
+    require(
+        "frontend/src/screens/chat/ChatDetailScreen.tsx",
+        "export default function ChatDetailScreen",
+        "/chats/${conversationId}/messages", "/chats/${conversationId}/attachments",
+        "joinRealtimeChat(conversationId)", "leaveRealtimeChat(conversationId)",
+        "setScreen('chat-options')",
     )
     print("E2EE lifecycle regression checks passed.")
 
