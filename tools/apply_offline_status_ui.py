@@ -11,16 +11,16 @@ def transform(text: str) -> str:
 
     is_app_shell = 'export default function AppShell' in text
     if is_app_shell:
-        import_line = "import OfflineStatusBanner from '../offline/OfflineStatusBanner'\\n"
-        anchor = "import CallExperience from '../crypto/CallExperience'\\n"
+        import_line = "import OfflineStatusBanner from '../offline/OfflineStatusBanner'\n"
+        anchor = "import CallExperience from '../crypto/CallExperience'\n"
         root_child_anchor = "        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>"
 
-        banner = '        <OfflineStatusBanner />\\n'
+        banner = '        <OfflineStatusBanner />\n'
     else:
-        import_line = "import OfflineStatusBanner from './offline/OfflineStatusBanner'\\n"
-        anchor = "import CallExperience from './crypto/CallExperience'\\n"
+        import_line = "import OfflineStatusBanner from './offline/OfflineStatusBanner'\n"
+        anchor = "import CallExperience from './crypto/CallExperience'\n"
         root_child_anchor = "      {/* Content */}"
-        banner = '      <OfflineStatusBanner />\\n'
+        banner = '      <OfflineStatusBanner />\n'
 
     if import_line not in text:
         if anchor not in text:

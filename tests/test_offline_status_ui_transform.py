@@ -66,7 +66,7 @@ export default function AppShell() {
 """
     transformed = MODULE.transform(shell)
     assert "import OfflineStatusBanner from '../offline/OfflineStatusBanner'" in transformed
-    assert "        <OfflineStatusBanner />\\n        <div style={{ flex: 1" in transformed
+    assert "        <OfflineStatusBanner />\n        <div style={{ flex: 1" in transformed
     assert MODULE.transform(transformed) == transformed
 
 
@@ -80,4 +80,4 @@ export default function App() {
 """
     transformed = MODULE.transform(app)
     assert "import OfflineStatusBanner from './offline/OfflineStatusBanner'" in transformed
-    assert "      <OfflineStatusBanner />\\n      {/* Content */}" in transformed
+    assert "      <OfflineStatusBanner />\n      {/* Content */}" in transformed
