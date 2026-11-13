@@ -50,3 +50,34 @@ def test_offline_status_transform_fails_clearly_without_app_shell_anchor() -> No
         assert "app-shell call overlay import anchor missing" in str(error)
     else:
         raise AssertionError("expected a missing app-shell import anchor to fail")
+
+
+def test_offline_status_banner_transform_targets_the_extracted_app_shell() -> None:
+    shell = """import CallExperience from '../crypto/CallExperience'
+export default function AppShell() {
+  return (
+    <div style={{ width: '100%', height: '100dvh' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {children}
+        </div>
+    </div>
+  )
+}
+"""
+    transformed = MODULE.transform(shell)
+    assert "import OfflineStatusBanner from '../offline/OfflineStatusBanner'" in transformed
+    assert "        <OfflineStatusBanner />\\n        <div style={{ flex: 1" in transformed
+    assert MODULE.transform(transformed) == transformed
+
+
+def test_offline_status_transform_keeps_legacy_app_shell_compatibility() -> None:
+    app = """import CallExperience from './crypto/CallExperience'
+export default function App() {
+  return <div style={{ width: '100%', height: '100dvh' }}>
+      {/* Content */}
+  </div>
+}
+"""
+    transformed = MODULE.transform(app)
+    assert "import OfflineStatusBanner from './offline/OfflineStatusBanner'" in transformed
+    assert "      <OfflineStatusBanner />\\n      {/* Content */}" in transformed

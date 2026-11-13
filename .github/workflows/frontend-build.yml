@@ -8,6 +8,8 @@ on:
     paths:
       - 'frontend/**'
       - 'tests/test_shop_ux_contract.py'
+      - 'tests/test_offline_status_ui_transform.py'
+      - 'tools/apply_offline_status_ui.py'
       - 'tests/test_admin_section_view_boundaries.py'
       - 'tests/test_admin_domain_panels_boundaries.py'
       - 'tests/test_podcast_player_module_contract.py'
