@@ -183,6 +183,13 @@ def main() -> int:
                     full_page=True,
                     animations="disabled",
                 )
+                chat_detail_reads = []
+                buyer_page.on(
+                    "response",
+                    lambda response: chat_detail_reads.append((response.url, response.status))
+                    if response.request.method == "GET" and "/chats/" in response.url
+                    else None,
+                )
                 with buyer_page.expect_response(
                     lambda response: response.request.method == "POST"
                     and response.url.rstrip("/").endswith("/chats"),
@@ -202,18 +209,26 @@ def main() -> int:
                         f"received status={chat_payload.get('status')!r}"
                     )
                 conversation_id = int(chat_payload["id"])
-                buyer_page.wait_for_function(
-                    """expected => {
-                      const state = JSON.parse(sessionStorage.getItem('prepza-navigation-state') || '{}')
-                      return Number(state.activeConversationId) === Number(expected)
-                    }""",
-                    arg=conversation_id,
-                    timeout=10000,
+                detail_status = None
+                for _ in range(40):
+                    detail_status = next(
+                        (
+                            status
+                            for url, status in chat_detail_reads
+                            if url.split("?")[0].rstrip("/").endswith(
+                                f"/chats/{conversation_id}"
+                            )
+                        ),
+                        None,
+                    )
+                    if detail_status is not None:
+                        break
+                    buyer_page.wait_for_timeout(250)
+                assert detail_status == 200, (
+                    "ChatDetail did not load the created conversation; "
+                    f"conversation_id={conversation_id}, responses={chat_detail_reads!r}"
                 )
-                navigation_state = buyer_page.evaluate(
-                    "JSON.parse(sessionStorage.getItem('prepza-navigation-state') || '{}')"
-                )
-                print(f"ChatDetail navigation state after contact: {navigation_state!r}")
+                print(f"PASS: ChatDetail loaded conversation {conversation_id}")
                 buyer_page.get_by_role("button", name="Chat options").wait_for(
                     state="visible", timeout=15000
                 )
