@@ -68,7 +68,7 @@ def test_home_and_explore_prebuild_steps_validate_feature_owned_sources() -> Non
     assert "HOME = ROOT / 'frontend' / 'src' / 'screens' / 'home' / 'HomeScreen.tsx'" in home_patch
     assert 'HOME = ROOT / "frontend" / "src" / "screens" / "home" / "HomeScreen.tsx"' in shop_patch
     assert 'BOTTOM_NAV = ROOT / "frontend" / "src" / "navigation" / "BottomNav.tsx"' in shop_patch
-    assert "frontend/src/screens/explore/ExploreScreen.tsx" in explore_patch
+    assert "EXPLORE = ROOT / 'frontend' / 'src' / 'screens' / 'explore' / 'ExploreScreen.tsx'" in explore_patch
     assert "function HomeScreen" not in home_patch
     assert "function ExploreSurface" not in explore_patch
 

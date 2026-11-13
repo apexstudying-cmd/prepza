@@ -2,71 +2,48 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-APP = ROOT / 'frontend' / 'src' / 'App.tsx'
+NAVIGATION = ROOT / 'frontend' / 'src' / 'navigation' / 'useAppNavigation.ts'
 READER_MODULE = ROOT / 'frontend' / 'src' / 'screens' / 'study' / 'DocumentReaderScreen.tsx'
 
-text = APP.read_text(encoding='utf-8')
+text = NAVIGATION.read_text(encoding='utf-8')
 original = text
 
-# Navigation persistence must use localStorage in the final generated source.
+# The extracted navigation hook owns the history stack. Persist its stack in
+# localStorage so a standalone PWA can resume after its process is closed.
 text = text.replace("sessionStorage.getItem('prepza-navigation-state')", "localStorage.getItem('prepza-navigation-state')")
 text = text.replace("sessionStorage.setItem('prepza-navigation-state'", "localStorage.setItem('prepza-navigation-state'")
 
-new_set_screen = """  const setScreen = (s: Screen) => {
-    if (s === screen) return
-    if (screenStack.length > 1 && screenStack[screenStack.length - 2] === s) {
+new_set_screen = """  const setScreen = (target: Screen) => {
+    if (target === screen) return
+    if (screenStack.length > 1 && screenStack[screenStack.length - 2] === target) {
       window.history.back()
       return
     }
-    const nextStack = [...screenStack, s]
+    const ancestorIndex = screenStack.lastIndexOf(target)
+    const nextStack = ancestorIndex >= 0 ? screenStack.slice(0, ancestorIndex + 1) : [...screenStack, target]
     setScreenStack(nextStack)
     try {
       const raw = localStorage.getItem('prepza-navigation-state')
       const existing = raw ? JSON.parse(raw) : {}
-      localStorage.setItem('prepza-navigation-state', JSON.stringify({
-        ...existing,
-        stack: nextStack,
-        activeConversationId,
-        activeDocumentId,
-        activeGroupId,
-        activeProfileUserId,
-        activeOpportunityId,
-      }))
+      localStorage.setItem('prepza-navigation-state', JSON.stringify({ ...existing, stack: nextStack }))
     } catch { /* navigation persistence is optional */ }
     window.history.pushState({ prepzaNav: true }, '')
   }
 """
 
-start = text.find("  const setScreen = (s: Screen) => {")
+start = text.find("  const setScreen = (target: Screen) => {")
 if start >= 0:
-    end_marker = "\n  }\n\n  useEffect(() => {"
+    end_marker = "\n  }\n\n  const resetNavigation"
     end = text.find(end_marker, start)
     if end < 0:
-        raise SystemExit('Instant navigation patch: transformed setScreen boundary not found')
-    text = text[:start] + new_set_screen.rstrip('\n') + text[end + len("\n  }"):]
+        raise SystemExit('Instant navigation patch: extracted setScreen boundary not found')
+    if new_set_screen.strip() not in text:
+        text = text[:start] + new_set_screen.rstrip('\n') + text[end + len("\n  }"):]
 elif new_set_screen.strip() not in text:
-    raise SystemExit('Instant navigation patch: setScreen function not found')
+    raise SystemExit('Instant navigation patch: extracted setScreen function not found')
 
-# Study Hub must render its actual shell immediately. Never replace it with a
-# full-screen loading interstitial while the document request is in flight.
-text = text.replace(
-    "  const docLoading = activeDocumentId != null && doc === null && !docLoadError\n  if (docLoading) return <SkeletonDocument />\n",
-    "",
-    1,
-)
-text = text.replace("{doc?.title || 'Loading…'}", "{doc?.title || 'Study Hub'}", 1)
-text = text.replace(
-    "{doc ? 'Preview not available for this file type - use the tools above to study it.' : 'Fetching your document…'}",
-    "{doc ? 'Preview not available for this file type - use the tools above to study it.' : ''}",
-    1,
-)
-
-# Remove the reader loading gate inside the reader component only. The earlier
-# navigation-polish transform may express this gate as GenerationLoading rather
-# than SkeletonDocument, so matching one exact generated line is not safe.
-reader_path = READER_MODULE if READER_MODULE.exists() else APP
-reader_text = READER_MODULE.read_text(encoding='utf-8') if READER_MODULE.exists() else text
-reader_start = reader_text.find('function DocumentReaderScreen(')
+reader_text = READER_MODULE.read_text(encoding='utf-8')
+reader_start = reader_text.find('export default function DocumentReaderScreen(')
 if reader_start < 0:
     raise SystemExit('Instant navigation patch: DocumentReaderScreen not found')
 reader_end = reader_text.find('\n// ───', reader_start)
@@ -86,31 +63,24 @@ reader = re.sub(
     reader,
     count=1,
 )
-
-# The source guard must narrow `doc` for TypeScript as well as suppress the
-# transient unavailable screen. While the request is pending, keep only the
-# reader surface mounted; once it completes, a genuine missing document gets
-# the real error state.
 reader = re.sub(
     r"if \(!doc \|\| activeDocumentId == null\) return <GenerationError error=\"Document unavailable\.\" />",
     "if (!doc) {\n    if (loading) return <div style={{ flex: 1, minHeight: 0, background: '#111827' }} />\n    return <GenerationError error=\"Document unavailable.\" />\n  }\n  if (activeDocumentId == null) return <GenerationError error=\"No document selected.\" />",
     reader,
     count=1,
 )
-reader = reader.replace('Opening your document…', 'Loading…')
-reader = reader.replace('Opening your document...', 'Loading…')
-reader = reader.replace('Opening your document', 'Loading…')
+reader = reader.replace('Opening your document…', 'Loading reader…')
+reader = reader.replace('Opening your document...', 'Loading reader…')
+reader = reader.replace('Opening your document', 'Loading reader')
 if reader != reader_before:
     reader_text = reader_text[:reader_start] + reader + reader_text[reader_end:]
-if not READER_MODULE.exists():
-    text = reader_text
 
-if text == original and (not READER_MODULE.exists() or reader_text == READER_MODULE.read_text(encoding='utf-8')):
+if text == original and reader_text == READER_MODULE.read_text(encoding='utf-8'):
     print('Instant navigation and reader transient-state fixes already applied.')
     raise SystemExit(0)
 
 if text != original:
-    APP.write_text(text, encoding='utf-8')
-if READER_MODULE.exists() and reader_text != READER_MODULE.read_text(encoding='utf-8'):
+    NAVIGATION.write_text(text, encoding='utf-8')
+if reader_text != READER_MODULE.read_text(encoding='utf-8'):
     READER_MODULE.write_text(reader_text, encoding='utf-8')
 print('Instant navigation and reader transient-state fixes applied and verified.')

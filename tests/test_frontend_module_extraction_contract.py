@@ -237,7 +237,7 @@ def test_last_study_resume_transform_targets_extracted_home_and_my_study_modules
     )
     app = """import HomeScreen from './screens/home/HomeScreen'
 import StudyMaterialsScreen from './screens/study/StudyMaterialsScreen'
-function DocumentStudyScreen({ activeDocumentId }: { activeDocumentId: number | null }) {
+function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
   useEffect(() => { return () => {} }, [])
 }
 export default function App() {

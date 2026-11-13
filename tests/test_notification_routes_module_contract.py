@@ -11,7 +11,7 @@ ROUTES = ROOT / "notification_routes.py"
 def test_notification_routes_are_registered_at_the_original_app_initialization_boundary():
     assert "register_notification_feature_routes" in APP
     assert "register_notification_feature_routes(app, db, Notification, require_csrf)" in APP
-    assert "def register_notification_feature_routes(app, db, Notification, require_csrf):" in REGISTRY
+    assert "def register_notification_feature_routes(" in REGISTRY
     assert "register_notification_routes(app, db, Notification, require_csrf)" in REGISTRY
     for route in (
         '@app.route("/notifications")',

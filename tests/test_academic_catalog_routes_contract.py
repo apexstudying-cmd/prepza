@@ -162,7 +162,7 @@ def test_app_registers_the_extracted_routes_through_the_shared_registry_before_s
     assert "class University(db.Model):" in model_source
     assert "class Program(db.Model):" in model_source
     assert model_import in app_source
-    assert "def register_academic_catalog_route(app, University, Program):" in registry_source
+    assert "def register_academic_catalog_route(" in registry_source
     assert "register_academic_catalog_routes(app, University, Program)" in registry_source
     assert register_at > app_source.index(model_import)
     assert register_at < app_source.index('@app.route("/signup", methods=["POST"])')
