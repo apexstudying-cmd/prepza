@@ -184,13 +184,14 @@ def main() -> int:
                     animations="disabled",
                 )
                 buyer_page.get_by_role("button", name="Message in Prepza").click(timeout=10000)
-                buyer_page.wait_for_function(
-                    """() => document.body.innerText.includes('Message request created') ||
-                      Boolean(document.querySelector('textarea[placeholder*="message" i]')) ||
-                      Boolean(document.querySelector('input[placeholder*="message" i]'))""",
-                    timeout=15000,
-                )
-                print("PASS: buyer browsed details, saved, reported and contacted the seller")
+                composer = buyer_page.get_by_placeholder("Message", exact=True)
+                composer.wait_for(state="visible", timeout=15000)
+                composer.fill("QA in-app seller message")
+                composer.press("Enter")
+                buyer_page.get_by_text(
+                    "QA in-app seller message", exact=True
+                ).wait_for(timeout=10000)
+                print("PASS: buyer browsed details, saved, reported, opened ChatDetail and sent an in-app message")
                 buyer_context.close()
 
                 # Seller: inspect owned listings and exercise pause/sold controls.
