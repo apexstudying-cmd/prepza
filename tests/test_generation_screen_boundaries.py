@@ -53,7 +53,7 @@ def test_prebuild_wraps_generation_owners_without_changing_route_keys() -> None:
 
 
 def test_generation_navigation_and_offline_artifact_replay_contracts_remain_owned() -> None:
-    assert "setScreen('share-sheet')" in GENERATION
+    assert "setScreen('document-study')" in GENERATION
     assert "setScreen('document-study')" in STUDY_GENERATION
     assert "prepza-open-material" in GENERATION
     assert "prepza-open-material" in STUDY_GENERATION
