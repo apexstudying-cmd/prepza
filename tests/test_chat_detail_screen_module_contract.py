@@ -15,7 +15,7 @@ def _detail_source() -> str:
 
 def test_active_chat_detail_route_is_owned_by_the_chat_feature_module() -> None:
     detail = _detail_source()
-    assert "import ChatDetailScreen from './screens/chat/ChatDetailScreen'" in APP
+    assert "import ChatDetailScreen, { getChatDraft } from './screens/chat/ChatDetailScreen'" in APP
     assert "case 'chat-detail':       return <ChatDetailScreen" in APP
     assert "function ChatDetailScreen(" not in APP
     assert "export default function ChatDetailScreen(" in detail
@@ -73,7 +73,7 @@ def test_chat_detail_keeps_drafts_cache_reactions_and_voice_lifecycle() -> None:
         "stream.getTracks().forEach(track => track.stop())",
         "voiceTimerRef.current",
         "setRecordingSeconds(0)",
-        "MAX_CHAT_ATTACHMENT_SIZE_BYTES",
+        "maxAttachmentSizeBytes",
     ):
         assert contract in detail, f"missing ChatDetail state/media contract: {contract}"
 
@@ -87,8 +87,11 @@ def test_chat_detail_preserves_navigation_and_app_shell_loading_components() -> 
         "DelayedScreenSkeleton",
         "SkeletonChatDetail",
         "getFileExtension",
-        "ALLOWED_UPLOAD_EXTENSIONS",
+        "allowedUploadExtensions",
     ):
         assert contract in detail, f"missing ChatDetail composition contract: {contract}"
     assert "DelayedScreenSkeleton={DelayedScreenSkeleton}" in APP
     assert "SkeletonChatDetail={SkeletonChatDetail}" in APP
+    assert "allowedUploadExtensions={ALLOWED_UPLOAD_EXTENSIONS}" in APP
+    assert "maxAttachmentSizeBytes={MAX_CHAT_ATTACHMENT_SIZE_BYTES}" in APP
+    assert "getChatDraft } from './screens/chat/ChatDetailScreen'" in APP
