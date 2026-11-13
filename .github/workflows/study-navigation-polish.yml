@@ -26,10 +26,14 @@ jobs:
       - name: Verify deterministic patch
         run: |
           cp frontend/src/App.tsx /tmp/App.after
+          cp frontend/src/navigation/useAppNavigation.ts /tmp/useAppNavigation.after
+          cp frontend/src/screens/onboarding/SplashScreen.tsx /tmp/SplashScreen.after
           cp frontend/src/screens/study/DocumentStudyHubScreen.tsx /tmp/DocumentStudyHubScreen.after
           cp frontend/src/screens/study/DocumentReaderScreen.tsx /tmp/DocumentReaderScreen.after
           python3 scripts/apply_study_navigation_polish.py
           cmp frontend/src/App.tsx /tmp/App.after
+          cmp frontend/src/navigation/useAppNavigation.ts /tmp/useAppNavigation.after
+          cmp frontend/src/screens/onboarding/SplashScreen.tsx /tmp/SplashScreen.after
           cmp frontend/src/screens/study/DocumentStudyHubScreen.tsx /tmp/DocumentStudyHubScreen.after
           cmp frontend/src/screens/study/DocumentReaderScreen.tsx /tmp/DocumentReaderScreen.after
 
@@ -38,7 +42,10 @@ jobs:
           grep -F "function MindMapScreen" frontend/src/App.tsx
           grep -F "const [document, setDocument] = useState<DocumentDetail | null>(() => activeDocumentId != null ? DOC_CACHE[activeDocumentId] ?? null : null)" frontend/src/screens/study/DocumentStudyHubScreen.tsx
           grep -F "const [doc, setDoc] = useState<DocumentDetail | null>(() => activeDocumentId != null ? DOC_CACHE[activeDocumentId] ?? null : null)" frontend/src/screens/study/DocumentReaderScreen.tsx
-          grep -F "window.history.back()" frontend/src/App.tsx
+          grep -F "window.history.back()" frontend/src/navigation/useAppNavigation.ts
+          grep -F "localStorage.getItem('prepza-navigation-state')" frontend/src/navigation/useAppNavigation.ts
+          grep -F "localStorage.setItem('prepza-navigation-state'" frontend/src/App.tsx
+          grep -F "const stored = storedNavigation" frontend/src/App.tsx
           grep -F "resumeOffline={() => {" frontend/src/App.tsx
           grep -F "resumeOffline()" frontend/src/screens/onboarding/SplashScreen.tsx
           grep -F "prepza: study-navigation-polish-v2" frontend/src/App.tsx
@@ -82,6 +89,6 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add frontend/src/App.tsx frontend/src/screens/study/DocumentReaderScreen.tsx scripts/apply_study_navigation_polish.py .github/workflows/study-navigation-polish.yml
+          git add frontend/src/App.tsx frontend/src/navigation/useAppNavigation.ts frontend/src/screens/onboarding/SplashScreen.tsx frontend/src/screens/study/DocumentReaderScreen.tsx frontend/src/screens/study/DocumentStudyHubScreen.tsx scripts/apply_study_navigation_polish.py tools/run_study_navigation_polish.py .github/workflows/study-navigation-polish.yml
           git commit -m 'fix: polish study navigation and mind map dark mode'
           git push origin HEAD:fix/study-navigation-polish
