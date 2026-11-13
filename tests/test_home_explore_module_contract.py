@@ -12,6 +12,9 @@ def test_home_route_and_student_workspace_are_module_owned() -> None:
     assert "import HomeScreen from './screens/home/HomeScreen'" in APP
     assert "case 'home':" in APP
     assert "return <HomeScreen" in APP
+    assert "import ShopScreen from './shop/ShopScreen'" in APP
+    assert "case 'shop':" in APP
+    assert "return <ShopScreen setScreen={setScreen} setActiveConversationId={setActiveConversationId} />" in APP
     assert "function HomeScreen(" not in APP
     assert "const HOME_CACHE" not in APP
     assert "export default function HomeScreen(" in HOME

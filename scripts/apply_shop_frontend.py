@@ -8,10 +8,10 @@ BOTTOM_NAV = ROOT / "frontend" / "src" / "navigation" / "BottomNav.tsx"
 
 
 def replace_once(text: str, old: str, new: str, label: str) -> str:
-    if old in text:
-        return text.replace(old, new, 1)
     if new in text:
         return text
+    if old in text:
+        return text.replace(old, new, 1)
     raise SystemExit(f"Shop frontend patch anchor missing: {label}")
 
 
@@ -21,8 +21,8 @@ def main() -> None:
     bottom_nav = BOTTOM_NAV.read_text(encoding="utf-8")
     text = replace_once(
         text,
-        "import CompleteProfileScreen from './screens/onboarding/CompleteProfileScreen'\\n",
-        "import CompleteProfileScreen from './screens/onboarding/CompleteProfileScreen'\\nimport ShopScreen from './shop/ShopScreen'\\n",
+        "import CompleteProfileScreen from './screens/onboarding/CompleteProfileScreen'" + chr(10),
+        "import CompleteProfileScreen from './screens/onboarding/CompleteProfileScreen'" + chr(10) + "import ShopScreen from './shop/ShopScreen'" + chr(10),
         "ShopScreen import",
     )
     screen_types = (ROOT / 'frontend' / 'src' / 'types' / 'navigation.ts').read_text(encoding='utf-8')

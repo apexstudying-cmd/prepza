@@ -6,6 +6,7 @@ import { N, useTheme } from './theme/theme'
 import { Ic } from './ui/icons'
 import Avi from './ui/Avi'
 import CompleteProfileScreen from './screens/onboarding/CompleteProfileScreen'
+import ShopScreen from './shop/ShopScreen'
 import SplashScreen from './screens/onboarding/SplashScreen'
 import LoginScreen from './screens/auth/LoginScreen'
 import { ForgotPasswordScreen, ResetPasswordScreen, VerifyConfirmScreen, SignupScreen, CheckEmailScreen } from './screens/auth/AuthScreens'
@@ -2946,6 +2947,7 @@ export default function App() {
       case 'reset-password':    return <ResetPasswordScreen setScreen={setScreen} />
       case 'verify-confirm':    return <VerifyConfirmScreen setScreen={setScreen} />
       case 'home':              return <HomeScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} setActiveOpportunityId={setActiveOpportunityId} SponsoredOpportunityCard={SponsoredOpportunityCard} loadingView={<SkeletonHome />} />
+      case 'shop':              return <ShopScreen setScreen={setScreen} setActiveConversationId={setActiveConversationId} />
       case 'explore':           return <ExploreScreen setScreen={setScreen} setActiveGroupId={setActiveGroupId} setActiveDocumentId={setActiveDocumentId} setActiveOpportunityId={setActiveOpportunityId} setActiveProfileUserId={setActiveProfileUserId} setActiveProfileName={setActiveProfileName} SponsoredOpportunityCard={SponsoredOpportunityCard} loadingView={<DelayedScreenSkeleton><SkeletonExplore /></DelayedScreenSkeleton>} ErrorView={GenerationError} />
       case 'create-modal':      return <CreateModal setScreen={setScreen} />
       case 'share-opp-form':    return <ShareOppForm setScreen={setScreen} />

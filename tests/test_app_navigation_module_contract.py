@@ -78,3 +78,13 @@ def test_extracted_splash_resume_uses_the_hook_snapshot_not_a_private_helper() -
     assert "const stored = storedNavigation" in source
     assert "const stored = readStoredNavigationState()" in source
     assert "NAVIGATION_MODULE.read_text(encoding='utf-8')" in source
+
+
+
+def test_back_navigation_guard_targets_the_extracted_navigation_module() -> None:
+    guard = (ROOT / "tools" / "apply_back_navigation_guard.py").read_text(encoding="utf-8")
+    assert 'NAVIGATION = ROOT / "frontend/src/navigation/useAppNavigation.ts"' in guard
+    assert 'NAVIGATION.read_text(encoding="utf-8")' in guard
+    assert "onBackButtonCapture" in guard
+    assert "authenticated navigation floor" in guard
+    assert "document.addEventListener('click', onBackButtonCapture, true)" in guard

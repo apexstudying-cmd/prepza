@@ -98,14 +98,16 @@ def main() -> None:
         home = home.replace(old_featured, new_featured, 1)
     elif "const lastStudyId = readLastStudyDocumentId()" not in home:
         raise SystemExit("Home featured document owner anchor missing")
-    home = home.replace(
-        "setActiveDocumentId(featuredDoc.id); setScreen('document-study')",
-        "rememberLastStudyDocument(featuredDoc.id); setActiveDocumentId(featuredDoc.id); setScreen('document-study')",
-    )
-    home = home.replace(
-        "setActiveDocumentId(d.id); setScreen('document-study')",
-        "rememberLastStudyDocument(d.id); setActiveDocumentId(d.id); setScreen('document-study')",
-    )
+    if "rememberLastStudyDocument(featuredDoc.id)" not in home:
+        home = home.replace(
+            "setActiveDocumentId(featuredDoc.id); setScreen('document-study')",
+            "rememberLastStudyDocument(featuredDoc.id); setActiveDocumentId(featuredDoc.id); setScreen('document-study')",
+        )
+    if "rememberLastStudyDocument(d.id)" not in home:
+        home = home.replace(
+            "setActiveDocumentId(d.id); setScreen('document-study')",
+            "rememberLastStudyDocument(d.id); setActiveDocumentId(d.id); setScreen('document-study')",
+        )
     if "rememberLastStudyDocument(featuredDoc.id)" not in home or "rememberLastStudyDocument(d.id)" not in home:
         raise SystemExit("Home document-open handlers are not wired to last-study storage")
 
