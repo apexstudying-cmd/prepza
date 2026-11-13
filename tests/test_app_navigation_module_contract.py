@@ -26,12 +26,16 @@ def test_navigation_hook_preserves_stack_and_browser_history_semantics() -> None
     assert "window.history.replaceState({ prepzaNav: true }, window.location.pathname)" in NAV
     assert "window.addEventListener('popstate', onPopState)" in NAV
     assert "stack.length > 1 ? stack.slice(0, -1) : stack" in NAV
-    assert "onResetToLogin?.()" in NAV
+    reset_start = NAV.index("const resetNavigation")
+    reset_end = NAV.index("\n  useEffect", reset_start)
+    reset_navigation = NAV[reset_start:reset_end]
+    assert "if (target === 'login') onResetToLogin?.()" in reset_navigation
 
 
 def test_app_shell_uses_navigation_hook_and_keeps_session_revalidation() -> None:
     assert "import { useAppNavigation } from './navigation/useAppNavigation'" in APP
-    assert "useAppNavigation({ onResetToLogin: resetChatRealtime })" in APP
+    assert "useAppNavigation({" in APP
+    assert "onResetToLogin: resetChatRealtime" in APP
     assert "function readStoredNavigationState" not in APP
     assert "const [screenStack, setScreenStack]" not in APP
     assert "window.addEventListener('pageshow', onPageShow)" in APP

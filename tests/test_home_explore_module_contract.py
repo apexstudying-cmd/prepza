@@ -74,7 +74,3 @@ def test_morio_identity_contract_reads_the_home_feature_module() -> None:
     identity_test = (ROOT / "scripts/test_morio_identity_contract.py").read_text(encoding="utf-8")
     assert 'source("frontend/src/screens/home/HomeScreen.tsx")' in identity_test
     assert 'app.index("function HomeScreen(")' not in identity_test
-
-
-def test_explore_imports_opportunity_presentation_helpers_from_shared_module() -> None:
-    assert "import { fmtDeadline, oppTypeMeta } from '../../lib/opportunities'" in EXPLORE

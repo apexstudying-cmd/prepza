@@ -1,7 +1,6 @@
 import { useEffect, useState, type ComponentType, type ReactNode } from 'react'
 
 import { api } from '../../lib/appApi'
-import { fmtDeadline, oppTypeMeta } from '../../lib/opportunities'
 import { N, useTheme } from '../../theme/theme'
 import { Ic } from '../../ui/icons'
 import Avi from '../../ui/Avi'
