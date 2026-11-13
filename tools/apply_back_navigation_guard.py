@@ -1,11 +1,11 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-APP = ROOT / "frontend/src/App.tsx"
+NAVIGATION = ROOT / "frontend/src/navigation/useAppNavigation.ts"
 
 
 def replace_once(old: str, new: str) -> None:
-    text = APP.read_text(encoding="utf-8")
+    text = NAVIGATION.read_text(encoding="utf-8")
     if new in text:
         return
     if old not in text:
@@ -13,7 +13,7 @@ def replace_once(old: str, new: str) -> None:
             print("Back-navigation guard is already source-owned; skipping legacy transform.")
             return
         raise SystemExit("Back-navigation patch anchor missing")
-    APP.write_text(text.replace(old, new, 1), encoding="utf-8")
+    NAVIGATION.write_text(text.replace(old, new, 1), encoding="utf-8")
 
 
 old_effect = '''  useEffect(() => {\n    window.history.replaceState({ prepzaNav: true }, '')\n    const onPopState = () => {\n      setScreenStack(stack => (stack.length > 1 ? stack.slice(0, -1) : stack))\n    }\n    window.addEventListener('popstate', onPopState)\n    return () => window.removeEventListener('popstate', onPopState)\n  }, [])'''

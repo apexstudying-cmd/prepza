@@ -70,7 +70,7 @@ def test_home_and_explore_prebuild_steps_validate_feature_owned_sources() -> Non
     assert 'BOTTOM_NAV = ROOT / "frontend" / "src" / "navigation" / "BottomNav.tsx"' in shop_patch
     assert "EXPLORE = ROOT / 'frontend' / 'src' / 'screens' / 'explore' / 'ExploreScreen.tsx'" in explore_patch
     assert "function HomeScreen" not in home_patch
-    assert "function ExploreSurface" not in explore_patch
+    assert "if 'function ExploreSurface(' in app or 'export default function ExploreScreen(' not in explore" in explore_patch
 
 
 def test_morio_identity_contract_reads_the_home_feature_module() -> None:

@@ -42,7 +42,8 @@ if start >= 0:
 elif new_set_screen.strip() not in text:
     raise SystemExit('Instant navigation patch: extracted setScreen function not found')
 
-reader_text = READER_MODULE.read_text(encoding='utf-8')
+reader_path = READER_MODULE
+reader_text = reader_path.read_text(encoding='utf-8')
 reader_start = reader_text.find('export default function DocumentReaderScreen(')
 if reader_start < 0:
     raise SystemExit('Instant navigation patch: DocumentReaderScreen not found')

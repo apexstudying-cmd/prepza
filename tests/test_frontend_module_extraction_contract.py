@@ -250,8 +250,8 @@ export default function App() {
 """
     home = """import { api } from '../../lib/appApi'
 const activeDocs = documents.filter(d => !docsLoading)
-const featuredDoc = activeDocs[0]
-const restDocs = activeDocs.slice(1)
+  const featuredDoc = activeDocs[0]
+  const restDocs = activeDocs.slice(1)
 <div onClick={() => { setActiveDocumentId(featuredDoc.id); setScreen('document-study') }} />
 <button onClick={e => { e.stopPropagation(); setActiveDocumentId(featuredDoc.id); setScreen('document-study') }} />
 <div onClick={() => { setActiveDocumentId(d.id); setScreen('document-study') }} />
