@@ -284,6 +284,17 @@ def main() -> int:
                 admin_page = admin_context.new_page()
                 login(admin_page, admin)
                 open_shop(admin_page)
+                admin_control = admin_page.get_by_role("button", name="Open Admin Platform")
+                admin_control.wait_for(state="visible", timeout=10000)
+                primary_nav = admin_page.get_by_role("navigation", name="Primary navigation")
+                control_box = admin_control.bounding_box()
+                nav_box = primary_nav.bounding_box()
+                assert control_box is not None and nav_box is not None
+                control_bottom = control_box["y"] + control_box["height"]
+                assert control_bottom <= nav_box["y"] - 8, (
+                    "Admin Platform floating control overlaps primary navigation: "
+                    f"control_bottom={control_bottom}, nav_top={nav_box['y']}"
+                )
                 admin_page.get_by_role("button", name="Moderation").click(timeout=5000)
                 admin_page.get_by_text(PENDING_APPROVE_TITLE, exact=True).wait_for(timeout=10000)
                 admin_page.screenshot(
