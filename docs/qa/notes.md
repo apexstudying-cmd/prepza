@@ -2393,3 +2393,15 @@ The same workflow also performs a PostgreSQL 17 custom-format dump and restores 
 A separate QA trace failure exposed a documentation/ownership issue: the manifest still searched for `StudyTimeLog`, `StudyStreak` and `DocumentPageText` inside `app.py` after those models moved to feature-owned modules. The fix changes the manifest paths to `study_models.py` and `document_models.py`. The trace then passed all 11 features with zero failures/warnings on runtime code head `0f393bd011d6047915cbb12a15acac87f21102c0`; the current main commit `09bd1d82910d83797da2303a9f42afbd1739fbfe` is a documentation-only reconciliation. The lesson is that a successful extraction must update code ownership maps and QA trace manifests together; otherwise a stale trace can report a false red even when the model is correctly registered elsewhere.
 
 The current full browser run is on `0f393`, while migration/restore passed on its parent `732760`. Even though the intervening commit is only a QA manifest path correction and does not alter runtime code, the final release gate still requires a combined one-SHA rehearsal. Do not silently combine adjacent-SHA evidence into a PASS for `clean_full_regression`.
+
+## 2026-11-13 — architecture candidate contract reconciliation
+
+The candidate initially exposed four verification mismatches:
+- Two subscription tests raised `NameError: SUBSCRIPTION_PLAN_DURATIONS_MONTHS` after app-factory extraction. Restored the existing `PAYSTACK_BASE_URL` and Plus/Pro one-month duration map in the Flask compatibility module and added a source contract. This preserves billing behavior.
+- The generation contract expected the old inline `setRaw(res.mind_map)`. The active owner normalizes through `mapRoot(payload)` and stores with `setMap(root)`; the assertion now follows the extracted owner and still checks the canonical `mind_map` key.
+- The navigation contract searched `App.tsx` for inline `BottomNav`; it now reads `frontend/src/navigation/BottomNav.tsx` and asserts the same five labels, accessible names, current-page state and 44px targets.
+- ChatDetail contracts now assert app-shell wiring for profile callbacks, allowed upload extensions, maximum attachment size, loading composition and chats/options/profile transitions.
+
+These are source-owner/compatibility corrections, not weakened tests. On exact candidate `0c29859b3eb3b7acf3593e97eb9d08c57ac96acc`, Frontend Build passed 170 source/transform tests plus 5 offline Library tests; Backend Shared Extension passed 45 tests; Release Browser passed 99 PostgreSQL tests and responsive, Shop, B2B, offline and generated-artifact journeys.
+
+PR #80 was closed after confirming the same active ChatDetail boundary is integrated in #79. Current sizes are `App.tsx` 3,051 lines and `app.py` 8,791 lines. AdminSection, DocumentReader, ChatDetail, Home/Explore, generation and app-shell/navigation boundaries are module-owned, but remaining active inline screens and backend route groups mean architecture work is not complete.

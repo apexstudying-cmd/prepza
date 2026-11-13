@@ -1,14 +1,14 @@
 {
   "version": 1,
-  "last_verified_date": "2026-11-12",
-  "last_verified_commit": "0f393bd011d6047915cbb12a15acac87f21102c0",
+  "last_verified_date": "2026-11-13",
+  "last_verified_commit": "0c29859b3eb3b7acf3593e97eb9d08c57ac96acc",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
     {
       "id": "database_alembic",
       "status": "PASS",
-      "evidence": "PASS on exact runtime code head 0f393bd011d6047915cbb12a15acac87f21102c0 (current main 09bd1d is documentation-only): Release Browser and Cross-System Regression run 43171345717 built the production image, started disposable PostgreSQL/Redis, applied Alembic migrations and the controlled SQL migration ledger, started the app, and completed the release job."
+      "evidence": "PASS on PR #79 candidate 0c29859b3eb3b7acf3593e97eb9d08c57ac96acc: Release Browser run 43389767185 built the production image, started disposable PostgreSQL 17/Redis, applied Alembic migrations and exercised the controlled SQL migration ledger. This is fresh-database evidence, not populated-database backup/restore."
     },
     {
       "id": "authentication_session_csrf",
@@ -68,7 +68,7 @@
     {
       "id": "mobile_responsive_visual",
       "status": "PASS",
-      "evidence": "PASS for responsive browser checks on exact runtime code head 0f393bd011d6047915cbb12a15acac87f21102c0 (current main 09bd1d is documentation-only) in Release Browser run 43171345717 at 360x800, 390x844 and 768x1024; screenshot artifact 13922288483 was uploaded. The separate 16-image visual review artifact 13856133486 from the same unchanged Shop UI code was reviewed for Home/Shop hierarchy, listing editor, buyer Saved/reported, seller and admin moderation states. This is not a student usability study."
+      "evidence": "PASS on exact candidate 0c29859b3eb3b7acf3593e97eb9d08c57ac96acc, Release Browser 43389767185: phone-small 360x800, phone-standard 390x844 and tablet-portrait 768x1024 passed. Screenshot artifact 14020905208 (16 images) reviewed for Shop browse, listing form, stale-cache, buyer/seller/admin states. Navy/gold shell, white cards, filter hierarchy, KES 100 disclosure and five-item bottom navigation are coherent. Follow-up: existing global Admin Platform floating control overlaps bottom navigation in the admin screenshot."
     },
     {
       "id": "storage_backup_restore",
@@ -78,12 +78,12 @@
     {
       "id": "cross_system_journeys",
       "status": "PASS",
-      "evidence": "PASS on exact runtime code head 0f393bd011d6047915cbb12a15acac87f21102c0 (current main 09bd1d is documentation-only): Release Browser run 43171345717 passed production-image build, disposable PostgreSQL/Redis and migrations, phone-small (360x800), phone-standard (390x844) and tablet-portrait (768x1024), Shop buyer/seller/admin journeys, B2B browser-to-ledger regression, 99 disposable PostgreSQL QA tests (3536 warnings), online/offline Study Hub and generated-artifact browser journeys, screenshot upload and disposable-service cleanup."
+      "evidence": "PASS on exact candidate 0c29859b3eb3b7acf3593e97eb9d08c57ac96acc, Release Browser 43389767185: Shop buyer/seller/admin journeys, B2B browser-to-ledger, 99 disposable PostgreSQL QA tests, offline Study Hub lifecycle and generated-artifact replay all passed; disposable services cleaned up."
     },
     {
       "id": "ci_release_workflows",
       "status": "PASS",
-      "evidence": "PASS on exact current main 09bd1d82910d83797da2303a9f42afbd1739fbfe: all 12 push-triggered workflows on this documentation-only commit succeeded — Chat UX Contract 43173708535, Kokoro GPU worker validation 43173708718, Admin Route Contract 43173708444, Screen Loading Audit 43173708504, Student Frontend Contract 43173708517, E2EE Security Regression 43173708689, Realtime Runtime Regression 43173708677, Student contract validation 43173708647, AI economics validation 43173708744, B2B contract validation 43173708639, Release QA Trace 43173708552 and Frontend Build 43173708807. The latest full runtime Release Browser remains run 43171345717 on parent code head 0f393; no release-browser run was triggered by this documentation-only commit."
+      "evidence": "PASS on PR #79 candidate 0c29859b3eb3b7acf3593e97eb9d08c57ac96acc: all 16 triggered PR workflows succeeded. StudyHub Library Flow 43389767147 was SKIPPED by path condition and is not counted as pass. Current main 72f08742832dbc8a4b09469fadb72eea06ddf6da has 11/11 observed push-triggered workflows successful."
     },
     {
       "id": "existing_database_migration",
@@ -93,17 +93,17 @@
     {
       "id": "clean_full_regression",
       "status": "NOT_TESTED",
-      "evidence": "NOT_TESTED: the full Release Browser/Cross-System Regression passed on runtime code head 0f393 (current main 09bd1d is documentation-only)bd011d6047915cbb12a15acac87f21102c0 (run 43171345717), while the populated-database migration and backup/restore rehearsal passed on preceding commit 73276018786bdaf007396c514fa0f358145138a7 (run 43171200015). The only intervening commit changes qa/release_manifest.json to point at the extracted study_models.py/document_models.py files, not application runtime code, but the final release rule still requires a single exact SHA for the combined candidate. Provider, staging retrieval/citation, external monitoring and B2B viewability dispositions also remain open."
+      "evidence": "NOT_TESTED on one exact SHA: Release Browser passed on candidate 0c29859b3eb3b7acf3593e97eb9d08c57ac96acc (43389767185), while populated-database upgrade and PostgreSQL 17 backup/restore passed on older commit 73276018786bdaf007396c514fa0f358145138a7 (43171200015). Backup workflow paths omit application Python modules, so it did not run for this candidate. Extend path filter and rerun before marking PASS."
     },
     {
       "id": "b2b_monetization_integrity",
       "status": "IN_PROGRESS",
-      "evidence": "IN_PROGRESS: latest runtime Release Browser run 43171345717 passed the browser-to-ledger regression. The backend still cannot independently prove the client's 50%-visible/1.5-second viewport dwell condition; do not claim tamper-proof viewability or CPA/conversion billing."
+      "evidence": "IN_PROGRESS: B2B browser-to-ledger regression passed in Release Browser 43389767185 on candidate 0c29859b3eb3b7acf3593e97eb9d08c57ac96acc. Server cannot independently prove the client's 50%-visible/1.5-second dwell condition; do not claim tamper-proof viewability until resolved or formally accepted."
     },
     {
       "id": "shop_marketplace",
       "status": "IN_PROGRESS",
-      "evidence": "IN_PROGRESS: exact latest runtime Release Browser run 43171345717 passed buyer browse/detail/save/Saved/report/contact, seller My Listings/pause/sold/KES 100 per item per manually renewed 30-day period disclosure, and admin approve/reject/report/payment-review journeys; the disposable PostgreSQL suite passed. The user-approved classifieds model remains unchanged: no free first listing, automatic recurring fee, buyer checkout/cart/escrow or seller payout. The current-head populated-database migration and backup/restore rehearsals passed in run 43171200015 on 73276018786bdaf007396c514fa0f358145138a7. Real Paystack sandbox checkout/webhooks and R2 object/header operations remain NOT_TESTED pending safe staging evidence."
+      "evidence": "IN_PROGRESS: Release Browser 43389767185 passed buyer browse/detail/save/report/direct-contact, seller listing/My Listings/pause/sold and KES 100 per-item manual 30-day posting-fee, plus admin payment-verification/moderation. Screenshots reviewed in artifact 14020905208. Real Paystack sandbox checkout/webhooks and R2 object/header operations remain NOT_TESTED pending safe staging credentials."
     },
     {
       "id": "payment_recovery_idempotency",
@@ -123,7 +123,7 @@
     {
       "id": "documentation_audit",
       "status": "IN_PROGRESS",
-      "evidence": "IN_PROGRESS: evidence and architecture/Shop QA records were reconciled in documentation commit 09bd1d82910d83797da2303a9f42afbd1739fbfe on current main. Runtime evidence remains tied to code head 0f393bd011d6047915cbb12a15acac87f21102c0. Provider-side evidence, staging page-text/observability migrations and backfill, human citation review, external Sentry/request-ID delivery, B2B viewability disposition, and one-SHA final regression remain open."
+      "evidence": "IN_PROGRESS: 13 November reconciliation updates architecture, NEXT_STEPS, actualtest, notes, Shop architecture, Shop user flow, Shop UX and release_status with candidate 0c29859b3eb3b7acf3593e97eb9d08c57ac96acc and exact run/artifact evidence. Broader audit remains open."
     },
     {
       "id": "vps_or_render_deployment",
@@ -133,7 +133,7 @@
     {
       "id": "browser_study_hub_offline_content_artifacts",
       "status": "PASS",
-      "evidence": "GitHub Actions Release Browser and Cross-System Regression run 40502457332 passed on runtime commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015 (2026-10-27). Production app image built; disposable PostgreSQL/Redis started; Alembic migrations applied; online/offline and generated-artifact browser journeys passed; responsive screenshots uploaded; disposable services and volumes removed."
+      "evidence": "PASS on exact candidate 0c29859b3eb3b7acf3593e97eb9d08c57ac96acc, Release Browser 43389767185: offline lifecycle, multi-document Summary/Flashcards/Practice Questions/Mind Map replay, cached podcast descriptor plus actual audio Blob, no offline generation POSTs and reload persistence all passed."
     },
     {
       "id": "admin_study_time_visibility",
@@ -162,16 +162,18 @@
     }
   ],
   "next_actions": [
-    "Home/PWA verification: rebuild exact current main locally, verify splash/login/home brand marks use /icon-192.png, confirm the five Home Quick Actions remain Upload, My Study, Library, Morio and Shop, and inspect the installed PWA/offline shell. Source/CI checks alone are not a browser/PWA sign-off.",
-    "Staging access needed: apply migrations/20261029_document_page_text.sql and migrations/20261029_request_observability.sql through the controlled backup/restore process, then verify schema and rollback/restore evidence. Do not run these against production without explicit deployment approval.",
-    "Staging access needed: run the read-only document inventory first, then review and execute scripts/backfill_document_page_text.py --apply only for native-text PDFs; scanned/mixed PDFs must remain skipped and must not trigger paid OCR.",
-    "Course-material review needed: approve representative course PDFs and expected source pages so retrieval Recall@5/Precision@5/MRR@5 and generated-answer citation faithfulness can be reviewed by a human. Keep billable embeddings disabled until a cost/quality decision is approved.",
-    "Provider access needed: verify Paystack sandbox checkout/webhooks, SES delivery, bounded real OpenAI generation, R2 object operations/headers, and configured audio/GPU provider health using safe staging credentials. Never use live payments or start billable GPU workloads without explicit approval.",
-    "Monitoring access needed: configure/verify Sentry project notification rules or other external paging and browser/provider X-Request-ID propagation; do not claim outbound paging is active until delivery is observed.",
-    "B2B review needed: document and approve the remaining client-observed 50%-visible/1.5-second viewability limitation or implement an independently verifiable server-side measurement before making tamper-proof viewability/CPA claims.",
-    "After staging/provider gates are verified or explicitly dispositioned, rerun populated-database migration, backup/restore, and the full release-candidate regression on one exact SHA. Keep clean_full_regression NOT_TESTED and release BLOCKED until that combined evidence exists.",
-    "Architecture follow-up: map and update every source-transform dependency before extracting the active DocumentReaderScreen from App.tsx; preserve offline Blob, reading-progress, heartbeat and page-render contracts. Then map ChatDetailScreen's E2EE/realtime dependencies. Do not extract unmounted legacy declarations merely to reduce line counts."
+    "Run populated-database migration and PostgreSQL 17 backup/restore on the same candidate SHA. The current .github/workflows/postgres-backup-restore.yml path filters omit application Python modules; add **/*.py to push and pull_request filters, then verify both jobs on one SHA.",
+    "Architecture follow-up: PR #79 candidate extracts active DocumentReader, ChatDetail, Home, Explore, generated-study and app-shell/navigation boundaries; AdminSection/controller/views were already on main. Continue with active Upload, UploadShareChoice, Processing, PublishLibrary and Subscription/Payment screens plus remaining app.py route groups. Do not extract unmounted legacy ChatsScreen or DocumentStudyScreen merely to reduce line counts.",
+    "Fix the existing global Admin Platform floating-control position so it no longer overlaps the five-item bottom navigation; do not add navigation items or change the five-tab contract.",
+    "Home/PWA verification: rebuild exact candidate locally, confirm splash/login/home brand marks use /icon-192.png, five Home Quick Actions remain Upload, My Study, Library, Morio and Shop, and inspect installed PWA/offline shell.",
+    "Staging access needed: apply migrations/20261029_document_page_text.sql and migrations/20261029_request_observability.sql through controlled backup/restore, then verify schema and rollback/restore evidence.",
+    "Staging access needed: run read-only document inventory first, then native-text-only page-text backfill. Scanned/mixed PDFs must remain skipped; no paid OCR.",
+    "Course-material review needed: approve representative PDFs and expected source pages for human retrieval/citation review. Keep billable embeddings disabled until cost/quality approval.",
+    "Provider access needed: verify Paystack sandbox checkout/webhooks, SES delivery, bounded real OpenAI generation, R2 object operations/headers and configured audio/GPU provider health using safe staging credentials. No live payments or billable GPU without explicit approval.",
+    "Monitoring access needed: verify Sentry notification delivery and browser/provider X-Request-ID propagation; do not claim outbound paging until delivery is observed.",
+    "B2B review needed: document/approve client-observed 50%-visible/1.5-second dwell limitation or implement independently verifiable server-side measurement before tamper-proof viewability/CPA claims.",
+    "Keep release BLOCKED; do not deploy or alter production data until explicit authorization and all release gates are closed."
   ],
-  "current_main_commit": "09bd1d82910d83797da2303a9f42afbd1739fbfe",
-  "verification_note": "Updated 2026-11-12. Current main is documentation-only commit 09bd1d82910d83797da2303a9f42afbd1739fbfe; the latest verified runtime code head is 0f393bd011d6047915cbb12a15acac87f21102c0. No open PRs were found. All 12 observed push-triggered workflows on current main 09bd1d succeeded, including Frontend Build 43173708807 and Release QA Trace 43173708552; the latest full Release Browser run 43171345717 passed on runtime code head 0f393. Frontend Build 43171345722 on 0f393 passed 124 source/transform tests, 5 offline Library tests, audits, TypeScript, service-worker validation and production Vite build. Release Browser 43171345717 passed production image, disposable PostgreSQL/Redis, Alembic/controlled SQL ledger, phone/tablet, Shop buyer/seller/admin, B2B browser-to-ledger, 99 PostgreSQL QA tests, online/offline Study Hub and generated-artifact journeys, screenshots and cleanup. Release QA Trace 43171345768 on 0f393 and 43173708552 on 09bd1d passed all 11 feature traces with zero failures/warnings. PostgreSQL Backup Restore Rehearsal 43171200015 on 73276018786bdaf007396c514fa0f358145138a7 passed populated-database migration/data-preservation and PostgreSQL 17 custom-format backup/restore through Alembic head 20261030_shared_study_streak; the restore matched 116 public tables and sentinel data. The migration/restore and full browser runs are on adjacent SHAs, so clean_full_regression remains NOT_TESTED until the combined final candidate is exercised on one SHA. Release remains BLOCKED by provider evidence, page-text migration/backfill and citation review, external Sentry/request-ID delivery, B2B viewability, Home/PWA verification and final one-SHA regression. No production database, live payment, purchase, deployment, new paid service or billable GPU operation was performed."
+  "current_main_commit": "72f08742832dbc8a4b09469fadb72eea06ddf6da",
+  "verification_note": "Updated 2026-11-13. Current main 72f08742832dbc8a4b09469fadb72eea06ddf6da has 11 observed push-triggered workflows, all successful. Sole consolidated architecture PR #79 remains draft at candidate 0c29859b3eb3b7acf3593e97eb9d08c57ac96acc; all 16 triggered PR workflows succeeded. Frontend Build 43389767091 passed 170 source/transform tests, 5 offline Library tests, audits, TypeScript, service-worker validation and production build. Backend Shared Extension 43389767160 passed 45 tests; Academic Catalog 43389767054, Admin Route 43389767044, E2EE Chat 43389767040, E2EE Security 43389767197, Study Navigation 43389767037, Study Hub Runtime 43389767124, Student Frontend 43389767152, Student Contract 43389767043, B2B 43389767048, AI Economics 43389767174, AI Generation 43389767246, Prepza Control API 43389767310 and Kokoro validation 43389767162 succeeded. StudyHub Library Flow 43389767147 was SKIPPED by path condition. Release Browser 43389767185 passed on exact candidate: production image, disposable PostgreSQL/Redis, Alembic/SQL ledger, phone/tablet, Shop buyer/seller/admin, B2B browser-to-ledger, 99 PostgreSQL QA tests, online/offline Study Hub and generated-artifact/podcast replay. Screenshot artifact 14020905208 has 16 images; key Shop views reviewed. PR #80 was closed as an alternate ChatDetail implementation to keep one integration review on #79. Architecture is not complete: App.tsx 3,051 lines, app.py 8,791 lines; active inline screens and backend route groups remain. Populated-database migration/backup-restore 43171200015 passed on older commit 732760, so clean_full_regression remains NOT_TESTED until that rehearsal runs on same candidate SHA. Shop remains IN_PROGRESS because real Paystack/R2 evidence is missing. B2B viewability, page-text/citation, monitoring, Home/PWA and provider checks remain open. No production database, live payment, deployment, new paid service or billable GPU operation was performed."
 }
