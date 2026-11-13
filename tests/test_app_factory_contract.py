@@ -43,6 +43,15 @@ def test_factory_keeps_limiter_default_and_memory_fallback(monkeypatch):
 
 
 
+def test_paystack_configuration_survives_app_factory_extraction():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "app.py").read_text(encoding="utf-8")
+    assert 'PAYSTACK_BASE_URL = "https://api.paystack.co"' in source
+    assert 'SUBSCRIPTION_PLAN_DURATIONS_MONTHS = {"plus": 1, "pro": 1}' in source
+
+
 def test_launch_wiring_audit_follows_the_extracted_factory_and_route_registry():
     from pathlib import Path
 

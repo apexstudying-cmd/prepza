@@ -15,6 +15,10 @@ def test_active_chat_detail_route_is_owned_by_the_chat_feature_module() -> None:
     assert "function ChatDetailScreen(" not in APP
     assert "export default function ChatDetailScreen(" in SCREEN
     assert "conversationId={activeConversationId}" in APP
+    assert "setActiveProfileUserId={setActiveProfileUserId}" in APP
+    assert "setActiveProfileName={setActiveProfileName}" in APP
+    assert "allowedUploadExtensions={ALLOWED_UPLOAD_EXTENSIONS}" in APP
+    assert "maxChatAttachmentSizeBytes={MAX_CHAT_ATTACHMENT_SIZE_BYTES}" in APP
     assert "loadingView={<DelayedScreenSkeleton><SkeletonChatDetail /></DelayedScreenSkeleton>}" in APP
 
 
@@ -70,6 +74,9 @@ def test_chat_detail_preserves_attachment_voice_and_message_interactions() -> No
         "ChatVoiceBubble",
         "setActiveProfileUserId",
         "setActiveProfileName",
+        "setScreen('chats')",
+        "setScreen('chat-options')",
+        "setScreen('student-profile')",
         "loadingView",
     ):
         assert contract in SCREEN, f"missing Chat Detail UI contract: {contract}"

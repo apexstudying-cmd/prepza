@@ -51,6 +51,8 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
 PAYSTACK_SECRET_KEY = os.environ.get("PAYSTACK_SECRET_KEY")
 PAYSTACK_PUBLIC_KEY = os.environ.get("PAYSTACK_PUBLIC_KEY")
+PAYSTACK_BASE_URL = "https://api.paystack.co"
+SUBSCRIPTION_PLAN_DURATIONS_MONTHS = {"plus": 1, "pro": 1}
 if sentry_dsn:
     sentry_sdk.init(
         dsn=sentry_dsn,
