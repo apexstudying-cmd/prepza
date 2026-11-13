@@ -38,4 +38,5 @@ def test_factory_keeps_limiter_default_and_memory_fallback(monkeypatch):
 
     app, limiter = create_app()
 
-    assert app.extensions.get("limiter") is limiter
+    registered = app.extensions.get("limiter")
+    assert registered is limiter or (isinstance(registered, set) and limiter in registered)

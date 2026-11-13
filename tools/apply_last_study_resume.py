@@ -1,108 +1,132 @@
 from pathlib import Path
-import re
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "frontend" / "src" / "App.tsx"
-text = APP.read_text(encoding="utf-8")
+HOME = ROOT / "frontend" / "src" / "screens" / "home" / "HomeScreen.tsx"
+STUDY = ROOT / "frontend" / "src" / "screens" / "study" / "StudyMaterialsScreen.tsx"
+HELPER = ROOT / "frontend" / "src" / "lib" / "lastStudyDocument.ts"
 
-HELPER_MARKER = "// ─── HOME ─────────────────────────────────────────────────────────────────────"
-HELPER = '''const LAST_STUDY_DOCUMENT_KEY = 'prepza-last-study-document-id'
+HELPER_SOURCE = """const LAST_STUDY_DOCUMENT_KEY = 'prepza-last-study-document-id'
 
-function lastStudyStorageKey(): string {
+function storageKey(): string {
   try {
-    const userId = window.localStorage.getItem('prepza-offline-user-id')
-    return userId ? `${LAST_STUDY_DOCUMENT_KEY}:${userId}` : LAST_STUDY_DOCUMENT_KEY
-  } catch { return LAST_STUDY_DOCUMENT_KEY }
+    const userId = typeof window === 'undefined' ? null : window.localStorage.getItem('prepza-offline-user-id')
+    return userId ? LAST_STUDY_DOCUMENT_KEY + ':' + userId : LAST_STUDY_DOCUMENT_KEY
+  } catch {
+    return LAST_STUDY_DOCUMENT_KEY
+  }
 }
 
-function rememberLastStudyDocument(documentId: number | null) {
-  if (documentId == null) return
-  try { window.localStorage.setItem(lastStudyStorageKey(), String(documentId)) } catch { /* storage is optional */ }
+export function rememberLastStudyDocument(documentId: number | null): void {
+  if (documentId == null || !Number.isSafeInteger(documentId) || documentId <= 0) return
+  try {
+    if (typeof window !== 'undefined') window.localStorage.setItem(storageKey(), String(documentId))
+  } catch {
+    // Browser storage is optional; navigation must continue when it is unavailable.
+  }
 }
 
-function readLastStudyDocumentId(): number | null {
+export function readLastStudyDocumentId(): number | null {
   try {
-    const raw = window.localStorage.getItem(lastStudyStorageKey())
-    const id = raw ? Number(raw) : NaN
-    return Number.isInteger(id) && id > 0 ? id : null
+    if (typeof window === 'undefined') return null
+    const raw = window.localStorage.getItem(storageKey())
+    const documentId = raw ? Number(raw) : NaN
+    return Number.isSafeInteger(documentId) && documentId > 0 ? documentId : null
   } catch {
     return null
   }
 }
+"""
 
-'''
-if HELPER not in text:
-    marker = text.find(HELPER_MARKER)
-    if marker < 0:
-        raise SystemExit("Home marker not found")
-    text = text[:marker] + HELPER + text[marker:]
-else:
-    # Upgrade an older unscoped helper in-place so the generated App cannot
-    # retain a cross-account last-study pointer.
-    old_key = "const LAST_STUDY_DOCUMENT_KEY = 'prepza-last-study-document-id'\n\nfunction rememberLastStudyDocument(documentId: number | null) {\n  if (documentId == null) return\n  try { window.localStorage.setItem(LAST_STUDY_DOCUMENT_KEY, String(documentId)) } catch { /* storage is optional */ }\n}\n\nfunction readLastStudyDocumentId(): number | null {\n  try {\n    const raw = window.localStorage.getItem(LAST_STUDY_DOCUMENT_KEY)"
-    if old_key in text:
-        text = text.replace(old_key, HELPER.rstrip().split('\n\n', 1)[0] + "\n\n" + HELPER.split('\n\n', 2)[1] + "\n\nfunction readLastStudyDocumentId(): number | null {\n  try {\n    const raw = window.localStorage.getItem(lastStudyStorageKey())", 1)
 
-old_featured = "  const featuredDoc = activeDocs[0]\n  const restDocs = activeDocs.slice(1)"
-new_featured = '''  const lastStudyId = readLastStudyDocumentId()
-  const lastStudyDoc = lastStudyId == null ? null : activeDocs.find(d => d.id === lastStudyId) || null
-  const featuredDoc = lastStudyDoc || activeDocs[0]
-  const restDocs = featuredDoc ? activeDocs.filter(d => d.id !== featuredDoc.id) : []'''
-if old_featured in text:
-    text = text.replace(old_featured, new_featured, 1)
-elif new_featured not in text:
-    raise SystemExit("Home featured document anchor not found")
+def ensure_import(source: str, anchor: str, import_line: str, label: str) -> str:
+    if import_line in source:
+        return source
+    if anchor not in source:
+        raise SystemExit(f"Last-study resume import anchor missing: {label}")
+    return source.replace(anchor, anchor + import_line, 1)
 
-text = text.replace(
-    "setActiveDocumentId(featuredDoc.id); setScreen('document-study')",
-    "rememberLastStudyDocument(featuredDoc.id); setActiveDocumentId(featuredDoc.id); setScreen('document-study')",
-)
 
-study_hub_marker = "function StudyMaterialsScreen"
-start = text.find(study_hub_marker)
-if start >= 0:
-    end = text.find("\nfunction ", start + len(study_hub_marker))
-    section_end = end if end >= 0 else len(text)
-    study_hub = text[start:section_end]
-    old_open = "const openDocument = (id: number) => { setActiveDocumentId(id); setScreen('document-study') }"
-    new_open = "const openDocument = (id: number) => { rememberLastStudyDocument(id); setActiveDocumentId(id); setScreen('document-study') }"
-    if old_open in study_hub:
-        study_hub = study_hub.replace(old_open, new_open, 1)
-        text = text[:start] + study_hub + text[section_end:]
-elif "import StudyMaterialsScreen from './screens/study/StudyMaterialsScreen'" in text:
-    route_pattern = re.compile(r"(case\s+'study-materials':\s*return\s+<StudyMaterialsScreen\b[^>]*)(\s*/>)")
-    if "onRememberLastStudyDocument={rememberLastStudyDocument}" not in text:
-        text, route_count = route_pattern.subn(
-            r"\1 onRememberLastStudyDocument={rememberLastStudyDocument}\2", text, count=1
+def main() -> None:
+    newline = chr(10)
+    HELPER.parent.mkdir(parents=True, exist_ok=True)
+    if not HELPER.exists():
+        HELPER.write_text(HELPER_SOURCE, encoding="utf-8")
+    else:
+        helper = HELPER.read_text(encoding="utf-8")
+        if "export function readLastStudyDocumentId()" not in helper or "export function rememberLastStudyDocument(" not in helper:
+            raise SystemExit("Last-study resume helper exists but does not expose the expected storage contract")
+
+    app = APP.read_text(encoding="utf-8")
+    home = HOME.read_text(encoding="utf-8")
+    study = STUDY.read_text(encoding="utf-8")
+
+    app = ensure_import(
+        app,
+        "import HomeScreen from './screens/home/HomeScreen'" + newline,
+        "import { rememberLastStudyDocument } from './lib/lastStudyDocument'" + newline,
+        "App",
+    )
+    marker = "function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {"
+    if "rememberLastStudyDocument(activeDocumentId)" not in app:
+        start = app.find(marker)
+        if start < 0:
+            raise SystemExit("DocumentStudyScreen owner missing")
+        effect = app.find("  useEffect(() => {", start)
+        if effect < 0:
+            raise SystemExit("DocumentStudyScreen effect anchor missing")
+        effect_source = (
+            "  useEffect(() => {" + newline
+            + "    rememberLastStudyDocument(activeDocumentId)" + newline
+            + "  }, [activeDocumentId])" + newline + newline
         )
-        if route_count != 1:
-            raise SystemExit("Extracted My Study route not found while wiring last-study callback")
-    module_path = ROOT / "frontend" / "src" / "screens" / "study" / "StudyMaterialsScreen.tsx"
-    if not module_path.exists():
-        raise SystemExit("Extracted My Study module is missing")
-    module_text = module_path.read_text(encoding="utf-8")
-    module_old_open = "const openDocument = (id: number) => { setActiveDocumentId(id); setScreen('document-study') }"
-    module_new_open = "const openDocument = (id: number) => { onRememberLastStudyDocument?.(id); setActiveDocumentId(id); setScreen('document-study') }"
-    if module_old_open in module_text:
-        module_text = module_text.replace(module_old_open, module_new_open, 1)
-        module_path.write_text(module_text, encoding="utf-8")
-    elif "onRememberLastStudyDocument?.(id)" not in module_text:
-        raise SystemExit("Extracted My Study openDocument callback anchor missing")
+        app = app[:effect] + effect_source + app[effect:]
 
-study_marker = "function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {"
-if "rememberLastStudyDocument(activeDocumentId)" not in text:
-    start = text.find(study_marker)
-    if start < 0:
-        raise SystemExit("DocumentStudyScreen marker not found")
-    effect_anchor = text.find("  useEffect(() => {", start)
-    if effect_anchor < 0:
-        raise SystemExit("DocumentStudyScreen effect anchor not found")
-    remember_effect = """  useEffect(() => {\n    rememberLastStudyDocument(activeDocumentId)\n  }, [activeDocumentId])\n\n"""
-    text = text[:effect_anchor] + remember_effect + text[effect_anchor:]
+    home = ensure_import(
+        home,
+        "import { api } from '../../lib/appApi'" + newline,
+        "import { readLastStudyDocumentId, rememberLastStudyDocument } from '../../lib/lastStudyDocument'" + newline,
+        "HomeScreen",
+    )
+    old_featured = "  const featuredDoc = activeDocs[0]" + newline + "  const restDocs = activeDocs.slice(1)"
+    new_featured = (
+        "  const lastStudyId = readLastStudyDocumentId()" + newline
+        + "  const featuredDoc = activeDocs.find(document => document.id === lastStudyId) || activeDocs[0]" + newline
+        + "  const restDocs = featuredDoc ? activeDocs.filter(document => document.id !== featuredDoc.id) : []"
+    )
+    if old_featured in home:
+        home = home.replace(old_featured, new_featured, 1)
+    elif "const lastStudyId = readLastStudyDocumentId()" not in home:
+        raise SystemExit("Home featured document owner anchor missing")
+    home = home.replace(
+        "setActiveDocumentId(featuredDoc.id); setScreen('document-study')",
+        "rememberLastStudyDocument(featuredDoc.id); setActiveDocumentId(featuredDoc.id); setScreen('document-study')",
+    )
+    home = home.replace(
+        "setActiveDocumentId(d.id); setScreen('document-study')",
+        "rememberLastStudyDocument(d.id); setActiveDocumentId(d.id); setScreen('document-study')",
+    )
+    if "rememberLastStudyDocument(featuredDoc.id)" not in home or "rememberLastStudyDocument(d.id)" not in home:
+        raise SystemExit("Home document-open handlers are not wired to last-study storage")
 
-required = ['lastStudyStorageKey()', "localStorage.setItem(lastStudyStorageKey(), String(documentId))", 'localStorage.getItem(lastStudyStorageKey())']
-missing = [x for x in required if x not in text]
-if missing:
-    raise SystemExit('Last-study resume verification failed: ' + ', '.join(missing))
-APP.write_text(text, encoding="utf-8")
-print("Last-study resume transformation applied and account-scoped.")
+    study = ensure_import(
+        study,
+        "import { api, ApiError } from '../../lib/appApi'" + newline,
+        "import { rememberLastStudyDocument } from '../../lib/lastStudyDocument'" + newline,
+        "My Study",
+    )
+    old_open = "const openDocument = (id: number) => { onRememberLastStudyDocument?.(id); setActiveDocumentId(id); setScreen('document-study') }"
+    new_open = "const openDocument = (id: number) => { onRememberLastStudyDocument?.(id); rememberLastStudyDocument(id); setActiveDocumentId(id); setScreen('document-study') }"
+    if old_open in study:
+        study = study.replace(old_open, new_open, 1)
+    elif "rememberLastStudyDocument(id)" not in study:
+        raise SystemExit("My Study openDocument callback anchor missing")
+
+    APP.write_text(app, encoding="utf-8")
+    HOME.write_text(home, encoding="utf-8")
+    STUDY.write_text(study, encoding="utf-8")
+    print("Last-study resume is wired to the extracted Home and My Study owners with account-scoped storage.")
+
+
+if __name__ == "__main__":
+    main()

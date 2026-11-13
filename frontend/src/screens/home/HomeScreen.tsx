@@ -1,6 +1,7 @@
 import { useEffect, useState, type ComponentType, type ReactNode } from 'react'
 
 import { api } from '../../lib/appApi'
+import { readLastStudyDocumentId, rememberLastStudyDocument } from '../../lib/lastStudyDocument'
 import { N, useTheme } from '../../theme/theme'
 import { Ic } from '../../ui/icons'
 import Pill from '../../ui/Pill'
@@ -69,8 +70,9 @@ export default function HomeScreen({ setScreen, setActiveDocumentId, setActiveOp
 
   const greetingName = displayName || 'there'
   const activeDocs = documents.filter(d => !docsLoading)
-  const featuredDoc = activeDocs[0]
-  const restDocs = activeDocs.slice(1)
+  const lastStudyId = readLastStudyDocumentId()
+  const featuredDoc = activeDocs.find(document => document.id === lastStudyId) || activeDocs[0]
+  const restDocs = featuredDoc ? activeDocs.filter(document => document.id !== featuredDoc.id) : []
 
   if (meLoading || docsLoading) return loadingView
   return (
@@ -124,7 +126,7 @@ export default function HomeScreen({ setScreen, setActiveDocumentId, setActiveOp
           ) : (
             <>
               {/* Featured doc */}
-              <div onClick={() => { setActiveDocumentId(featuredDoc.id); setScreen('document-study') }} style={{ background: `linear-gradient(135deg,${N.navy},${N.navy3})`, borderRadius: 18, padding: 18, cursor: 'pointer', position: 'relative', overflow: 'hidden', marginBottom: 10 }}>
+              <div onClick={() => { rememberLastStudyDocument(featuredDoc.id); setActiveDocumentId(featuredDoc.id); setScreen('document-study') }} style={{ background: `linear-gradient(135deg,${N.navy},${N.navy3})`, borderRadius: 18, padding: 18, cursor: 'pointer', position: 'relative', overflow: 'hidden', marginBottom: 10 }}>
                 <div style={{ position: 'absolute', right: -20, top: -20, width: 120, height: 120, background: 'rgba(201,168,76,0.07)', borderRadius: '50%', pointerEvents: 'none' }} />
                 <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 14 }}>
                   <div style={{ width: 48, height: 48, background: 'rgba(201,168,76,0.15)', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, color: N.gold, fontWeight: 800 }}>{Ic.book('w-6 h-6')}</div>
@@ -134,12 +136,12 @@ export default function HomeScreen({ setScreen, setActiveDocumentId, setActiveOp
                   </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button onClick={e => { e.stopPropagation(); setActiveDocumentId(featuredDoc.id); setScreen('document-study') }} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 11, border: 'none', borderRadius: 10, padding: '6px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Continue →</button>
+                  <button onClick={e => { e.stopPropagation(); rememberLastStudyDocument(featuredDoc.id); setActiveDocumentId(featuredDoc.id); setScreen('document-study') }} style={{ background: `linear-gradient(135deg,${N.gold},${N.goldL})`, color: N.navy, fontWeight: 800, fontSize: 11, border: 'none', borderRadius: 10, padding: '6px 14px', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans' }}>Continue →</button>
                 </div>
               </div>
               {/* Other docs */}
               {restDocs.map(d => (
-                <div key={d.id} onClick={() => { setActiveDocumentId(d.id); setScreen('document-study') }} style={{ background: T.card, borderRadius: 14, padding: '12px 14px', marginBottom: 8, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', border: '1px solid rgba(0,0,0,0.04)' }}>
+                <div key={d.id} onClick={() => { rememberLastStudyDocument(d.id); setActiveDocumentId(d.id); setScreen('document-study') }} style={{ background: T.card, borderRadius: 14, padding: '12px 14px', marginBottom: 8, boxShadow: '0 2px 10px rgba(0,0,0,0.05)', display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer', border: '1px solid rgba(0,0,0,0.04)' }}>
                   <div style={{ width: 40, height: 40, background: N.gold + '18', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: N.gold, fontWeight: 800 }}>{Ic.book('w-5 h-5')}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 700, fontSize: 12, color: T.text }} className="line-clamp-1">{d.title}</div>

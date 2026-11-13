@@ -7,6 +7,9 @@ from academic_models import Program, University
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_SOURCE = (ROOT / "app.py").read_text(encoding="utf-8")
+USER_MODELS_SOURCE = (ROOT / "user_models.py").read_text(encoding="utf-8")
+CORE_MODELS_SOURCE = (ROOT / "core_models.py").read_text(encoding="utf-8")
+ACADEMIC_MODELS_SOURCE = (ROOT / "academic_models.py").read_text(encoding="utf-8")
 
 
 def test_academic_models_share_the_existing_sqlalchemy_metadata():
@@ -51,10 +54,17 @@ def test_program_table_name_columns_foreign_key_and_defaults_are_unchanged():
     assert table.c.created_at.default.arg.__name__ == "utcnow"
 
 
-def test_app_preserves_legacy_model_exports_and_declaration_order():
+def test_app_reexports_model_classes_from_their_shared_feature_modules():
+    assert "from user_models import User" in APP_SOURCE
+    assert "from core_models import ContentItem, Payment, SystemSetting, ViewProgress" in APP_SOURCE
     assert "from academic_models import University, Program" in APP_SOURCE
+
+    assert "class User(db.Model):" not in APP_SOURCE
+    assert "class ContentItem(db.Model):" not in APP_SOURCE
     assert "class University(db.Model):" not in APP_SOURCE
     assert "class Program(db.Model):" not in APP_SOURCE
-    assert APP_SOURCE.index("class User(db.Model):") < APP_SOURCE.index(
-        "from academic_models import University, Program"
-    ) < APP_SOURCE.index("class ContentItem(db.Model):")
+
+    assert "class User(db.Model):" in USER_MODELS_SOURCE
+    assert "class ContentItem(db.Model):" in CORE_MODELS_SOURCE
+    assert "class University(db.Model):" in ACADEMIC_MODELS_SOURCE
+    assert "class Program(db.Model):" in ACADEMIC_MODELS_SOURCE

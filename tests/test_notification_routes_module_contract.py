@@ -4,12 +4,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = (ROOT / "app.py").read_text(encoding="utf-8")
+REGISTRY = (ROOT / "route_registry.py").read_text(encoding="utf-8")
 ROUTES = ROOT / "notification_routes.py"
 
 
 def test_notification_routes_are_registered_at_the_original_app_initialization_boundary():
-    assert "from notification_routes import register_notification_routes" in APP
-    assert "register_notification_routes(app, db, Notification, require_csrf)" in APP
+    assert "register_notification_feature_routes" in APP
+    assert "register_notification_feature_routes(app, db, Notification, require_csrf)" in APP
+    assert "def register_notification_feature_routes(app, db, Notification, require_csrf):" in REGISTRY
+    assert "register_notification_routes(app, db, Notification, require_csrf)" in REGISTRY
     for route in (
         '@app.route("/notifications")',
         '@app.route("/notifications/unread-count")',

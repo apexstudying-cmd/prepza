@@ -30,6 +30,8 @@ def test_home_quick_actions_keep_the_approved_five_in_order() -> None:
     assert "label: 'Podcasts'" not in actions
     assert "My Library →" not in HOME
     assert "setActiveDocumentId(featuredDoc.id); setScreen('document-study')" in HOME
+    assert "readLastStudyDocumentId()" in HOME
+    assert "rememberLastStudyDocument(featuredDoc.id)" in HOME
 
 
 def test_explore_route_is_resolved_by_the_feature_module() -> None:
@@ -63,8 +65,9 @@ def test_home_and_explore_prebuild_steps_validate_feature_owned_sources() -> Non
     home_patch = (ROOT / "scripts/apply_home_architecture_v2.py").read_text(encoding="utf-8")
     shop_patch = (ROOT / "scripts/apply_shop_frontend.py").read_text(encoding="utf-8")
     explore_patch = (ROOT / "scripts/apply_explore_architecture.py").read_text(encoding="utf-8")
-    assert "frontend/src/screens/home/HomeScreen.tsx" in home_patch
-    assert "frontend/src/screens/home/HomeScreen.tsx" in shop_patch
+    assert "HOME = ROOT / 'frontend' / 'src' / 'screens' / 'home' / 'HomeScreen.tsx'" in home_patch
+    assert 'HOME = ROOT / "frontend" / "src" / "screens" / "home" / "HomeScreen.tsx"' in shop_patch
+    assert 'BOTTOM_NAV = ROOT / "frontend" / "src" / "navigation" / "BottomNav.tsx"' in shop_patch
     assert "frontend/src/screens/explore/ExploreScreen.tsx" in explore_patch
     assert "function HomeScreen" not in home_patch
     assert "function ExploreSurface" not in explore_patch

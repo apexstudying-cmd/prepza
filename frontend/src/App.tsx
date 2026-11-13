@@ -17,6 +17,7 @@ import DocReadyScreen from './screens/study/DocReadyScreen'
 import DocumentStudyHubScreen from './screens/study/DocumentStudyHubScreen'
 import DocumentReaderScreen from './screens/study/DocumentReaderScreen'
 import HomeScreen from './screens/home/HomeScreen'
+import { rememberLastStudyDocument } from './lib/lastStudyDocument'
 import ExploreScreen from './screens/explore/ExploreScreen'
 import { FlashcardsStudyScreen, QuizStudyScreen, SummaryStudyScreen, MindMapStudyScreen } from './screens/study/GeneratedStudyScreens'
 import AchievementsScreen from './screens/gamification/AchievementsScreen'
@@ -1570,6 +1571,10 @@ function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: S
   const [doc, setDoc] = useState<DocumentDetail | null>(null)
   const [docLoadError, setDocLoadError] = useState('')
   const [heartbeatCsrf, setHeartbeatCsrf] = useState('')
+  useEffect(() => {
+    rememberLastStudyDocument(activeDocumentId)
+  }, [activeDocumentId])
+
   useEffect(() => {
     if (activeDocumentId == null) return
     let cancelled = false

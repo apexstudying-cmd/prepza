@@ -48,6 +48,6 @@ def test_bottom_navigation_owns_tab_selection_and_attention_behavior() -> None:
 
 def test_shop_frontend_transform_targets_module_owned_bottom_navigation() -> None:
     transform = (ROOT / "scripts/apply_shop_frontend.py").read_text(encoding="utf-8")
-    assert "frontend/src/navigation/BottomNav.tsx" in transform
+    assert 'BOTTOM_NAV = ROOT / "frontend" / "src" / "navigation" / "BottomNav.tsx"' in transform
     assert "document-reader','shop'].includes(active)" in transform
     assert "document-reader','shop'].includes(active)" not in APP
