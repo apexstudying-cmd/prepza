@@ -183,14 +183,57 @@ def main() -> int:
                     full_page=True,
                     animations="disabled",
                 )
-                buyer_page.get_by_role("button", name="Message in Prepza").click(timeout=10000)
+                with buyer_page.expect_response(
+                    lambda response: response.request.method == "POST"
+                    and response.url.rstrip("/").endswith("/chats"),
+                    timeout=15000,
+                ) as create_chat_response:
+                    buyer_page.get_by_role("button", name="Message in Prepza").click(timeout=10000)
+                created_chat = create_chat_response.value
+                if not created_chat.ok:
+                    raise AssertionError(
+                        f"Shop in-app contact failed to create a chat: "
+                        f"{created_chat.status} {created_chat.text()}"
+                    )
+                chat_payload = created_chat.json()
+                if chat_payload.get("status") != "accepted":
+                    raise AssertionError(
+                        "Shop contact did not open an accepted conversation; "
+                        f"received status={chat_payload.get('status')!r}"
+                    )
+                conversation_id = int(chat_payload["id"])
+                buyer_page.get_by_role("button", name="Chat options").wait_for(
+                    state="visible", timeout=15000
+                )
                 composer = buyer_page.get_by_placeholder("Message", exact=True)
-                composer.wait_for(state="visible", timeout=15000)
+                composer.wait_for(state="visible", timeout=10000)
                 composer.fill("QA in-app seller message")
-                composer.press("Enter")
+                send_button = buyer_page.get_by_role("button", name="Send", exact=True)
+                send_button.wait_for(state="visible", timeout=5000)
+                with buyer_page.expect_response(
+                    lambda response: response.request.method == "POST"
+                    and response.url.rstrip("/").endswith(
+                        f"/chats/{conversation_id}/messages"
+                    ),
+                    timeout=15000,
+                ) as send_message_response:
+                    send_button.click(timeout=10000)
+                sent_message = send_message_response.value
+                if sent_message.status not in (200, 201):
+                    raise AssertionError(
+                        f"Shop in-app message failed: {sent_message.status} "
+                        f"{sent_message.text()}"
+                    )
                 buyer_page.get_by_text(
-                    "QA in-app seller message", exact=True
+                    "QA in-app seller message", exact=False
                 ).wait_for(timeout=10000)
+                if composer.input_value():
+                    raise AssertionError("Chat composer did not clear after sending the message")
+                buyer_page.screenshot(
+                    path=str(ARTIFACTS / "buyer-chat-message-sent.png"),
+                    full_page=True,
+                    animations="disabled",
+                )
                 print("PASS: buyer browsed details, saved, reported, opened ChatDetail and sent an in-app message")
                 buyer_context.close()
 
