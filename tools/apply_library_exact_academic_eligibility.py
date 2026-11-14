@@ -283,10 +283,8 @@ def _library_context_matches(viewer, publication):
     app_text = app_text.replace(marker, helper, 1)
 
 replace_route_once_or_skip(
-'''    query = LibraryPublication.query.filter_by(status="approved")
-    flagged_document_ids = _flagged_document_ids()''',
-'''    viewer = db.session.get(User, user_id)
-    if not viewer:
+'''    query = LibraryPublication.query.filter_by(status="approved")''',
+'''    if not viewer:
         return jsonify({"error": "Account not found"}), 404
     if any(value is None for value in (viewer.university_id, viewer.program_id, viewer.year, viewer.semester)):
         return jsonify({"error": "Complete your university, course, year, and semester before accessing the Library"}), 400
@@ -297,8 +295,7 @@ replace_route_once_or_skip(
         LibraryPublication.program_id == viewer.program_id,
         LibraryPublication.year == viewer.year,
         LibraryPublication.semester == viewer.semester,
-    )
-    flagged_document_ids = _flagged_document_ids()''',
+    )''',
     "browse exact academic gate",
     lambda: all(token in route_text for token in (
         'LibraryPublication.status == "approved"',
