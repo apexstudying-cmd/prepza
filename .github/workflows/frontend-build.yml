@@ -15,6 +15,7 @@ on:
       - 'tests/test_podcast_player_module_contract.py'
       - 'tests/test_upload_flow_module_contract.py'
       - 'tests/test_frontend_module_extraction_contract.py'
+      - 'tests/test_library_screen_module_contract.py'
       - 'tests/test_publish_library_module_contract.py'
       - 'tests/test_publish_library_transform_module.py'
       - 'tools/apply_library_publish_context_ux.py'
