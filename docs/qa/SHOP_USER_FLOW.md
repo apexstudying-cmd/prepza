@@ -117,3 +117,15 @@ Release Browser [43389767185](https://github.com/apexstudying-cmd/prepza/actions
 Screenshot artifact [14020905208](https://github.com/apexstudying-cmd/prepza/actions/runs/43389767185/artifacts/14020905208) contains 16 images. Reviewed Shop browse on phone/tablet, tablet listing form, stale-cache, buyer listing, seller listing and admin moderation. The shell/cards are consistent with Prepza's navy/gold language; fee disclosure and direct-contact/no-buyer-checkout messaging are visible. The existing global Admin Platform floating control overlaps the bottom navigation on the admin screenshot; track this as a shell-positioning follow-up, not a new Shop tab.
 
 Provider limitation remains: fixtures use synthetic photos and mocked Paystack responses. Real Paystack sandbox checkout/webhooks and R2 upload/read/head/delete/headers are NOT_TESTED pending safe staging credentials. Shop remains IN_PROGRESS; no live provider transaction or production data was used.
+
+## 12. 14 November 2026 — exact candidate buyer/seller/admin flow
+
+Release Browser [43566535290](https://github.com/apexstudying-cmd/prepza/actions/runs/43566535290) passed the complete Shop browser journey on exact candidate `edcfad751e4f3774e297219ecbb4c22cc31ef854`:
+
+- **Buyer:** browse and inspect listing, save and open Saved, report the listing, open ChatDetail, and send an in-app message. The test now logs in the seller first and waits for the seller's E2EE public key so the existing direct-chat encryption bridge can encrypt for both participants.
+- **Seller:** view own listing/My Listings, pause it, mark it sold, and reach the paid listing form with the KES 100 disclosure.
+- **Admin:** approve/reject listings, resolve a buyer report and document payment verification/retry handling.
+- **Responsive:** phone-small 360x800, phone-standard 390x844 and tablet-portrait 768x1024 passed. The global Admin Platform control now clears the existing five-item bottom navigation; no new tab was added.
+- **Visual evidence:** [artifact 14102507070](https://github.com/apexstudying-cmd/prepza/actions/runs/43566535290}/artifacts/14102507070) has 17 images; Home/Shop phone, Shop tablet, buyer message, seller listing and admin moderation were reviewed.
+
+This is automated role/browser evidence, not live Paystack or R2 verification. Real Paystack sandbox checkout/webhooks and R2 upload/read/head/delete/response headers remain NOT_TESTED pending safe staging access. The KES 100/manual 30-day seller fee, moderation and direct-contact/no-buyer-checkout model remain unchanged.
