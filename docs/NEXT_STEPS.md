@@ -1,7 +1,7 @@
 # Prepza — Persistent Engineering Execution Tracker
 
 Last updated: 2026-11-14
-Branch: `refactor/architecture-boundaries-2026-11`; consolidated PR #79 remains draft at latest documentation head `097573a29a9a9077eed601a3527327004d7ab551` (latest application-code head `8a78cd0e6ae87e8a08c3739b5aca50f9dbe493fd`; latest test/workflow head `7f9b2072472710c2d794b090e88a3647609e4809`), based on main `02fcdfb12ab065d6613b08bd82d031cc3bb109ea`. Frontend Build [43583027683](https://github.com/apexstudying-cmd/prepza/actions/runs/43583027683) passed on this candidate; full Release Browser [43583027599](https://github.com/apexstudying-cmd/prepza/actions/runs/43583027599) passed on the same application-code head. PR #79 has not been merged.
+Branch: `refactor/architecture-boundaries-2026-11`; consolidated PR #79 remains draft at latest documentation head `412c7ef3ef136bfb1ffcc819150b91a4083be97e` (latest application-code head `8a78cd0e6ae87e8a08c3739b5aca50f9dbe493fd`; latest test/workflow head `7f9b2072472710c2d794b090e88a3647609e4809`), based on main `02fcdfb12ab065d6613b08bd82d031cc3bb109ea`. Frontend Build [43583027683](https://github.com/apexstudying-cmd/prepza/actions/runs/43583027683) passed on this candidate; full Release Browser [43583027599](https://github.com/apexstudying-cmd/prepza/actions/runs/43583027599) passed on the same application-code head. PR #79 has not been merged.
 
 Status:
 - [x] completed/verified
