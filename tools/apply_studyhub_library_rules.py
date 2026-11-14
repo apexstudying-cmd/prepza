@@ -129,7 +129,7 @@ def split_library_route_source(source: str) -> tuple[str, str]:
 
 def restore_library_route_source(prefix: str, body: str) -> str:
     indented = "\n".join(("    " + line) if line else "" for line in body.splitlines())
-    return prefix + indented + "\n"
+    return (prefix + indented).rstrip() + "\n"
 
 
 if __name__ == "__main__":

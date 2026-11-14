@@ -146,6 +146,6 @@ replace_once_or_skip(
     ),
 )
 
-LIBRARY_ROUTES.write_text(route_prefix + "\n".join(("    " + line) if line else "" for line in text.splitlines()) + "\n", encoding="utf-8")
+LIBRARY_ROUTES.write_text((route_prefix + "\n".join(("    " + line) if line else "" for line in text.splitlines())).rstrip() + "\n", encoding="utf-8")
 LIBRARY_MODELS.write_text(library_model_text, encoding="utf-8")
 print("Applied Library academic-context patch successfully.")
