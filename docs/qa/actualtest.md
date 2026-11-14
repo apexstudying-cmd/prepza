@@ -465,3 +465,18 @@ Candidate [PR #79](https://github.com/apexstudying-cmd/prepza/pull/79), exact he
 - **Screenshot artifact:** [14103724866](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716679/artifacts/14103724866), 17 responsive images captured. Shop source is unchanged from the previous reviewed Shop visual artifact [14102507070](https://github.com/apexstudying-cmd/prepza/actions/runs/43566535290/artifacts/14102507070).
 - **Initial contract mismatch:** Frontend Build [43570635198](https://github.com/apexstudying-cmd/prepza/actions/runs/43570635198) failed on intermediate head ac06cbd29ba04a27ced5932a842ef1cf620f07cd because the Morio identity test still counted the Processing screen's /icon-192.png from App.tsx. The test was retargeted to UploadFlowScreens and retained its original minimum-count assertion; final Frontend Build passed without weakening tests.
 - **Disposition:** database_alembic, existing_database_migration, storage_backup_restore, mobile_responsive_visual, cross_system_journeys, ci_release_workflows and one-SHA clean_full_regression are PASS on this candidate. Shop remains IN_PROGRESS pending real Paystack sandbox and R2 evidence. Overall release remains BLOCKED by provider/staging, retrieval/citation, external monitoring, B2B viewability, remaining architecture and deployment gates. No production data, live payment, deployment, paid service or billable GPU operation was touched.
+
+
+## 2026-11-14 — PublishLibrary module extraction (PR #79)
+
+The active PublishLibrary screen was moved from App.tsx to frontend/src/screens/library/PublishLibraryScreen.tsx. App.tsx retains the existing route and active-document state and injects EmptyState. The original screen body, publish API request, ready-document eligibility, rights confirmation, CSRF header, payload fields and navigation destinations were preserved.
+
+The module-aware transform in tools/apply_library_publish_context_ux.py now applies to the extracted screen and is idempotent. A new temporary-tree test executes the transform twice and checks the second run is a no-op. The upload/publish verifier follows the extracted UploadFlowScreens and PublishLibraryScreen modules and checks the shared navigation type.
+
+- **Candidate:** PR #79 head 8a78cd0e6ae87e8a08c3739b5aca50f9dbe493fd (draft; not merged).
+- **Frontend Build:** [43583027683](https://github.com/apexstudying-cmd/prepza/actions/runs/43583027683) PASS. The source/module/transform suite passed 180 tests; the offline Library regression passed 5 tests; upload/publish module ownership verification, functional-wiring audit, ORM/schema drift audit, TypeScript, service-worker validation and production Vite build all passed. The build log confirms the Library publish academic-context transform executed against the module.
+- **Full Release Browser:** [43583027599](https://github.com/apexstudying-cmd/prepza/actions/runs/43583027599) was queued when this record was written. Do not count it as a pass or claim a dedicated end-to-end publish browser journey until a completed run provides that evidence.
+- **Source sizes:** App.tsx 2,552 lines; PublishLibraryScreen.tsx 241 lines; app.py 8,791 lines.
+- **Intermediate test corrections:** initial runs exposed stale assertions that expected the moved component/helper imports in App.tsx and an upload verifier that expected the Screen union to remain inline. Tests now assert module ownership and the shared navigation type; no implementation behavior assertion was removed.
+
+No production database, deployment, live payment, new paid service or billable GPU operation was performed. Overall release remains BLOCKED by the unrelated provider, retrieval/citation, monitoring, B2B viewability, Home/PWA and deployment gates.
