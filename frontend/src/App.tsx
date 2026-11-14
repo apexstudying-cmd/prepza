@@ -40,7 +40,6 @@ import type { OpportunityPublic, SponsoredCampaign } from './types/opportunities
 import type { DocumentDetail } from './types/documents'
 import { formatStudyTime } from './lib/studyTime'
 import { oppTypeMeta, fmtDeadline } from './lib/opportunities'
-import { LIBRARY_MATERIAL_TYPES, materialTypeLabel } from './lib/library'
 import LibraryScreen from './screens/library/LibraryScreen'
 import PublishLibraryScreen from './screens/library/PublishLibraryScreen'
 import { podcastColor, podcastDuration, type PodcastItem } from './types/podcast'
