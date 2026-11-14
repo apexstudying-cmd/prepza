@@ -36,7 +36,7 @@ required_publish = [
     "setTitle(uploaded.title)",
     "d.status === 'ready' || d.id === activeDocumentId",
     "const canProceed1 = selectedDocId != null && title.trim().length > 0 && selectedDoc?.status === 'ready'",
-    " >('/library/publish'",
+    ">('/library/publish'",
     "'X-CSRF-Token': csrfToken",
 ]
 for anchor in required_publish:
