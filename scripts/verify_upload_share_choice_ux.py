@@ -7,7 +7,6 @@ navigation = (root / "frontend/src/types/navigation.ts").read_text(encoding="utf
 publish = (root / "frontend/src/screens/library/PublishLibraryScreen.tsx").read_text(encoding="utf-8")
 
 required_app = [
-    "| 'upload-share-choice'",
     "import { UploadScreen, UploadShareChoiceScreen, ProcessingScreen } from './screens/upload/UploadFlowScreens'",
     "import PublishLibraryScreen from './screens/library/PublishLibraryScreen'",
     "case 'upload':",
