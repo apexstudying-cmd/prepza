@@ -66,7 +66,7 @@ def test_follow_route_registration_and_private_profile_boundary() -> None:
         Document=object(),
         XpEvent=object(),
         StudyTimeLog=object(),
-        display_name=lambda user: user.display_name,
+        _display_name=lambda user: user.display_name,
         get_signed_url=lambda *_args, **_kwargs: None,
         should_notify=lambda *_args: False,
         send_push_notification=lambda *_args, **_kwargs: None,

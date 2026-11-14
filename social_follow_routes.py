@@ -26,7 +26,7 @@ def register_social_follow_routes(
     Document: Any,
     XpEvent: Any,
     StudyTimeLog: Any,
-    display_name: Any,
+    _display_name: Any,
     get_signed_url: Any,
     should_notify: Any,
     send_push_notification: Any,
