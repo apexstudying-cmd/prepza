@@ -172,3 +172,15 @@ def register_gamification_routes(app: Any, **dependencies: Any) -> None:
     from gamification_routes import register_gamification_routes as register
 
     register(app, **dependencies)
+
+def register_notification_preference_routes(
+    app: Any,
+    db: Any,
+    PushSubscription: Any,
+    require_csrf: Any,
+    get_or_create_notification_prefs: Any,
+) -> None:
+    """Register notification preference and push-subscription routes."""
+    from notification_routes import register_notification_preference_routes as register
+
+    register(app, db, PushSubscription, require_csrf, get_or_create_notification_prefs)

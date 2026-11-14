@@ -41,6 +41,7 @@ from route_registry import (
     register_admin_reconciled_routes,
     register_runtime_feature_routes,
     register_gamification_routes,
+    register_notification_preference_routes,
 )
 from observability_models import RequestObservabilityEvent
 from security_models import AuditLog, PushSubscription, UserKey
@@ -6651,120 +6652,13 @@ def should_notify(user_id, category):
     return getattr(prefs, f"{category}_enabled", True)
 
 
-@app.route("/notification-preferences")
-def get_notification_preferences():
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    prefs = get_or_create_notification_prefs(user_id)
-    db.session.commit()
-
-    return jsonify({
-        "community_enabled": prefs.community_enabled,
-        "messages_enabled": prefs.messages_enabled,
-    })
-
-
-@app.route("/notification-preferences", methods=["PATCH"])
-@require_csrf
-def update_notification_preferences():
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    data = request.get_json(silent=True) or {}
-    prefs = get_or_create_notification_prefs(user_id)
-
-    if "community_enabled" in data:
-        if not isinstance(data["community_enabled"], bool):
-            return jsonify({"error": "community_enabled must be a boolean"}), 400
-        prefs.community_enabled = data["community_enabled"]
-
-    if "messages_enabled" in data:
-        if not isinstance(data["messages_enabled"], bool):
-            return jsonify({"error": "messages_enabled must be a boolean"}), 400
-        prefs.messages_enabled = data["messages_enabled"]
-
-    db.session.commit()
-
-    return jsonify({
-        "community_enabled": prefs.community_enabled,
-        "messages_enabled": prefs.messages_enabled,
-    })
-
-
-@app.route("/push/vapid-public-key")
-def get_vapid_public_key():
-    """
-    Public, unauthenticated - the frontend needs this before a push
-    subscription can be created, same reasoning as /universities being
-    public before a session exists.
-    """
-    public_key = os.environ.get("VAPID_PUBLIC_KEY")
-    if not public_key:
-        return jsonify({"error": "Push notifications are not configured"}), 503
-    return jsonify({"public_key": public_key})
-
-
-@app.route("/push/subscribe", methods=["POST"])
-@require_csrf
-def push_subscribe():
-    """
-    Upserts a push subscription for the logged-in user, keyed on endpoint
-    (not user_id) - a device re-subscribing gets a fresh endpoint from the
-    browser, so the same physical device never creates duplicate rows, but
-    a user can have many rows across devices.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    data = request.get_json(silent=True)
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    endpoint = (data.get("endpoint") or "").strip()
-    keys = data.get("keys") or {}
-    p256dh_key = (keys.get("p256dh") or "").strip()
-    auth_key = (keys.get("auth") or "").strip()
-
-    if not endpoint or not p256dh_key or not auth_key:
-        return jsonify({"error": "endpoint and keys.p256dh and keys.auth are required"}), 400
-
-    existing = PushSubscription.query.filter_by(endpoint=endpoint).first()
-    if existing:
-        existing.user_id = user_id
-        existing.p256dh_key = p256dh_key
-        existing.auth_key = auth_key
-    else:
-        db.session.add(PushSubscription(
-            user_id=user_id, endpoint=endpoint,
-            p256dh_key=p256dh_key, auth_key=auth_key,
-        ))
-    db.session.commit()
-
-    return jsonify({"message": "Subscribed"}), 201
-
-
-@app.route("/push/subscribe", methods=["DELETE"])
-@require_csrf
-def push_unsubscribe():
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    data = request.get_json(silent=True) or {}
-    endpoint = (data.get("endpoint") or "").strip()
-    if not endpoint:
-        return jsonify({"error": "endpoint is required"}), 400
-
-    sub = PushSubscription.query.filter_by(endpoint=endpoint, user_id=user_id).first()
-    if sub:
-        db.session.delete(sub)
-        db.session.commit()
-
-    return jsonify({"message": "Unsubscribed"})
+register_notification_preference_routes(
+    app,
+    db,
+    PushSubscription,
+    require_csrf,
+    get_or_create_notification_prefs,
+)
 
 
 # ---------- E2EE key management (Chats only - Study Groups/Forum unaffected) ----------
