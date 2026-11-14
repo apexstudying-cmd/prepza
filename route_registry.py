@@ -196,3 +196,9 @@ def register_group_routes(app: Any, db: Any, **dependencies: Any) -> None:
     from group_routes import register_group_routes as register
 
     register(app, db, **dependencies)
+
+def register_library_routes(app: Any, db: Any, **dependencies: Any) -> None:
+    """Register student Library and content-moderation routes."""
+    from library_routes import register_library_routes as register
+
+    register(app, db, **dependencies)
