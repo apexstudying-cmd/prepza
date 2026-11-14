@@ -88,3 +88,9 @@ def test_offline_architecture_audit_tracks_the_extracted_study_route_owner() -> 
     assert "'def study_time_sync'" in audit
     assert "today = _study_local_date()' in backend_study_routes" in audit
     assert '"path": "gamification_routes.py"' in manifest
+
+def test_launch_wiring_audit_tracks_study_activity_module_ownership() -> None:
+    launch_audit = (ROOT / "tools/verify_launch_wiring.py").read_text(encoding="utf-8")
+    assert 'STUDY_ROUTES = ROOT / "gamification_routes.py"' in launch_audit
+    assert "register_gamification_routes(" in launch_audit
+    assert "'@app.route(\"/study-time\")'" in launch_audit

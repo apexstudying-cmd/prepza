@@ -9,6 +9,7 @@ APP = FRONTEND / "src" / "App.tsx"
 BACKEND = ROOT / "app.py"
 APP_FACTORY = ROOT / "app_factory.py"
 ROUTE_REGISTRY = ROOT / "route_registry.py"
+STUDY_ROUTES = ROOT / "gamification_routes.py"
 MANIFEST = FRONTEND / "public" / "manifest.json"
 
 errors = []
@@ -21,6 +22,7 @@ require_file(APP, "App.tsx")
 require_file(BACKEND, "Flask app.py")
 require_file(APP_FACTORY, "Flask app factory")
 require_file(ROUTE_REGISTRY, "backend route registry")
+require_file(STUDY_ROUTES, "Study activity route module")
 require_file(FRONTEND / "src" / "StudyActivityScreen.tsx", "StudyActivityScreen")
 require_file(FRONTEND / "src" / "share" / "StudyShareSheet.tsx", "StudyShareSheet")
 require_file(FRONTEND / "public" / "manifest.json", "PWA manifest")
@@ -44,14 +46,23 @@ if APP.exists():
 if BACKEND.exists():
     backend_text = BACKEND.read_text(encoding="utf-8")
     for needle, label in [
-        ('@app.route("/streak")', "streak endpoint"),
-        ('@app.route("/study-time")', "study-time endpoint"),
-        ('@app.route("/profile/posts")', "profile posts endpoint"),
+        ("register_gamification_routes(", "study activity route registration"),
         ('@app.route("/ambassador/referral-qr")', "ambassador QR endpoint"),
         ("register_foundation_routes(app, db)", "foundation route registry call"),
     ]:
         if needle not in backend_text:
             errors.append(f"app.py missing {label}: {needle}")
+
+if STUDY_ROUTES.exists():
+    study_route_text = STUDY_ROUTES.read_text(encoding="utf-8")
+    for needle, label in [
+        ('@app.route("/streak")', "streak endpoint"),
+        ('@app.route("/study-time")', "study-time endpoint"),
+        ('@app.route("/profile/posts")', "profile posts endpoint"),
+        ('def study_time_sync(', "Study Hub sync handler"),
+    ]:
+        if needle not in study_route_text:
+            errors.append(f"gamification_routes.py missing {label}: {needle}")
 
 if APP_FACTORY.exists():
     factory_text = APP_FACTORY.read_text(encoding="utf-8")
