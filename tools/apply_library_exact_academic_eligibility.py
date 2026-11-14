@@ -93,6 +93,42 @@ replace_route_once_or_skip(
         'semester = data.get("semester")',
         "user.university_id", "user.program_id", "user.year", "user.semester",
     )),
+
+replace_route_once_or_skip(
+'''    if semester is None:
+        semester = user.semester
+
+    if not document_id:''',
+'''    if semester is None:
+        semester = user.semester
+
+    if data.get("unit_id") is not None:
+        return jsonify({"error": "unit_id is no longer supported for Library publications"}), 400
+    if any(value is None for value in (university_id, program_id, year, semester)):
+        return jsonify({"error": "university, course, year, and semester are required for Library publication"}), 400
+    if not isinstance(university_id, int) or isinstance(university_id, bool):
+        return jsonify({"error": "university_id must be an integer"}), 400
+    university = University.query.filter_by(id=university_id, is_active=True).first()
+    if not university:
+        return jsonify({"error": "Selected university was not found"}), 400
+    if not isinstance(program_id, int) or isinstance(program_id, bool):
+        return jsonify({"error": "program_id must be an integer"}), 400
+    program = Program.query.filter_by(id=program_id, university_id=university_id, is_active=True).first()
+    if not program:
+        return jsonify({"error": "Selected course does not belong to the selected university"}), 400
+    if not isinstance(year, int) or isinstance(year, bool) or not 1 <= year <= 5:
+        return jsonify({"error": "year must be an integer between 1 and 5"}), 400
+    if not isinstance(semester, int) or isinstance(semester, bool) or semester not in (1, 2, 3):
+        return jsonify({"error": "semester must be 1, 2, or 3"}), 400
+
+    if not document_id:''',
+    "complete academic context validation",
+    lambda: all(token in route_text for token in (
+        'unit_id is no longer supported for Library publications',
+        'Selected course does not belong to the selected university',
+        'year must be an integer between 1 and 5',
+        'semester must be 1, 2, or 3',
+    )),
 )
 
 replace_route_once_or_skip(
