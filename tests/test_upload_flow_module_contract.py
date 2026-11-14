@@ -71,6 +71,9 @@ def test_upload_screens_have_one_feature_owner_and_explicit_parent_props():
         assert "from './screens/upload/UploadFlowScreens'" in app
         assert "TopBar: UploadTopBar" in upload
         assert "TopBar: UploadTopBar" in choice
+        assert "export function UploadScreen(" in module
+        assert "export function UploadShareChoiceScreen(" in module
+        assert "export function ProcessingScreen(" in module
         assert "from '../../App'" not in module
         assert "from '../App'" not in module
 

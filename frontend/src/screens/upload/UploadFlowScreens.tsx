@@ -11,7 +11,7 @@ import { ALLOWED_UPLOAD_EXTENSIONS, MAX_UPLOAD_SIZE_BYTES } from './uploadConfig
 type UploadTopBar = ComponentType<{ title?: string; onBack?: () => void }>
 
 // ─── UPLOAD ───────────────────────────────────────────────────────────────────
-function UploadScreen({ setScreen, setActiveDocumentId, TopBar }: { setScreen: (s: Screen) => void; setActiveDocumentId: (id: number | null) => void; TopBar: UploadTopBar }) {
+export function UploadScreen({ setScreen, setActiveDocumentId, TopBar }: { setScreen: (s: Screen) => void; setActiveDocumentId: (id: number | null) => void; TopBar: UploadTopBar }) {
   const { mode, tokens: T } = useTheme()
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
@@ -140,7 +140,7 @@ function UploadScreen({ setScreen, setActiveDocumentId, TopBar }: { setScreen: (
 }
 
 // ─── POST-UPLOAD STUDYHUB / LIBRARY CHOICE ────────────────────────────────────
-function UploadShareChoiceScreen({ setScreen, activeDocumentId, TopBar }: { setScreen: (s: Screen) => void; activeDocumentId: number | null; TopBar: UploadTopBar }) {
+export function UploadShareChoiceScreen({ setScreen, activeDocumentId, TopBar }: { setScreen: (s: Screen) => void; activeDocumentId: number | null; TopBar: UploadTopBar }) {
   const { tokens: T } = useTheme()
   const [doc, setDoc] = useState<DocumentDetail | null>(null)
 
@@ -187,7 +187,7 @@ function UploadShareChoiceScreen({ setScreen, activeDocumentId, TopBar }: { setS
 }
 
 // ─── PROCESSING ───────────────────────────────────────────────────────────────
-function ProcessingScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+export function ProcessingScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
   const { tokens: T } = useTheme()
   const [doc, setDoc] = useState<DocumentDetail | null>(null)
   const [pollError, setPollError] = useState('')
