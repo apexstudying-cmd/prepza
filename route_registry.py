@@ -184,3 +184,9 @@ def register_notification_preference_routes(
     from notification_routes import register_notification_preference_routes as register
 
     register(app, db, PushSubscription, require_csrf, get_or_create_notification_prefs)
+
+def register_social_follow_routes(app: Any, db: Any, **dependencies: Any) -> None:
+    """Register social follow and public-profile routes."""
+    from social_follow_routes import register_social_follow_routes as register
+
+    register(app, db, **dependencies)
