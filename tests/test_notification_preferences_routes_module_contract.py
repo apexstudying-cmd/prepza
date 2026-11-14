@@ -53,7 +53,9 @@ def test_preference_and_push_routes_keep_methods_csrf_and_helper_behavior() -> N
         app, db, object(), identity, get_prefs
     )
 
-    routes = {rule.rule: rule.methods for rule in app.url_map.iter_rules()}
+    routes = {}
+    for rule in app.url_map.iter_rules():
+        routes.setdefault(rule.rule, set()).update(rule.methods)
     assert "GET" in routes["/notification-preferences"]
     assert "PATCH" in routes["/notification-preferences"]
     assert "GET" in routes["/push/vapid-public-key"]
