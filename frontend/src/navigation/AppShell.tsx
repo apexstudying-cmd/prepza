@@ -51,7 +51,7 @@ export default function AppShell({ screen, setScreen, unreadChats, exploreAttent
         </div>
         {!noNav.includes(screen) && <BottomNav active={screen} setScreen={setScreen} unreadChats={unreadChats} exploreAttention={exploreAttention} setExploreAttention={setExploreAttention} />}
         {isAdmin && (
-          <button aria-label="Open Admin Platform" onClick={onOpenAdmin} style={{ position: 'fixed', bottom: 'calc(68px + env(safe-area-inset-bottom, 0px))', right: 10, color: 'rgba(255,255,255,0.18)', fontSize: 10, fontFamily: 'Plus Jakarta Sans', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 99, padding: '3px 12px', cursor: 'pointer', letterSpacing: '0.5px', zIndex: 200 }}>
+          <button aria-label="Open Admin Platform" onClick={onOpenAdmin} style={{ position: 'fixed', bottom: 'calc(76px + env(safe-area-inset-bottom, 0px))', right: 10, color: 'rgba(255,255,255,0.18)', fontSize: 10, fontFamily: 'Plus Jakarta Sans', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 99, padding: '3px 12px', cursor: 'pointer', letterSpacing: '0.5px', zIndex: 200 }}>
             ⚙ Admin Platform
           </button>
         )}
