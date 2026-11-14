@@ -7,6 +7,9 @@ FRONTEND = ROOT / "frontend"
 DIST = FRONTEND / "dist"
 APP = FRONTEND / "src" / "App.tsx"
 BACKEND = ROOT / "app.py"
+APP_FACTORY = ROOT / "app_factory.py"
+ROUTE_REGISTRY = ROOT / "route_registry.py"
+STUDY_ROUTES = ROOT / "gamification_routes.py"
 MANIFEST = FRONTEND / "public" / "manifest.json"
 
 errors = []
@@ -17,6 +20,9 @@ def require_file(path, label):
 
 require_file(APP, "App.tsx")
 require_file(BACKEND, "Flask app.py")
+require_file(APP_FACTORY, "Flask app factory")
+require_file(ROUTE_REGISTRY, "backend route registry")
+require_file(STUDY_ROUTES, "Study activity route module")
 require_file(FRONTEND / "src" / "StudyActivityScreen.tsx", "StudyActivityScreen")
 require_file(FRONTEND / "src" / "share" / "StudyShareSheet.tsx", "StudyShareSheet")
 require_file(FRONTEND / "public" / "manifest.json", "PWA manifest")
@@ -40,17 +46,44 @@ if APP.exists():
 if BACKEND.exists():
     backend_text = BACKEND.read_text(encoding="utf-8")
     for needle, label in [
-        ('static_folder="frontend/dist"', "Flask static frontend directory"),
+        ("register_gamification_routes(", "study activity route registration"),
+        ('@app.route("/ambassador/referral-qr")', "ambassador QR endpoint"),
+        ("register_foundation_routes(app, db)", "foundation route registry call"),
+    ]:
+        if needle not in backend_text:
+            errors.append(f"app.py missing {label}: {needle}")
+
+if STUDY_ROUTES.exists():
+    study_route_text = STUDY_ROUTES.read_text(encoding="utf-8")
+    for needle, label in [
         ('@app.route("/streak")', "streak endpoint"),
         ('@app.route("/study-time")', "study-time endpoint"),
         ('@app.route("/profile/posts")', "profile posts endpoint"),
-        ('@app.route("/ambassador/referral-qr")', "ambassador QR endpoint"),
+        ('def study_time_sync(', "Study Hub sync handler"),
+    ]:
+        if needle not in study_route_text:
+            errors.append(f"gamification_routes.py missing {label}: {needle}")
+
+if APP_FACTORY.exists():
+    factory_text = APP_FACTORY.read_text(encoding="utf-8")
+    for needle, label in [
+        ('static_folder="frontend/dist"', "Flask static frontend directory"),
+        ('static_url_path=""', "root-mounted static asset path"),
+        ("def create_app()", "Flask application factory"),
+    ]:
+        if needle not in factory_text:
+            errors.append(f"app_factory.py missing {label}: {needle}")
+
+if ROUTE_REGISTRY.exists():
+    registry_text = ROUTE_REGISTRY.read_text(encoding="utf-8")
+    for needle, label in [
+        ("def register_foundation_routes(", "foundation route registrar"),
         ("register_usage_billing(app, db)", "usage billing registration"),
         ("register_organisation_billing(app, db)", "organisation billing registration"),
         ("register_discovery(app, db)", "discovery billing registration"),
     ]:
-        if needle not in backend_text:
-            errors.append(f"app.py missing {label}: {needle}")
+        if needle not in registry_text:
+            errors.append(f"route_registry.py missing {label}: {needle}")
 
 if MANIFEST.exists():
     import json
@@ -79,5 +112,5 @@ if errors:
 print("LAUNCH WIRING CHECK PASSED")
 print(" - Vite produced dist/index.html and a JavaScript bundle")
 print(" - App.tsx routes/imports are present")
-print(" - Flask production routes and billing registrations are present")
+print(" - Flask app factory, production routes, and route-registry billing registrations are present")
 print(" - PWA manifest, icons, and service worker source are present")

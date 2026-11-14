@@ -15,12 +15,18 @@ runpy.run_path(
 APP = ROOT / 'frontend' / 'src' / 'App.tsx'
 text = APP.read_text(encoding='utf-8')
 required = [
-    "localStorage.getItem('prepza-navigation-state')",
     "localStorage.setItem('prepza-navigation-state'",
     'resumeOffline={() => {',
+    'const stored = storedNavigation',
 ]
+NAVIGATION = ROOT / 'frontend' / 'src' / 'navigation' / 'useAppNavigation.ts'
+navigation_text = NAVIGATION.read_text(encoding='utf-8')
 splash = (ROOT / 'frontend' / 'src' / 'screens' / 'onboarding' / 'SplashScreen.tsx').read_text(encoding='utf-8')
 missing = [marker for marker in required if marker not in text]
+if "localStorage.getItem('prepza-navigation-state')" not in navigation_text:
+    missing.append("localStorage.getItem('prepza-navigation-state') in extracted navigation hook")
+if "window.history.back()" not in navigation_text:
+    missing.append("window.history.back() in extracted navigation hook")
 if 'resumeOffline()' not in splash:
     missing.append('resumeOffline() in extracted SplashScreen module')
 if missing:

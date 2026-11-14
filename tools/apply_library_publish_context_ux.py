@@ -1,18 +1,30 @@
 from pathlib import Path
 
 APP = Path(__file__).resolve().parents[1] / "frontend" / "src" / "App.tsx"
-text = APP.read_text()
+MODULE = Path(__file__).resolve().parents[1] / "frontend" / "src" / "screens" / "library" / "PublishLibraryScreen.tsx"
+TARGET = MODULE if MODULE.exists() else APP
+text = TARGET.read_text()
 
 type_anchor = "type PublishableDoc = { id: number; title: string; status: string; file_type: string | null; page_count: number | null }\n"
-if text.count(type_anchor) != 1:
-    print("Library publish context UX: legacy PublishableDoc anchor is absent in the current App architecture; skipping safely.")
+context_type = "type LibraryAcademicContext = { university_id: number | null; program_id: number | null; year: number | null; semester: number | null }\n"
+if context_type not in text:
+    if TARGET == APP:
+        if text.count(type_anchor) != 1:
+            print("Library publish context UX: neither the extracted module nor the legacy App anchor is available; skipping safely.")
+            raise SystemExit(0)
+        text = text.replace(type_anchor, type_anchor + context_type, 1)
+    else:
+        component_anchor = "function PublishLibraryScreen("
+        start = text.find(component_anchor)
+        if start < 0:
+            raise SystemExit("FAIL CLOSED: PublishLibraryScreen module anchor not found")
+        text = text[:start] + context_type + "\n" + text[start:]
+
+# The prebuild mutates source files. Treat a completed transform as a no-op on
+# subsequent local builds instead of failing because its original anchors moved.
+if "contextChangedFromProfile" in text:
+    print("Library publish context UX: already applied; skipping.")
     raise SystemExit(0)
-if "type LibraryAcademicContext =" not in text:
-    text = text.replace(
-        type_anchor,
-        type_anchor + "type LibraryAcademicContext = { university_id: number | null; program_id: number | null; year: number | null; semester: number | null }\n",
-        1,
-    )
 
 start = text.find("function PublishLibraryScreen(")
 if start < 0:
@@ -82,11 +94,11 @@ replace_once(
 )
 
 replace_once(
-'''          <div style={{ background: T.card, borderRadius: 14, padding: '14px 16px', marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>\n            <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 4 }}>What happens if rejected?</div>''',
+'''          <div style={{ background: T.card, borderRadius: 14, padding: '14px 16px', marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>\n            <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 4 }}>Library moderation</div>''',
 '''          {contextChangedFromProfile && (\n            <div style={{ background: `${N.gold}10`, border: `1px solid ${N.gold}25`, borderRadius: 14, padding: '14px 16px', marginBottom: 16 }}>\n              <div style={{ fontSize: 12, fontWeight: 800, color: T.text, marginBottom: 5 }}>Your profile is different</div>\n              <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.55, marginBottom: 10 }}>That's okay. This document will use the context you confirmed above. Want Prepza to update your academic profile too?</div>\n              <button\n                disabled={profileUpdateState === 'saving' || profileUpdateState === 'saved'}\n                onClick={async () => {\n                  setProfileUpdateState('saving')\n                  try {\n                    await api('/profile', { method: 'PATCH', headers: { 'X-CSRF-Token': csrfToken }, body: JSON.stringify(context) })\n                    setProfileContext(context)\n                    setProfileUpdateState('saved')\n                  } catch { setProfileUpdateState('error') }\n                }}\n                style={{ background: profileUpdateState === 'saved' ? '#4CC97B' : T.card, border: `1px solid ${profileUpdateState === 'saved' ? '#4CC97B' : N.gold}50`, color: profileUpdateState === 'saved' ? '#fff' : N.gold, borderRadius: 10, padding: '8px 12px', fontSize: 11, fontWeight: 800, cursor: profileUpdateState === 'saving' ? 'default' : 'pointer', fontFamily: 'Plus Jakarta Sans' }}\n              >{profileUpdateState === 'saving' ? 'Updating…' : profileUpdateState === 'saved' ? 'Profile updated' : profileUpdateState === 'error' ? 'Try again' : 'Update my profile'}</button>\n            </div>\n          )}\n          <div style={{ background: T.card, borderRadius: 14, padding: '14px 16px', marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>\n            <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 4 }}>What happens if rejected?</div>''',
     "publish profile update suggestion",
 )
 
 text = text[:start] + function + text[end + 2:]
-APP.write_text(text)
+TARGET.write_text(text)
 print("Applied Library publish academic-context UX successfully.")

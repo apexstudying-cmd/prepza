@@ -4,12 +4,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = (ROOT / "app.py").read_text(encoding="utf-8")
+REGISTRY = (ROOT / "route_registry.py").read_text(encoding="utf-8")
 ROUTES = ROOT / "notification_routes.py"
 
 
 def test_notification_routes_are_registered_at_the_original_app_initialization_boundary():
-    assert "from notification_routes import register_notification_routes" in APP
-    assert "register_notification_routes(app, db, Notification, require_csrf)" in APP
+    assert "register_notification_feature_routes" in APP
+    assert "register_notification_feature_routes(app, db, Notification, require_csrf)" in APP
+    assert "def register_notification_feature_routes(" in REGISTRY
+    assert "register_notification_routes(app, db, Notification, require_csrf)" in REGISTRY
     for route in (
         '@app.route("/notifications")',
         '@app.route("/notifications/unread-count")',
@@ -54,7 +57,9 @@ def test_notification_route_module_keeps_response_serialization_ordering_and_aut
         'return jsonify({"message": "Notification deleted"})',
     ):
         assert contract in source
-    assert source.count("@require_csrf") == 3
+    feed_routes, preference_routes = source.split("def register_notification_preference_routes(", 1)
+    assert feed_routes.count("@require_csrf") == 3
+    assert preference_routes.count("@require_csrf") == 3
 
 
 def test_notification_preference_helpers_remain_in_app_for_existing_callers():

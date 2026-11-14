@@ -1,5 +1,6 @@
 import { useEffect, useState, type ComponentType } from 'react'
 import { api, ApiError } from '../../lib/appApi'
+import { rememberLastStudyDocument } from '../../lib/lastStudyDocument'
 import { N, useTheme, currentThemeMode } from '../../theme/theme'
 import { Ic } from '../../ui/icons'
 import { listSavedStudyHubOffline } from '../../offline/studyHubOffline'
@@ -181,7 +182,7 @@ export default function StudyMaterialsScreen({ setScreen, setActiveDocumentId, L
     }).finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [])
-  const openDocument = (id: number) => { onRememberLastStudyDocument?.(id); setActiveDocumentId(id); setScreen('document-study') }
+  const openDocument = (id: number) => { onRememberLastStudyDocument?.(id); rememberLastStudyDocument(id); setActiveDocumentId(id); setScreen('document-study') }
   const openMaterial = (row: { documentId: number; materialId: number; type: string }) => {
     setActiveDocumentId(row.documentId)
     try {

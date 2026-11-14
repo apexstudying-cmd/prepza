@@ -31,11 +31,19 @@ REQUIRED_SCREENS = {
     "study-activity",
 }
 
-REQUIRED_FRONTEND_PATHS = [
-    "/students",
-    "/message-requests",
-    "/chats/${req.conversation_id}/${action}-request",
-]
+REQUIRED_FRONTEND_CONTRACTS = {
+    "frontend/src/screens/explore/ExploreScreen.tsx": (
+        "/students",
+    ),
+    "frontend/src/crypto/WhatsAppChatExperience.tsx": (
+        "api<{ chats: ChatSummary[] }>('/chats')",
+        "`/chats/${chat.id}`",
+    ),
+    "frontend/src/screens/chat/ChatDetailScreen.tsx": (
+        "`/chats/${conversationId}`",
+        "`/chats/${conversationId}/messages`",
+    ),
+}
 
 REQUIRED_BACKEND_ROUTE_ANCHORS = [
     '@app.get("/students")',
@@ -63,11 +71,22 @@ if missing_screens:
         + ", ".join(missing_screens)
     )
 
-missing_frontend = [path for path in REQUIRED_FRONTEND_PATHS if path not in frontend]
+missing_frontend = []
+for relative_path, markers in REQUIRED_FRONTEND_CONTRACTS.items():
+    source_path = ROOT / relative_path
+    if not source_path.exists():
+        missing_frontend.append(f"{relative_path} (module missing)")
+        continue
+    source = source_path.read_text(encoding="utf-8")
+    missing_frontend.extend(
+        f"{relative_path}: {marker}"
+        for marker in markers
+        if marker not in source
+    )
 if missing_frontend:
     raise SystemExit(
-        "STUDENT_SCREEN_CONTRACT_FAILED: frontend missing critical path(s): "
-        + ", ".join(missing_frontend)
+        "STUDENT_SCREEN_CONTRACT_FAILED: frontend missing active module contract(s): "
+        + "; ".join(missing_frontend)
     )
 
 missing_backend = [
@@ -95,6 +114,5 @@ for anchor in required_security_anchors:
 
 print("STUDENT_SCREEN_CONTRACT_PASSED")
 print(f" - required student screens: {len(REQUIRED_SCREENS)}")
-print(" - Explore student directory contract: present")
-print(" - Message request list/accept/decline contract: present")
-print(" - Pending recipient isolation: present")
+print(" - Explore student directory and active chat list/detail contracts: present")
+print(" - Message-request backend routes and pending recipient isolation: present")

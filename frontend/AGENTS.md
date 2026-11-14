@@ -32,6 +32,8 @@ Focused frontend source-transform tests are run in CI from the repository root:
 python -m pytest -q \
   tests/test_generation_ui_build_contract.py \
   tests/test_frontend_module_extraction_contract.py \
+  tests/test_publish_library_transform_module.py \
+  tests/test_subscription_screens_module_contract.py \
   tests/test_document_study_progress_transform.py \
   tests/test_frontend_ambassador_module_contract.py
 ```
@@ -53,6 +55,11 @@ python -m pytest -q \
 - `src/screens/gamification/AchievementsScreen.tsx` and `src/types/achievements.ts` - achievement list/progress UI and its typed response contract.
 - `src/screens/gamification/ProgressScreens.tsx`, `src/types/gamification.ts`, and `src/lib/studyTime.ts` - XP progress history/pagination, its response contract, and the shared study-time formatter used by Profile. The `study-streak` and `time-studied` routes currently render `StudyActivityScreen`; older inline declarations are not the active route targets and must not be wired in as part of extraction.
 - `src/screens/study/StudyMaterialsScreen.tsx` - My Study document/material lists, offline IndexedDB integration, saved Library items, and replay navigation. Its app-shell UI and last-study callback are explicit props; it must not import `App.tsx`.
+- `src/screens/library/LibraryScreen.tsx` - Library browse, saved items, published submissions, filtering, reporting, and navigation. Preserve its API/CSRF behavior, optimistic save state, offline save integration, and injected app-shell feedback components.
+- `src/screens/library/PublishLibraryScreen.tsx` - publish-to-Library wizard. App.tsx injects the existing EmptyState, active document ID, and route callback. Preserve ready-document eligibility, title/description validation, rights confirmation, CSRF-protected publish payload, and current route destinations. The academic-context UX prebuild transform in tools/apply_library_publish_context_ux.py must target this module and remain idempotent.
+- `src/screens/billing/SubscriptionScreens.tsx` - student subscription plans, hosted checkout handoff, payment success/failure, and payment history. Keep selectedPlan lifted in App.tsx; inject ErrorState/EmptyState and preserve all existing API, CSRF, redirect, retry-guard, pending-status and timer behavior. Do not initiate provider charges in tests.
+- `src/types/billing.ts` - shared subscription plan/status and payment-history response contracts.
+- `src/lib/paymentStatus.ts` - neutral payment status presentation metadata shared by student billing and AdminPlatform; AdminPlatform re-exports the existing constant for compatibility.
 - `src/screens/podcast/PodcastLibraryScreen.tsx` - Podcast Library list, API loading, session cache, and navigation to the player.
 - `src/types/podcast.ts` - shared podcast item type and Home/Library presentation helpers.
 - `src/ui/Pill.tsx` - shared status pill component.

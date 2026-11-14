@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
     paths:
+      - '**/*.py'
+      - 'frontend/**'
+      - 'Dockerfile'
+      - 'docker-compose.vps.yml'
+      - 'requirements*.txt'
       - 'scripts/backup_postgres.py'
       - 'scripts/test_existing_database_migration.py'
       - 'alembic/**'
@@ -12,6 +17,11 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - '**/*.py'
+      - 'frontend/**'
+      - 'Dockerfile'
+      - 'docker-compose.vps.yml'
+      - 'requirements*.txt'
       - 'scripts/backup_postgres.py'
       - 'scripts/test_existing_database_migration.py'
       - 'alembic/**'

@@ -10,10 +10,15 @@ APP_SOURCE = (ROOT / "app.py").read_text(encoding="utf-8")
 RUNTIME_SOURCE = (ROOT / "db_runtime.py").read_text(encoding="utf-8")
 
 
-def test_application_keeps_legacy_app_db_exports_through_shared_extensions():
-    assert "from extensions import db, init_extensions" in APP_SOURCE
-    assert "init_extensions(app)" in APP_SOURCE
+def test_application_keeps_legacy_app_db_exports_through_factory_and_shared_extensions():
+    factory_source = (ROOT / "app_factory.py").read_text(encoding="utf-8")
+    assert "from app_factory import create_app" in APP_SOURCE
+    assert "app, limiter = create_app()" in APP_SOURCE
+    assert "from extensions import db" in APP_SOURCE
+    assert "init_extensions(app)" not in APP_SOURCE
     assert "db = SQLAlchemy(app)" not in APP_SOURCE
+    assert "def create_app()" in factory_source
+    assert "init_extensions(app)" in factory_source
     assert "from db_runtime import configure_sqlalchemy_runtime" not in APP_SOURCE
 
 
