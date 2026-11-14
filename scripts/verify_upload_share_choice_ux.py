@@ -1,38 +1,53 @@
 from pathlib import Path
 
-s = Path("frontend/src/App.tsx").read_text()
+root = Path(__file__).resolve().parents[1]
+app = (root / "frontend/src/App.tsx").read_text(encoding="utf-8")
+upload = (root / "frontend/src/screens/upload/UploadFlowScreens.tsx").read_text(encoding="utf-8")
+publish = (root / "frontend/src/screens/library/PublishLibraryScreen.tsx").read_text(encoding="utf-8")
 
-required = [
+required_app = [
     "| 'upload-share-choice'",
-    "setScreen('upload-share-choice')",
-    'function UploadShareChoiceScreen({ setScreen, activeDocumentId }',
-    'Share to Prepza Library',
+    "import { UploadScreen, UploadShareChoiceScreen, ProcessingScreen } from './screens/upload/UploadFlowScreens'",
+    "import PublishLibraryScreen from './screens/library/PublishLibraryScreen'",
+    "case 'upload':",
     "case 'upload-share-choice':",
-    "function PublishLibraryScreen({ setScreen, activeDocumentId }",
+    "case 'processing':",
+    "case 'publish-library':   return <PublishLibraryScreen setScreen={setScreen} activeDocumentId={activeDocumentId} EmptyState={EmptyState} />",
+]
+for anchor in required_app:
+    if anchor not in app:
+        raise SystemExit(f"missing app-shell upload/publish anchor: {anchor}")
+
+required_upload = [
+    "export function UploadScreen(",
+    "export function UploadShareChoiceScreen(",
+    "export function ProcessingScreen(",
+    "setActiveDocumentId(created.document_id)",
+    "setScreen('upload-share-choice')",
+    "setScreen('publish-library')",
+]
+for anchor in required_upload:
+    if anchor not in upload:
+        raise SystemExit(f"missing upload-flow module anchor: {anchor}")
+
+required_publish = [
+    "export default function PublishLibraryScreen(",
     "setSelectedDocId(uploaded.id)",
     "setTitle(uploaded.title)",
-    "case 'publish-library':   return <PublishLibraryScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />",
+    "d.status === 'ready' || d.id === activeDocumentId",
+    "const canProceed1 = selectedDocId != null && title.trim().length > 0 && selectedDoc?.status === 'ready'",
+    "api('/library/publish'",
+    "'X-CSRF-Token': csrfToken",
 ]
-for anchor in required:
-    if anchor not in s:
-        raise SystemExit(f"missing upload/share UX anchor: {anchor}")
+for anchor in required_publish:
+    if anchor not in publish:
+        raise SystemExit(f"missing PublishLibrary module anchor: {anchor}")
 
-if s.count("| 'upload-share-choice'") != 1:
-    raise SystemExit("upload-share-choice screen union member is duplicated")
+if app.count("case 'upload-share-choice':") != 1:
+    raise SystemExit("upload-share-choice route is duplicated")
+if app.count("case 'publish-library':") != 1:
+    raise SystemExit("publish-library route is duplicated")
+if "function PublishLibraryScreen(" in app:
+    raise SystemExit("PublishLibraryScreen is still declared inside App.tsx")
 
-if s.count("case 'upload-share-choice':") != 1:
-    raise SystemExit("upload-share-choice render case is duplicated")
-
-if "setActiveDocumentId(created.document_id)\n      setScreen('processing')" in s:
-    raise SystemExit("upload still bypasses the explicit post-upload choice")
-
-if "setScreen('publish-library')" not in s:
-    raise SystemExit("share choice does not open the Library publishing flow")
-
-if "d.status === 'ready' || d.id === activeDocumentId" not in s:
-    raise SystemExit("publish flow does not retain the uploaded document while it prepares")
-
-if "const canProceed1 = selectedDocId != null && title.trim().length > 0 && selectedDoc?.status === 'ready'" not in s:
-    raise SystemExit("publish flow could submit a document before it is ready")
-
-print("post-upload StudyHub/Library choice and document binding anchors verified")
+print("upload, post-upload choice, and PublishLibrary module ownership verified")
