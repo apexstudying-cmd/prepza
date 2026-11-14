@@ -1,7 +1,7 @@
 # Prepza — Persistent Engineering Execution Tracker
 
 Last updated: 2026-11-14
-Branch: `refactor/architecture-boundaries-2026-11`; consolidated PR #79 remains draft at candidate head `8a78cd0e6ae87e8a08c3739b5aca50f9dbe493fd`, based on main `02fcdfb12ab065d6613b08bd82d031cc3bb109ea`. Frontend Build [43583027683](https://github.com/apexstudying-cmd/prepza/actions/runs/43583027683) passed on this candidate; full Release Browser [43583027599](https://github.com/apexstudying-cmd/prepza/actions/runs/43583027599) is pending. PR #79 has not been merged.
+Branch: `refactor/architecture-boundaries-2026-11`; consolidated PR #79 remains draft at latest documentation head `d6a8174f237af2840498a4ee21959b709ae538d0` (latest application-code head `8a78cd0e6ae87e8a08c3739b5aca50f9dbe493fd`), based on main `02fcdfb12ab065d6613b08bd82d031cc3bb109ea`. Frontend Build [43583027683](https://github.com/apexstudying-cmd/prepza/actions/runs/43583027683) passed on this candidate; full Release Browser [43583027599](https://github.com/apexstudying-cmd/prepza/actions/runs/43583027599) is pending. PR #79 has not been merged.
 
 Status:
 - [x] completed/verified
@@ -1004,4 +1004,4 @@ The active prebuild transformer tools/apply_library_publish_context_ux.py now ta
 - Full Release Browser/Cross-System Regression [43583027599](https://github.com/apexstudying-cmd/prepza/actions/runs/43583027599) was still queued when this note was written. Do not claim full browser verification for PublishLibrary until it completes.
 - PR #79 remains draft and unmerged. No deployment, production database change, live payment, new paid service or billable GPU work was performed.
 
-Next architecture boundary: Subscription/Payment screens, followed by backend route/service/model groups. Keep the overall release status separate; release remains BLOCKED by provider, retrieval/citation, monitoring, B2B viewability, Home/PWA and deployment gates.
+Next architecture boundary: Subscription/Payment screens; see the [Subscription and payment extraction map](architecture/SUBSCRIPTION_PAYMENT_EXTRACTION_MAP.md). Then continue with backend route/service/model groups. Keep the overall release status separate; release remains BLOCKED by provider, retrieval/citation, monitoring, B2B viewability, Home/PWA and deployment gates.
