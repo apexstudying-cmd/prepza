@@ -57,7 +57,9 @@ def test_notification_route_module_keeps_response_serialization_ordering_and_aut
         'return jsonify({"message": "Notification deleted"})',
     ):
         assert contract in source
-    assert source.count("@require_csrf") == 3
+    feed_routes, preference_routes = source.split("def register_notification_preference_routes(", 1)
+    assert feed_routes.count("@require_csrf") == 3
+    assert preference_routes.count("@require_csrf") == 3
 
 
 def test_notification_preference_helpers_remain_in_app_for_existing_callers():
