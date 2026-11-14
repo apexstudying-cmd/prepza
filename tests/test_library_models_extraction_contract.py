@@ -42,5 +42,9 @@ def test_library_prebuild_transforms_follow_the_extracted_model_owner():
     eligibility = (root / "tools" / "apply_library_exact_academic_eligibility.py").read_text(encoding="utf-8")
     assert 'LIBRARY_MODELS = ROOT / "library_models.py"' in academic
     assert 'library_model_text = LIBRARY_MODELS.read_text(encoding="utf-8")' in academic
+    assert 'LIBRARY_ROUTES = ROOT / "library_routes.py"' in academic
+    assert 'text = LIBRARY_ROUTES.read_text(encoding="utf-8")' in academic
     assert 'LIBRARY_MODELS = ROOT / "library_models.py"' in eligibility
     assert 'library_model = LIBRARY_MODELS.read_text(encoding="utf-8")' in eligibility
+    assert 'LIBRARY_ROUTES = ROOT / "library_routes.py"' in eligibility
+    assert 'route_text = LIBRARY_ROUTES.read_text(encoding="utf-8")' in eligibility

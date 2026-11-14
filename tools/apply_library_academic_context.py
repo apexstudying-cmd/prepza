@@ -1,13 +1,13 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-APP = ROOT / "app.py"
+LIBRARY_ROUTES = ROOT / "library_routes.py"
 LIBRARY_MODELS = ROOT / "library_models.py"
-text = APP.read_text(encoding="utf-8")
+text = LIBRARY_ROUTES.read_text(encoding="utf-8")
 library_model_text = LIBRARY_MODELS.read_text(encoding="utf-8")
 
 # The ORM model now belongs to library_models.py; route handlers remain in
-# app.py. Apply the schema transformation only when the legacy Unit field is
+# library_routes.py. Apply the schema transformation only when the legacy Unit field is
 # still present, but always continue with route transformations below.
 if all(token in library_model_text for token in (
     "university_id = db.Column",
@@ -141,6 +141,6 @@ replace_once_or_skip(
     ),
 )
 
-APP.write_text(text, encoding="utf-8")
+LIBRARY_ROUTES.write_text(text, encoding="utf-8")
 LIBRARY_MODELS.write_text(library_model_text, encoding="utf-8")
 print("Applied Library academic-context patch successfully.")

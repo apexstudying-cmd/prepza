@@ -45,7 +45,7 @@ def test_library_academic_context_transform_accepts_extracted_canonical_state_an
     import sys
 
     (tmp_path / "tools").mkdir()
-    for relative in ("app.py", "library_models.py", "tools/apply_library_academic_context.py"):
+    for relative in ("app.py", "library_routes.py", "library_models.py", "tools/apply_library_academic_context.py"):
         source = ROOT / relative
         target = tmp_path / relative
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -53,6 +53,7 @@ def test_library_academic_context_transform_accepts_extracted_canonical_state_an
 
     script = tmp_path / "tools" / "apply_library_academic_context.py"
     app = tmp_path / "app.py"
+    library_routes = tmp_path / "library_routes.py"
 
     first = subprocess.run(
         [sys.executable, str(script)],
@@ -63,8 +64,8 @@ def test_library_academic_context_transform_accepts_extracted_canonical_state_an
     )
     assert first.returncode == 0, first.stdout + first.stderr
 
-    transformed = app.read_text(encoding="utf-8")
-    browse = transformed.split("def browse_library():", 1)[1].split("\n@app.route", 1)[0]
+    transformed = library_routes.read_text(encoding="utf-8")
+    browse = transformed.split("def browse_library():", 1)[1].split("\n    @app.route", 1)[0]
     assert "viewer = db.session.get(User, user_id)" in browse
     assert "relevance_order = []" in browse
     assert "query.order_by(*relevance_order, order_col)" in browse
@@ -77,7 +78,7 @@ def test_library_academic_context_transform_accepts_extracted_canonical_state_an
         check=False,
     )
     assert second.returncode == 0, second.stdout + second.stderr
-    assert app.read_text(encoding="utf-8") == transformed
+    assert library_routes.read_text(encoding="utf-8") == transformed
 
 
 def test_admin_platform_is_owned_by_a_dedicated_admin_module_without_changing_route_keys():
