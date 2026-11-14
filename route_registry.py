@@ -190,3 +190,9 @@ def register_social_follow_routes(app: Any, db: Any, **dependencies: Any) -> Non
     from social_follow_routes import register_social_follow_routes as register
 
     register(app, db, **dependencies)
+
+def register_group_routes(app: Any, db: Any, **dependencies: Any) -> None:
+    """Register study-group feature routes."""
+    from group_routes import register_group_routes as register
+
+    register(app, db, **dependencies)
