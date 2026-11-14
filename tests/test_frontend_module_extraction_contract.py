@@ -660,8 +660,12 @@ def test_publish_library_screen_is_owned_by_its_feature_module():
 
 
 def test_publish_library_screen_preserves_document_eligibility_rights_and_submission_contract():
-    # The current screen remains inline in App.tsx; assert its real implementation
-    # contracts without pretending the future extraction has happened.
+    assert "case 'publish-library':" in APP
+    assert "EmptyState={EmptyState}" in APP
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "library" /
+        "PublishLibraryScreen.tsx"
+    ).read_text(encoding="utf-8")
     for contract in (
         "api<{ csrf_token: string }>('/me')",
         "api<{ documents:",
@@ -677,10 +681,10 @@ def test_publish_library_screen_preserves_document_eligibility_rights_and_submis
         "setScreen('upload')",
         "setScreen('home')",
         "setScreen('library')",
-        "type PublishableDoc",
+        "import type { PublishableDoc } from '../../types/library'",
         "EmptyState",
     ):
-        assert contract in APP
+        assert contract in source
 
 
 
