@@ -2413,3 +2413,22 @@ Release Browser run [43566068845](https://github.com/apexstudying-cmd/prepza/act
 The same intermediate run measured the Admin Platform floating control bottom at 776px and primary navigation top at 782.5px: a 6.5px gap failed the 8px clearance assertion. `frontend/src/navigation/AppShell.tsx` now positions the existing control at `calc(76px + env(safe-area-inset-bottom, 0px))`; the final exact-head browser run passed. The five navigation items and admin visibility rule were not changed.
 
 The PostgreSQL rehearsal workflow now triggers for `**/*.py`, `frontend/**`, Dockerfile, Compose, requirements, Alembic/schema and workflow changes. This prevents a frontend candidate from missing the exact-SHA database/restore rehearsal. Both backup jobs passed on `edcfad751e4f3774e297219ecbb4c22cc31ef854` in [43566535421](https://github.com/apexstudying-cmd/prepza/actions/runs/43566535421).
+
+
+## 2026-11-14 — Upload flow extraction and contract ownership
+
+The connected active Upload flow was extracted as one feature boundary in the existing consolidated PR #79. App.tsx remains the route and active-document state owner. UploadFlowScreens.tsx owns the existing Upload, post-upload choice and Processing components, with the app's TopBar injected as a typed component prop. The screen bodies were moved without redesigning their state, effects, API calls, retry behavior, JSX or route transitions.
+
+The dependency split is explicit:
+- frontend/src/lib/fileUtils.ts owns the existing extension parser and SHA-256 helper.
+- frontend/src/screens/upload/uploadConfig.ts owns the same eight accepted upload extensions, 50 MiB document limit, 20 MiB chat attachment limit and JPG/JPEG/PNG image types.
+- ChatDetail and ChatOptions continue to receive the same shared helpers/limits from the app shell.
+- AppShell no-nav rules, route union, Quick Actions and bottom navigation are unchanged.
+
+The preservation contract covers the signed-in /me/CSRF request, document registration payload, signed storage PUT, one retry only for a 409 confirmation response after 1.5 seconds, duplicate registration path, local-first offline File persistence, explicit private-by-default Library choice, 2.5-second Processing poll, terminal states and timer cleanup.
+
+The first Frontend Build attempt after extraction exposed a real source-ownership assumption: scripts/test_morio_identity_contract.py counted the Processing screen's canonical /icon-192.png mark inside App.tsx. Once the component moved, that source count fell even though the image was still present in the active React screen. The contract was corrected to count the new UploadFlowScreens owner while retaining the original minimum count. This is a test-owner retarget, not a weakened assertion. Final Frontend Build [43570716681](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716681) passed 179 source/transform tests, 5 offline Library tests, audits, TypeScript, service-worker validation and production build.
+
+Exact candidate c494d147393035ac40bc8875f62d1ff6339c477a also passed Release Browser [43570716679](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716679) and PostgreSQL Backup Restore [43570716644](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716644). The release job passed 99 PostgreSQL tests, Shop buyer/seller/admin, B2B, responsive phone/tablet, online/offline Study Hub and generated-artifact replay; the backup job passed populated-database upgrade and PostgreSQL 17 restore. StudyHub Library Flow was skipped by path condition and is not counted as a pass.
+
+Current sizes are App.tsx 2,780 lines and app.py 8,791 lines. The next frontend boundary is PublishLibrary, but its active prebuild transformer still targets App.tsx. Retarget that transformer and add preservation/idempotency tests before moving the screen. Remaining backend route groups and external release blockers mean Prepza is not launch-ready.

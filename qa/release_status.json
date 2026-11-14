@@ -1,14 +1,14 @@
 {
   "version": 1,
   "last_verified_date": "2026-11-14",
-  "last_verified_commit": "edcfad751e4f3774e297219ecbb4c22cc31ef854",
+  "last_verified_commit": "c494d147393035ac40bc8875f62d1ff6339c477a",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
     {
       "id": "database_alembic",
       "status": "PASS",
-      "evidence": "PASS on exact PR #79 candidate edcfad751e4f3774e297219ecbb4c22cc31ef854: Release Browser run 43566535290 built the production image, started disposable PostgreSQL 17/Redis, applied Alembic migrations and exercised the controlled SQL migration ledger."
+      "evidence": "PASS on exact candidate c494d147393035ac40bc8875f62d1ff6339c477a: Release Browser [43570716679](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716679) built the production image, started disposable PostgreSQL 17/Redis, applied Alembic migrations and exercised the controlled SQL migration ledger."
     },
     {
       "id": "authentication_session_csrf",
@@ -68,42 +68,42 @@
     {
       "id": "mobile_responsive_visual",
       "status": "PASS",
-      "evidence": "PASS on exact candidate edcfad751e4f3774e297219ecbb4c22cc31ef854, Release Browser 43566535290: phone-small 360x800, phone-standard 390x844 and tablet-portrait 768x1024 passed. Screenshot artifact 14102507070 (17 images) was reviewed for Home/Shop phone, Shop tablet, buyer message, seller listing and admin moderation. The Admin Platform floating control now clears the five-item bottom navigation and its browser assertion passes."
+      "evidence": "PASS on exact candidate c494d147393035ac40bc8875f62d1ff6339c477a, Release Browser [43570716679](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716679): phone-small 360x800, phone-standard 390x844 and tablet-portrait 768x1024 browser checks passed. Screenshot artifact [14103724866](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716679/artifacts/14103724866) was captured. Shop source is unchanged since the prior reviewed 17-image artifact [14102507070](https://github.com/apexstudying-cmd/prepza/actions/runs/43566535290/artifacts/14102507070), which covered Home/Shop phone, Shop tablet, buyer, seller and admin states."
     },
     {
       "id": "storage_backup_restore",
       "status": "PASS",
-      "evidence": "PASS on exact candidate edcfad751e4f3774e297219ecbb4c22cc31ef854: PostgreSQL Backup Restore Rehearsal run 43566535421 passed both existing-database upgrade/data preservation and PostgreSQL 17 custom-format backup/restore. The restored database matched Alembic state, public-table count and sentinel data; the application smoke-tested against restored data."
+      "evidence": "PASS on exact candidate c494d147393035ac40bc8875f62d1ff6339c477a: PostgreSQL Backup Restore Rehearsal [43570716644](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716644) passed both existing-database upgrade/data-preservation and PostgreSQL 17 custom-format backup/restore jobs. The restored database matched Alembic state, public-table count and sentinel data; the application smoke-tested against restored data."
     },
     {
       "id": "cross_system_journeys",
       "status": "PASS",
-      "evidence": "PASS on exact candidate edcfad751e4f3774e297219ecbb4c22cc31ef854, Release Browser 43566535290: Shop buyer browse/detail/save/report/direct-contact and encrypted in-app message; seller My Listings/pause/sold/paid listing form; admin approve/reject/report/payment review; B2B browser-to-ledger; 99 disposable PostgreSQL QA tests; online/offline Study Hub and generated-artifact replay all passed. Disposable services were cleaned up."
+      "evidence": "PASS on exact candidate c494d147393035ac40bc8875f62d1ff6339c477a, Release Browser [43570716679](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716679): Shop buyer/seller/admin journeys, B2B browser-to-ledger metering, 99 disposable PostgreSQL QA tests, responsive phone/tablet checks, online/offline Study Hub and generated-artifact replay all passed. Disposable services were cleaned up."
     },
     {
       "id": "ci_release_workflows",
       "status": "PASS",
-      "evidence": "PASS on exact PR #79 candidate edcfad751e4f3774e297219ecbb4c22cc31ef854: all 17 triggered workflows succeeded — Release Browser 43566535290, PostgreSQL Backup Restore 43566535421, Frontend Build 43566535402, Study Hub Runtime 43566535284, AI Economics 43566535360, Kokoro 43566535416, Admin Route 43566535271, Prepza Control API 43566535408, Backend Academic Catalog 43566535266, B2B Contract 43566535336, E2EE Security 43566535409, AI Generation 43566535269, E2EE Chat 43566535333, Student Frontend 43566535280, Backend Shared Extension 43566535270, Study Navigation 43566535264 and Student Contract 43566535275. StudyHub Library Flow 43566535404 was SKIPPED by path condition and is not counted as passing."
+      "evidence": "PASS on exact candidate c494d147393035ac40bc8875f62d1ff6339c477a: all 17 triggered workflows succeeded — Release Browser 43570716679, PostgreSQL Backup Restore 43570716644, Frontend Build 43570716681, Study Hub Runtime 43570716706, AI Economics 43570716647, Kokoro 43570716735, Admin Route 43570716672, Prepza Control API 43570716834, Backend Academic Catalog 43570716768, B2B Contract 43570716791, E2EE Security 43570716703, AI Generation 43570716695, E2EE Chat 43570716700, Student Frontend 43570716655, Student Contract 43570716719, Backend Shared Extension 43570716698 and Study Navigation 43570716671. StudyHub Library Flow [43570716663](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716663) was SKIPPED by path condition and is not counted as a pass."
     },
     {
       "id": "existing_database_migration",
       "status": "PASS",
-      "evidence": "PASS on exact candidate edcfad751e4f3774e297219ecbb4c22cc31ef854 in run 43566535421: a representative prior database at 20261005_chat_attach_source_doc was seeded with document/material data, upgraded to 20261030_shared_study_streak, and verified to preserve the document/material while adding nullable material FK, Shop payment-review schema and shared-streak tables. Disposable CI only."
+      "evidence": "PASS on exact candidate c494d147393035ac40bc8875f62d1ff6339c477a, run [43570716644](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716644): a representative prior-revision database with seeded document/material data upgraded to Alembic head without losing the seeded rows; Shop/streak schema and relationships were verified. Disposable CI only."
     },
     {
       "id": "clean_full_regression",
       "status": "PASS",
-      "evidence": "PASS on one exact SHA edcfad751e4f3774e297219ecbb4c22cc31ef854: Release Browser 43566535290 and PostgreSQL Backup Restore 43566535421 both checked out and asserted this exact SHA. Release Browser passed production image, Alembic/SQL ledger, phone/tablet, Shop buyer/seller/admin, B2B browser-to-ledger, 99 PostgreSQL QA tests, online/offline Study Hub and generated-artifact/podcast replay. No production system was touched."
+      "evidence": "PASS on one exact SHA c494d147393035ac40bc8875f62d1ff6339c477a: Release Browser [43570716679](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716679) and PostgreSQL Backup Restore [43570716644](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716644) both checked out and asserted this exact SHA. Browser, Shop roles, B2B, 99 PostgreSQL tests, online/offline artifacts, existing-database upgrade and PostgreSQL 17 backup/restore all passed. No production system was touched."
     },
     {
       "id": "b2b_monetization_integrity",
       "status": "IN_PROGRESS",
-      "evidence": "IN_PROGRESS: exact candidate edcfad751e4f3774e297219ecbb4c22cc31ef854, Release Browser 43566535290 passed B2B browser-to-ledger checks for offscreen/offline no-billing, fresh visibility, lost-response UUID retry, rapid-click debounce, duplicate-click idempotency and report reconciliation. The backend still cannot independently prove the client's 50%-visible/1.5-second dwell condition; do not claim tamper-proof viewability or CPA/conversion billing."
+      "evidence": "IN_PROGRESS on exact candidate c494d147393035ac40bc8875f62d1ff6339c477a: Release Browser [43570716679](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716679) passed B2B browser-to-ledger checks, including offscreen/offline no-billing, fresh visibility, lost-response UUID retry, rapid-click debounce, duplicate-click idempotency and report reconciliation. The backend still cannot independently prove the client's 50%-visible/1.5-second dwell condition; do not claim tamper-proof viewability or CPA/conversion billing."
     },
     {
       "id": "shop_marketplace",
       "status": "IN_PROGRESS",
-      "evidence": "IN_PROGRESS: exact candidate edcfad751e4f3774e297219ecbb4c22cc31ef854, Release Browser 43566535290 passed buyer browse/detail/save/report/contact and encrypted in-app message, seller My Listings/pause/sold/KES 100 paid listing form, and admin approve/reject/report/payment review. Screenshot artifact 14102507070 was reviewed; Admin Platform control no longer overlaps the five-item navigation. The classifieds model is unchanged. Real Paystack sandbox checkout/webhooks and R2 object/header operations remain NOT_TESTED pending safe staging evidence."
+      "evidence": "IN_PROGRESS on exact candidate c494d147393035ac40bc8875f62d1ff6339c477a: Release Browser [43570716679](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716679) passed buyer browse/detail/save/report/contact and encrypted in-app message; seller My Listings/pause/sold/KES 100 paid listing form; admin approve/reject/report/payment review. Existing visual review artifact [14102507070](https://github.com/apexstudying-cmd/prepza/actions/runs/43566535290/artifacts/14102507070) covers phone/tablet buyer/seller/admin. The classifieds model is unchanged. Real Paystack sandbox checkout/webhooks and R2 object/header operations remain NOT_TESTED pending safe staging evidence."
     },
     {
       "id": "payment_recovery_idempotency",
@@ -123,7 +123,7 @@
     {
       "id": "documentation_audit",
       "status": "IN_PROGRESS",
-      "evidence": "IN_PROGRESS: 14 November evidence sync records exact candidate edcfad751e4f3774e297219ecbb4c22cc31ef854, same-SHA migration/backup/restore and Release Browser results, Shop E2EE fixture setup and Admin Platform clearance. Broader audit remains open for staging/provider evidence, page-text/citation, external monitoring, B2B viewability and remaining architecture boundaries."
+      "evidence": "IN_PROGRESS: the exact candidate c494d147393035ac40bc8875f62d1ff6339c477a verification, upload-flow extraction, release tracker and architecture/QA notes are synchronized in this update. Broader audit remains open for provider/staging evidence, page-text/index invalidation and human citation review, external monitoring/request-ID delivery, B2B viewability, Home/PWA review and remaining frontend/backend boundaries."
     },
     {
       "id": "vps_or_render_deployment",
@@ -133,7 +133,7 @@
     {
       "id": "browser_study_hub_offline_content_artifacts",
       "status": "PASS",
-      "evidence": "PASS on exact candidate edcfad751e4f3774e297219ecbb4c22cc31ef854, Release Browser 43566535290: local-first PDF Blob, Study Hub visible/hidden/inactivity/podcast lifecycle, offline time/reconnect reconciliation, three-document/five-material cache, no offline generation POSTs, multiple-document replay and cached podcast audio Blob survived reload."
+      "evidence": "PASS on exact candidate c494d147393035ac40bc8875f62d1ff6339c477a, Release Browser [43570716679](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716679): offline Study Hub lifecycle and generated-artifact replay passed; the job explicitly recovered offline emulation after a service-worker reload and confirmed artifact replay made no generation POST requests."
     },
     {
       "id": "admin_study_time_visibility",

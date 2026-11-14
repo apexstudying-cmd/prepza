@@ -1,8 +1,8 @@
 # Upload flow extraction map
 
-**Snapshot:** 14 November 2026, consolidated candidate PR [#79](https://github.com/apexstudying-cmd/prepza/pull/79); implementation follows the pre-extraction characterization commit `dd86446263612f9a41ce56c481785dd25b395c14`.
+**Snapshot:** 14 November 2026, consolidated candidate PR [#79](https://github.com/apexstudying-cmd/prepza/pull/79); exact verified code head `c494d147393035ac40bc8875f62d1ff6339c477a`.
 
-**Status:** the three active screens are extracted together into `frontend/src/screens/upload/UploadFlowScreens.tsx`; exact-head CI verification is pending. The app remains the route/state owner and injects its existing TopBar. This document does not claim launch certification.
+**Status:** the three active screens are extracted together into `frontend/src/screens/upload/UploadFlowScreens.tsx`; exact-head Frontend Build, Release Browser and PostgreSQL backup/restore all PASS on `c494d147393035ac40bc8875f62d1ff6339c477a`. The app remains the route/state owner and injects its existing TopBar. This does not claim launch certification.
 
 ## Active runtime ownership
 
@@ -66,13 +66,13 @@ The current UploadScreen also receives file helpers/constants that are shared wi
 
 Target module applied: `frontend/src/screens/upload/UploadFlowScreens.tsx`, with named exports for the three existing screens. Shared file helpers now live in `frontend/src/lib/fileUtils.ts`; upload/chat attachment limits and image types live in `frontend/src/screens/upload/uploadConfig.ts`.
 
-1. Move the existing component bodies without rewriting their state, effects, API calls, retry logic, JSX or route transitions.
-2. Keep screen and activeDocumentId state in the app-navigation owner and pass only the existing explicit props.
-3. Resolve app-local dependencies explicitly: pass or extract the existing TopBar; keep the file helper/constants shared with ChatDetail; import the existing API, theme, document type and offline persistence modules directly where appropriate.
-4. Do not import App.tsx from the feature module.
-5. Keep AppShell.noNav, the Screen union, route IDs, Home Quick Actions and bottom navigation unchanged.
-6. Retarget only transformers that actually own the moved source. Keep the active Library publishing transformer on PublishLibraryScreen until that separate screen is extracted.
-7. Compare the moved component bodies against the pre-extraction source after normalizing only exports, imports and prop declarations.
+1. Moved the existing component bodies without rewriting their state, effects, API calls, retry logic, JSX or route transitions.
+2. Kept screen and activeDocumentId state in the app-navigation owner and passed only explicit props.
+3. Injected the existing TopBar; moved shared file helpers/constants into shared modules used by ChatDetail and ChatOptions; imported the existing API, theme, document type and offline persistence modules directly.
+4. Kept App.tsx out of the feature module.
+5. Kept AppShell.noNav, the Screen union, route IDs, Home Quick Actions and bottom navigation unchanged.
+6. Left the active Library publishing transformer on PublishLibraryScreen for the separate upcoming extraction.
+7. Added module-owner, helper-owner and route-prop assertions; the existing screen logic was moved without behavioral edits.
 
 ## Verification contract
 
@@ -87,11 +87,11 @@ tests/test_upload_flow_module_contract.py is a characterization suite that accep
 
 The test is included in the Frontend Build workflow. Because the pull-request workflow paths include tests/** and the backup/restore workflow paths include **/*.py, this test-only candidate update also exercises the full responsive/cross-system release workflow and the PostgreSQL upgrade/backup/restore rehearsal on the exact new SHA.
 
-No API, authorization, upload limit, navigation, business rule, production data or provider behavior is changed by this pre-extraction step.
+No API, authorization, upload limit, navigation, business rule, production data or provider behavior was changed by this extraction.
 
 
 ## Candidate verification state
 
 The extraction preserves the moved component bodies' state/effects, API calls, upload confirmation retry, local-first File persistence, private-by-default choice, processing poll cadence/cleanup, route IDs and AppShell navigation policy. The existing app-local TopBar is injected as a typed component prop rather than imported from App.tsx.
 
-Frontend Build, Release Browser and PostgreSQL backup/restore must pass on the exact post-extraction commit before this boundary is marked verified. Until those run results are inspected, exact-head verification is **NOT_TESTED**.
+**PASS on exact code head c494d147393035ac40bc8875f62d1ff6339c477a.** Frontend Build [43570716681](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716681) passed 179 source/transform tests, 5 offline Library tests, functional/schema audits, TypeScript, service-worker validation and production build. Release Browser [43570716679](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716679) passed responsive, Shop buyer/seller/admin, B2B, 99 PostgreSQL QA, online/offline and generated-artifact journeys. PostgreSQL Backup Restore [43570716644](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716644) passed both existing-database upgrade and PostgreSQL 17 restore jobs.
