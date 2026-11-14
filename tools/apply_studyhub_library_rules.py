@@ -117,14 +117,30 @@ def apply_rules(source: str) -> str:
     return apply_library_route_rules(apply_app_rules(source))
 
 
+def split_library_route_source(source: str) -> tuple[str, str]:
+    marker = "    @app.route("
+    start = source.find(marker)
+    if start < 0:
+        raise RuntimeError("Extracted Library route registration block was not found")
+    prefix = source[:start]
+    body = "\\n".join(line[4:] if line.startswith("    ") else line for line in source[start:].splitlines())
+    return prefix, body
+
+
+def restore_library_route_source(prefix: str, body: str) -> str:
+    indented = "\\n".join(("    " + line) if line else "" for line in body.splitlines())
+    return prefix + indented + "\\n"
+
+
 if __name__ == "__main__":
     app_text = APP.read_text(encoding="utf-8")
-    route_text = LIBRARY_ROUTES.read_text(encoding="utf-8")
+    route_source = LIBRARY_ROUTES.read_text(encoding="utf-8")
+    route_prefix, route_text = split_library_route_source(route_source)
     updated_app = apply_app_rules(app_text)
     updated_routes = apply_library_route_rules(route_text)
     if updated_app != app_text or updated_routes != route_text:
         APP.write_text(updated_app, encoding="utf-8")
-        LIBRARY_ROUTES.write_text(updated_routes, encoding="utf-8")
+        LIBRARY_ROUTES.write_text(restore_library_route_source(route_prefix, updated_routes), encoding="utf-8")
         print("Study Hub/Library ownership rules applied")
     else:
         print("Study Hub/Library ownership rules already applied; no changes needed")
