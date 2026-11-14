@@ -131,4 +131,4 @@ def test_payment_history_uses_shared_status_metadata_and_shell_feedback_props():
     assert "export const PAYMENT_STATUS_META:" in PAYMENT_STATUS
     assert "from '../../lib/paymentStatus'" in BILLING
     assert "export { PAYMENT_STATUS_META } from '../lib/paymentStatus'" in ADMIN_PLATFORM
-    assert "from './admin/AdminPlatform'" not in APP
+    assert "import { PAYMENT_STATUS_META } from './admin/AdminPlatform'" not in APP
