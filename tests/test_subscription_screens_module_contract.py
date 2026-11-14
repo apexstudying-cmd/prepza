@@ -46,7 +46,7 @@ def test_subscription_plan_and_status_types_keep_backend_response_shapes():
         "offline_study?: boolean",
         "premium_library?: boolean",
         "study_hub_uploads?: boolean",
-        "export type SubscriptionStatus = { plan: string; is_active: boolean; expires_at: string | null }",
+        "export type SubscriptionStatus = {",
         "export type PaymentHistoryItem = {",
         "payment_type: string",
         "content_title?: string | null",
@@ -58,6 +58,10 @@ def test_subscription_plan_and_status_types_keep_backend_response_shapes():
         "created_at: string | null",
     ):
         assert contract in TYPES
+
+    status_type = TYPES[TYPES.index("export type SubscriptionStatus = {"):TYPES.index("export type PaymentHistoryItem = {")]
+    for field in ("plan: string", "is_active: boolean", "expires_at: string | null"):
+        assert field in status_type
 
 
 def test_subscription_screen_preserves_plan_status_usage_and_navigation_contracts():
