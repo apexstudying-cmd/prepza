@@ -69,6 +69,8 @@ def test_upload_screens_have_one_feature_owner_and_explicit_parent_props():
         module = UPLOAD_MODULE_PATH.read_text(encoding="utf-8")
         app = APP_PATH.read_text(encoding="utf-8")
         assert "from './screens/upload/UploadFlowScreens'" in app
+        assert "TopBar: UploadTopBar" in upload
+        assert "TopBar: UploadTopBar" in choice
         assert "from '../../App'" not in module
         assert "from '../App'" not in module
 
@@ -175,9 +177,9 @@ def test_app_route_props_and_bottom_navigation_rules_remain_unchanged():
     app = APP_PATH.read_text(encoding="utf-8")
     routes = (
         r"case 'upload':\s*return <UploadScreen setScreen=\{setScreen\} "
-        r"setActiveDocumentId=\{setActiveDocumentId\} />",
+        r"setActiveDocumentId=\{setActiveDocumentId\} TopBar=\{TopBar\} />",
         r"case 'upload-share-choice':\s*return <UploadShareChoiceScreen "
-        r"setScreen=\{setScreen\} activeDocumentId=\{activeDocumentId\} />",
+        r"setScreen=\{setScreen\} activeDocumentId=\{activeDocumentId\} TopBar=\{TopBar\} />",
         r"case 'processing':\s*return <ProcessingScreen "
         r"setScreen=\{setScreen\} activeDocumentId=\{activeDocumentId\} />",
     )
@@ -195,6 +197,26 @@ def test_app_route_props_and_bottom_navigation_rules_remain_unchanged():
     assert "upload-share-choice" in hidden
     assert "processing" in hidden
     assert "upload" not in hidden
+
+
+
+def test_shared_upload_policy_and_file_helpers_have_single_owner():
+    config = UPLOAD_CONFIG_PATH.read_text(encoding="utf-8")
+    file_utils = FILE_UTILS_PATH.read_text(encoding="utf-8")
+    app = APP_PATH.read_text(encoding="utf-8")
+
+    assert "export const ALLOWED_UPLOAD_EXTENSIONS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'jpg', 'jpeg', 'png']" in config
+    assert "export const MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024" in config
+    assert "export const MAX_CHAT_ATTACHMENT_SIZE_BYTES = 20 * 1024 * 1024" in config
+    assert "export const IMAGE_FILE_TYPES = ['jpg', 'jpeg', 'png']" in config
+    assert "export function getFileExtension(" in file_utils
+    assert "export async function sha256Hex(" in file_utils
+    assert "from './lib/fileUtils'" in app
+    assert "from './screens/upload/uploadConfig'" in app
+    assert "function getFileExtension(" not in app
+    assert "async function sha256Hex(" not in app
+    assert "const ALLOWED_UPLOAD_EXTENSIONS" not in app
+    assert "const MAX_CHAT_ATTACHMENT_SIZE_BYTES" not in app
 
 
 def test_upload_transformer_inventory_is_wired_and_legacy_patch_is_not_prebuild():

@@ -1,8 +1,8 @@
 # Upload flow extraction map
 
-**Snapshot:** 14 November 2026, consolidated candidate PR [#79](https://github.com/apexstudying-cmd/prepza/pull/79), pre-extraction head edcfad751e4f3774e297219ecbb4c22cc31ef854.
+**Snapshot:** 14 November 2026, consolidated candidate PR [#79](https://github.com/apexstudying-cmd/prepza/pull/79); implementation follows the pre-extraction characterization commit `dd86446263612f9a41ce56c481785dd25b395c14`.
 
-**Status:** dependency inventory and characterization contract; the three screens remain inline in frontend/src/App.tsx. This document does not claim that extraction or launch certification is complete.
+**Status:** the three active screens are extracted together into `frontend/src/screens/upload/UploadFlowScreens.tsx`; exact-head CI verification is pending. The app remains the route/state owner and injects its existing TopBar. This document does not claim launch certification.
 
 ## Active runtime ownership
 
@@ -62,9 +62,9 @@ The active frontend/package.json prebuild chain does not currently rewrite these
 
 The current UploadScreen also receives file helpers/constants that are shared with the ChatDetail route. Keep those shared contracts available to ChatDetail; do not duplicate or silently narrow the accepted types.
 
-## Safe extraction shape
+## Applied extraction boundary
 
-Target module: frontend/src/screens/upload/UploadFlowScreens.tsx, with named exports for the three existing screens.
+Target module applied: `frontend/src/screens/upload/UploadFlowScreens.tsx`, with named exports for the three existing screens. Shared file helpers now live in `frontend/src/lib/fileUtils.ts`; upload/chat attachment limits and image types live in `frontend/src/screens/upload/uploadConfig.ts`.
 
 1. Move the existing component bodies without rewriting their state, effects, API calls, retry logic, JSX or route transitions.
 2. Keep screen and activeDocumentId state in the app-navigation owner and pass only the existing explicit props.
@@ -74,7 +74,7 @@ Target module: frontend/src/screens/upload/UploadFlowScreens.tsx, with named exp
 6. Retarget only transformers that actually own the moved source. Keep the active Library publishing transformer on PublishLibraryScreen until that separate screen is extracted.
 7. Compare the moved component bodies against the pre-extraction source after normalizing only exports, imports and prop declarations.
 
-## Verification added before code movement
+## Verification contract
 
 tests/test_upload_flow_module_contract.py is a characterization suite that accepts either the current inline owner or the planned single feature-module owner. It protects:
 
@@ -88,3 +88,10 @@ tests/test_upload_flow_module_contract.py is a characterization suite that accep
 The test is included in the Frontend Build workflow. Because the pull-request workflow paths include tests/** and the backup/restore workflow paths include **/*.py, this test-only candidate update also exercises the full responsive/cross-system release workflow and the PostgreSQL upgrade/backup/restore rehearsal on the exact new SHA.
 
 No API, authorization, upload limit, navigation, business rule, production data or provider behavior is changed by this pre-extraction step.
+
+
+## Candidate verification state
+
+The extraction preserves the moved component bodies' state/effects, API calls, upload confirmation retry, local-first File persistence, private-by-default choice, processing poll cadence/cleanup, route IDs and AppShell navigation policy. The existing app-local TopBar is injected as a typed component prop rather than imported from App.tsx.
+
+Frontend Build, Release Browser and PostgreSQL backup/restore must pass on the exact post-extraction commit before this boundary is marked verified. Until those run results are inspected, exact-head verification is **NOT_TESTED**.
