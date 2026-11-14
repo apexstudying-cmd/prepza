@@ -123,6 +123,22 @@ with app.app_context():
     run_container_python(code)
 
 
+def wait_for_e2ee_identity(page, user_id: int) -> None:
+    page.wait_for_function(
+        """async userId => {
+          try {
+            const response = await fetch('/keys/' + userId, { credentials: 'include' })
+            if (!response.ok) return false
+            const payload = await response.json()
+            return typeof payload.public_key === 'string' && payload.public_key.length > 0
+          } catch {
+            return false
+          }
+        }""",
+        arg=user_id,
+        timeout=15000,
+    )
+
 def open_shop(page) -> None:
     page.get_by_role("navigation", name="Primary navigation").wait_for(
         state="visible", timeout=20000
@@ -143,6 +159,15 @@ def main() -> int:
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)
             try:
+                # The direct-chat fetch bridge encrypts messages with both
+                # participants' registered public keys. Bootstrap the seller's
+                # real browser identity before the buyer opens the conversation.
+                seller_context = browser.new_context(viewport={"width": 390, "height": 844})
+                seller_page = seller_context.new_page()
+                login(seller_page, seller)
+                wait_for_e2ee_identity(seller_page, seller["user_id"])
+                print("PASS: seller secure-chat identity is registered")
+
                 # Buyer: browse, inspect, save, report and contact the seller.
                 buyer_context = browser.new_context(viewport={"width": 390, "height": 844})
                 buyer_page = buyer_context.new_page()
@@ -264,10 +289,8 @@ def main() -> int:
                 print("PASS: buyer browsed details, saved, reported, opened ChatDetail and sent an in-app message")
                 buyer_context.close()
 
-                # Seller: inspect owned listings and exercise pause/sold controls.
-                seller_context = browser.new_context(viewport={"width": 390, "height": 844})
-                seller_page = seller_context.new_page()
-                login(seller_page, seller)
+                # Seller: reuse the already-authenticated context so the same
+                # device identity can receive and decrypt direct-chat messages.
                 open_shop(seller_page)
                 seller_page.get_by_role("button", name="My listings").click(timeout=5000)
                 seller_page.get_by_text(ACTIVE_TITLE, exact=True).wait_for(timeout=10000)
