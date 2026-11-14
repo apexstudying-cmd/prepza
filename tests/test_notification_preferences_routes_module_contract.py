@@ -32,6 +32,7 @@ def test_app_delegates_preference_and_push_routes_but_keeps_shared_helpers() -> 
 
 def test_preference_and_push_routes_keep_methods_csrf_and_helper_behavior() -> None:
     app = Flask("prepza-notification-preferences-contract")
+    app.config.update(TESTING=True, SECRET_KEY="notification-contract-test-secret")
     prefs = SimpleNamespace(community_enabled=True, messages_enabled=False)
 
     class FakeSession:
