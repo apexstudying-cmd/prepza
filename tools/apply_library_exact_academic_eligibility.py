@@ -98,6 +98,7 @@ replace_route_once_or_skip(
         'semester = data.get("semester")',
         "user.university_id", "user.program_id", "user.year", "user.semester",
     )),
+)
 
 replace_route_once_or_skip(
 '''    if semester is None:
