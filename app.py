@@ -4071,7 +4071,7 @@ register_library_routes(
 )
 
 
-    # ---------- XP / Achievements / Streaks (Chunk 7) ----------
+# ---------- XP / Achievements / Streaks (Chunk 7) ----------
 #
 # Fixed-value MVP: XP amounts and the achievement catalog are hardcoded
 # constants below rather than admin-editable SystemSetting rows (unlike
