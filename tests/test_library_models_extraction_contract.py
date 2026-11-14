@@ -47,7 +47,7 @@ def test_library_prebuild_transforms_follow_the_extracted_model_owner():
     assert 'LIBRARY_MODELS = ROOT / "library_models.py"' in eligibility
     assert 'library_model_text = LIBRARY_MODELS.read_text(encoding="utf-8")' in eligibility
     assert 'LIBRARY_ROUTES = ROOT / "library_routes.py"' in eligibility
-    assert 'route_text = LIBRARY_ROUTES.read_text(encoding="utf-8")' in eligibility
+    assert 'route_source = LIBRARY_ROUTES.read_text(encoding="utf-8")' in eligibility
 
 def test_library_route_transformers_target_library_routes_module():
     root = Path(__file__).resolve().parents[1]

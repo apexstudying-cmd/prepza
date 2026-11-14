@@ -300,15 +300,19 @@ replace_route_once_or_skip(
     )
     flagged_document_ids = _flagged_document_ids()''',
     "browse exact academic gate",
-    lambda: "LibraryPublication.semester == viewer.semester" in route_text,
+    lambda: all(token in route_text for token in (
+        'LibraryPublication.status == "approved"',
+        "LibraryPublication.university_id == viewer.university_id",
+        "LibraryPublication.program_id == viewer.program_id",
+        "LibraryPublication.year == viewer.year",
+        "LibraryPublication.semester == viewer.semester",
+    )),
 )
 
 replace_route_once_or_skip(
 '''    publication = db.session.get(LibraryPublication, publication_id)
     if not publication or publication.status != "approved":
-        return jsonify({"error": "Library item not found"}), 404
-
-    source = db.session.get(Document, publication.document_id)''',
+        return jsonify({"error": "Library item not found"}), 404''',
 '''    publication = db.session.get(LibraryPublication, publication_id)
     if not publication or publication.status != "approved":
         return jsonify({"error": "Library item not found"}), 404
@@ -317,9 +321,7 @@ replace_route_once_or_skip(
     if not viewer:
         return jsonify({"error": "Account not found"}), 404
     if not _library_context_matches(viewer, publication):
-        return jsonify({"error": "This Library item is not available for your university, course, year, and semester"}), 403
-
-    source = db.session.get(Document, publication.document_id)''',
+        return jsonify({"error": "This Library item is not available for your university, course, year, and semester"}), 403''',
     "save exact academic gate",
     lambda: "_library_context_matches(viewer, publication)" in route_text,
 )
