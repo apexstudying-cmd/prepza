@@ -25,10 +25,10 @@
         },
         {
           "kind": "backend_route",
-          "path": "app.py",
+          "path": "gamification_routes.py",
           "anchors": [
             "/study-time/sync",
-            "study_time_sync"
+            "def study_time_sync"
           ]
         },
         {

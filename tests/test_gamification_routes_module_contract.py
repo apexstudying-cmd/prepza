@@ -80,3 +80,11 @@ def test_study_activity_registration_preserves_route_surface_and_guards() -> Non
     assert "@login_required" in MODULE_SOURCE
     assert "@require_csrf" in MODULE_SOURCE
     assert "@limiter.limit(" in MODULE_SOURCE
+
+def test_offline_architecture_audit_tracks_the_extracted_study_route_owner() -> None:
+    audit = (ROOT / "scripts/audit_offline_architecture.py").read_text(encoding="utf-8")
+    manifest = (ROOT / "qa/release_manifest.json").read_text(encoding="utf-8")
+    assert "backend_study_routes = read('gamification_routes.py')" in audit
+    assert "'def study_time_sync'" in audit
+    assert "today = _study_local_date()' in backend_study_routes" in audit
+    assert '"path": "gamification_routes.py"' in manifest
