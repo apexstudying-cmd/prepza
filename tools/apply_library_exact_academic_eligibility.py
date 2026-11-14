@@ -10,7 +10,7 @@ route_start = route_source.find("    @app.route(")
 if route_start < 0:
     raise SystemExit("FAIL CLOSED: extracted Library route registration block was not found")
 route_prefix = route_source[:route_start]
-route_text = "\\n".join(line[4:] if line.startswith("    ") else line for line in route_source[route_start:].splitlines())
+route_text = "\n".join(line[4:] if line.startswith("    ") else line for line in route_source[route_start:].splitlines())
 library_model_text = LIBRARY_MODELS.read_text(encoding="utf-8")
 
 if not all(token in library_model_text for token in (
@@ -324,6 +324,6 @@ replace_route_once_or_skip(
 )
 
 APP.write_text(app_text, encoding="utf-8")
-LIBRARY_ROUTES.write_text(route_prefix + "\\n".join(("    " + line) if line else "" for line in route_text.splitlines()) + "\\n", encoding="utf-8")
+LIBRARY_ROUTES.write_text(route_prefix + "\n".join(("    " + line) if line else "" for line in route_text.splitlines()) + "\n", encoding="utf-8")
 LIBRARY_MODELS.write_text(library_model_text, encoding="utf-8")
 print("Applied exact Library academic eligibility rules to app.py and library_routes.py.")

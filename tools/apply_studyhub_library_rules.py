@@ -123,13 +123,13 @@ def split_library_route_source(source: str) -> tuple[str, str]:
     if start < 0:
         raise RuntimeError("Extracted Library route registration block was not found")
     prefix = source[:start]
-    body = "\\n".join(line[4:] if line.startswith("    ") else line for line in source[start:].splitlines())
+    body = "\n".join(line[4:] if line.startswith("    ") else line for line in source[start:].splitlines())
     return prefix, body
 
 
 def restore_library_route_source(prefix: str, body: str) -> str:
-    indented = "\\n".join(("    " + line) if line else "" for line in body.splitlines())
-    return prefix + indented + "\\n"
+    indented = "\n".join(("    " + line) if line else "" for line in body.splitlines())
+    return prefix + indented + "\n"
 
 
 if __name__ == "__main__":
