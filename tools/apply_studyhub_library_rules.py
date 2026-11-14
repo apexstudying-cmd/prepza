@@ -2,62 +2,44 @@ from __future__ import annotations
 
 from pathlib import Path
 
-APP = Path(__file__).resolve().parents[1] / "app.py"
+ROOT = Path(__file__).resolve().parents[1]
+APP = ROOT / "app.py"
+LIBRARY_ROUTES = ROOT / "library_routes.py"
 
 
-def replace_once_or_already_applied(
-    source: str,
-    old: str,
-    new: str,
-    label: str,
-    already_applied: str,
-) -> str:
-    """Apply one source transformation, or safely accept its exact prior result."""
+def replace_once_or_already_applied(source: str, old: str, new: str, label: str, already_applied: str) -> str:
     old_count = source.count(old)
     applied_count = source.count(already_applied)
-
     if applied_count == 1 and (old_count == 0 or old in already_applied):
         return source
-
     if old_count == 1 and applied_count == 0:
         return source.replace(old, new, 1)
-
-    if old_count > 1:
-        reason = "original anchor is not unique"
-    elif applied_count > 1:
-        reason = "already-applied anchor is not unique"
-    else:
-        reason = "neither the original nor the expected result was found"
+    reason = "original anchor is not unique" if old_count > 1 else (
+        "already-applied anchor is not unique" if applied_count > 1 else
+        "neither the original nor the expected result was found"
+    )
     raise RuntimeError(f"Study Hub/Library backend patch failed ({label}): {reason}")
 
 
-def apply_rules(source: str) -> str:
-    # A publisher may remove their own Study Hub copy without deleting the public
-    # Library publication. is_removed is a personal Study Hub visibility flag, not
-    # a destruction flag for an approved Library source.
-    old_publication_visibility = (
+def apply_app_rules(source: str) -> str:
+    old = (
         'def _approved_library_publication(document):\n'
         '    """Return the approved Library publication for a document, if public."""\n'
         '    if not document or document.is_removed:\n'
         '        return None'
     )
-    new_publication_visibility = (
+    new = (
         'def _approved_library_publication(document):\n'
         '    """Return the approved Library publication for a document, if public."""\n'
         '    if not document:\n'
         '        return None'
     )
-    source = replace_once_or_already_applied(
-        source,
-        old_publication_visibility,
-        new_publication_visibility,
-        "approved Library publication source visibility",
-        new_publication_visibility,
+    return replace_once_or_already_applied(
+        source, old, new, "approved Library publication source visibility", new
     )
 
-    # The source document may be soft-removed from its owner's Study Hub while its
-    # approved Library publication remains valid. A saving student still receives
-    # their own personal Document row.
+
+def apply_library_route_rules(source: str) -> str:
     old_copy_visibility = (
         "source = db.session.get(Document, publication.document_id)\n"
         "    if not source or source.is_removed or not source.document_content_id:\n"
@@ -88,10 +70,6 @@ def apply_rules(source: str) -> str:
         "Library save source visibility", new_save_visibility,
     )
 
-    # The endpoint already handles repeated saves idempotently: it reuses the
-    # student's existing Study Hub document and returns 200. Remove the older
-    # early-409 guard if a previous prebuild run inserted it; it bypasses that
-    # established behavior and prevents an existing bookmark from being handled.
     obsolete_save_guard = """    existing_studyhub = Document.query.filter_by(
         user_id=user_id,
         document_content_id=source.document_content_id,
@@ -110,8 +88,6 @@ def apply_rules(source: str) -> str:
     if guard_count == 1:
         source = source.replace(obsolete_save_guard, "", 1)
 
-    # Removing a Library save removes the student's personal Study Hub copy too,
-    # but never deletes or soft-removes the public Library source document.
     unsave_anchor = (
         "    publication = db.session.get(LibraryPublication, publication_id)\n"
         "    db.session.delete(saved)\n"
@@ -130,21 +106,25 @@ def apply_rules(source: str) -> str:
 
     db.session.delete(saved)
 """
-    source = replace_once_or_already_applied(
-        source,
-        unsave_anchor,
-        unsave_replacement,
-        "Library unsave removes personal Study Hub copy",
-        unsave_replacement,
+    return replace_once_or_already_applied(
+        source, unsave_anchor, unsave_replacement,
+        "Library unsave removes personal Study Hub copy", unsave_replacement,
     )
-    return source
+
+
+def apply_rules(source: str) -> str:
+    """Compatibility helper retained for focused tests of the complete patch."""
+    return apply_library_route_rules(apply_app_rules(source))
 
 
 if __name__ == "__main__":
-    text = APP.read_text(encoding="utf-8")
-    updated = apply_rules(text)
-    if updated != text:
-        APP.write_text(updated, encoding="utf-8")
+    app_text = APP.read_text(encoding="utf-8")
+    route_text = LIBRARY_ROUTES.read_text(encoding="utf-8")
+    updated_app = apply_app_rules(app_text)
+    updated_routes = apply_library_route_rules(route_text)
+    if updated_app != app_text or updated_routes != route_text:
+        APP.write_text(updated_app, encoding="utf-8")
+        LIBRARY_ROUTES.write_text(updated_routes, encoding="utf-8")
         print("Study Hub/Library ownership rules applied")
     else:
         print("Study Hub/Library ownership rules already applied; no changes needed")

@@ -7,6 +7,10 @@ on:
       - 'app_factory.py'
       - 'route_registry.py'
       - 'library_routes.py'
+      - 'tools/apply_library_academic_context.py'
+      - 'tools/apply_library_exact_academic_eligibility.py'
+      - 'tools/apply_studyhub_library_rules.py'
+      - 'tools/audit_unit_references.py'
       - 'group_routes.py'
       - 'social_follow_routes.py'
       - 'notification_routes.py'
@@ -34,6 +38,8 @@ on:
       - 'tests/test_social_follow_routes_module_contract.py'
       - 'tests/test_group_routes_module_contract.py'
       - 'tests/test_library_routes_module_contract.py'
+      - 'tests/test_library_models_extraction_contract.py'
+      - 'tests/test_apply_studyhub_library_rules.py'
       - 'tests/test_backend_model_boundaries.py'
       - 'tests/test_chat_models_extraction_contract.py'
       - 'tests/test_social_models_extraction_contract.py'
@@ -54,6 +60,10 @@ on:
       - 'app_factory.py'
       - 'route_registry.py'
       - 'library_routes.py'
+      - 'tools/apply_library_academic_context.py'
+      - 'tools/apply_library_exact_academic_eligibility.py'
+      - 'tools/apply_studyhub_library_rules.py'
+      - 'tools/audit_unit_references.py'
       - 'group_routes.py'
       - 'social_follow_routes.py'
       - 'notification_routes.py'
@@ -81,6 +91,8 @@ on:
       - 'tests/test_social_follow_routes_module_contract.py'
       - 'tests/test_group_routes_module_contract.py'
       - 'tests/test_library_routes_module_contract.py'
+      - 'tests/test_library_models_extraction_contract.py'
+      - 'tests/test_apply_studyhub_library_rules.py'
       - 'tests/test_backend_model_boundaries.py'
       - 'tests/test_chat_models_extraction_contract.py'
       - 'tests/test_social_models_extraction_contract.py'
@@ -115,4 +127,4 @@ jobs:
       - name: Run backend boundary and compatibility tests
         env:
           PYTHONPATH: .
-        run: python -m pytest -q tests/test_backend_extensions_contract.py tests/test_app_factory_contract.py tests/test_backend_route_registry_contract.py tests/test_gamification_routes_module_contract.py tests/test_notification_preferences_routes_module_contract.py tests/test_social_follow_routes_module_contract.py tests/test_group_routes_module_contract.py tests/test_library_routes_module_contract.py tests/test_backend_model_boundaries.py tests/test_chat_models_extraction_contract.py tests/test_social_models_extraction_contract.py tests/test_opportunity_models_extraction_contract.py tests/test_user_model_extraction_contract.py tests/test_core_models_extraction_contract.py tests/test_auth_guards_contract.py tests/test_academic_models_contract.py tests/test_learning_models_extraction_contract.py tests/test_study_models_extraction_contract.py tests/test_document_models_extraction_contract.py tests/test_library_models_extraction_contract.py
+        run: python -m pytest -q tests/test_backend_extensions_contract.py tests/test_app_factory_contract.py tests/test_backend_route_registry_contract.py tests/test_gamification_routes_module_contract.py tests/test_notification_preferences_routes_module_contract.py tests/test_social_follow_routes_module_contract.py tests/test_group_routes_module_contract.py tests/test_library_routes_module_contract.py tests/test_library_models_extraction_contract.py tests/test_apply_studyhub_library_rules.py tests/test_backend_model_boundaries.py tests/test_chat_models_extraction_contract.py tests/test_social_models_extraction_contract.py tests/test_opportunity_models_extraction_contract.py tests/test_user_model_extraction_contract.py tests/test_core_models_extraction_contract.py tests/test_auth_guards_contract.py tests/test_academic_models_contract.py tests/test_learning_models_extraction_contract.py tests/test_study_models_extraction_contract.py tests/test_document_models_extraction_contract.py tests/test_library_models_extraction_contract.py

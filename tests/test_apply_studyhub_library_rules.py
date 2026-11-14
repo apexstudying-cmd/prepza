@@ -74,3 +74,8 @@ def test_library_rules_patch_removes_legacy_conflicting_save_guard() -> None:
     assert '"code": "already_in_studyhub"' not in cleaned
     assert save_anchor in cleaned
     assert MODULE.apply_rules(cleaned) == cleaned
+
+def test_studyhub_library_transform_targets_extracted_library_routes():
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert 'LIBRARY_ROUTES = ROOT / "library_routes.py"' in source
+    assert "updated_routes = apply_library_route_rules(route_text)" in source

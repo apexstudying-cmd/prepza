@@ -48,3 +48,43 @@ def test_library_prebuild_transforms_follow_the_extracted_model_owner():
     assert 'library_model = LIBRARY_MODELS.read_text(encoding="utf-8")' in eligibility
     assert 'LIBRARY_ROUTES = ROOT / "library_routes.py"' in eligibility
     assert 'route_text = LIBRARY_ROUTES.read_text(encoding="utf-8")' in eligibility
+
+def test_library_route_transformers_target_library_routes_module():
+    root = Path(__file__).resolve().parents[1]
+    exact = (root / "tools" / "apply_library_exact_academic_eligibility.py").read_text(encoding="utf-8")
+    studyhub = (root / "tools" / "apply_studyhub_library_rules.py").read_text(encoding="utf-8")
+    unit_audit = (root / "tools" / "audit_unit_references.py").read_text(encoding="utf-8")
+    assert 'LIBRARY_ROUTES = ROOT / "library_routes.py"' in exact
+    assert 'LIBRARY_ROUTES = ROOT / "library_routes.py"' in studyhub
+    assert 'RUNTIME_SOURCES = [APP, LIBRARY_ROUTES, GROUP_ROUTES]' in unit_audit
+
+
+def test_exact_library_eligibility_transform_updates_extracted_routes_idempotently(tmp_path):
+    import shutil
+    import subprocess
+    import sys
+
+    for relative in ("app.py", "library_routes.py", "library_models.py", "tools/apply_library_exact_academic_eligibility.py"):
+        source = ROOT / relative
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+
+    script = tmp_path / "tools" / "apply_library_exact_academic_eligibility.py"
+    app = tmp_path / "app.py"
+    routes = tmp_path / "library_routes.py"
+
+    first = subprocess.run([sys.executable, str(script)], cwd=tmp_path, text=True, capture_output=True, check=False)
+    assert first.returncode == 0, first.stdout + first.stderr
+    transformed_app = app.read_text(encoding="utf-8")
+    transformed_routes = routes.read_text(encoding="utf-8")
+    assert 'LIBRARY_MATERIAL_TYPES = {"lecture_notes", "past_paper"}' in transformed_app
+    assert "def _library_context_matches(viewer, publication):" in transformed_app
+    assert "Selected course does not belong to the selected university" in transformed_routes
+    assert "LibraryPublication.semester == viewer.semester" in transformed_routes
+    assert "_library_context_matches(viewer, publication)" in transformed_routes
+
+    second = subprocess.run([sys.executable, str(script)], cwd=tmp_path, text=True, capture_output=True, check=False)
+    assert second.returncode == 0, second.stdout + second.stderr
+    assert app.read_text(encoding="utf-8") == transformed_app
+    assert routes.read_text(encoding="utf-8") == transformed_routes
