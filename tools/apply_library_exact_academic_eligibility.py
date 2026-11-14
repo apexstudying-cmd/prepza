@@ -309,7 +309,7 @@ replace_route_once_or_skip(
 save_start = route_text.find("def save_library_item(")
 if save_start < 0:
     raise SystemExit("FAIL CLOSED: save_library_item route was not found")
-save_end = route_text.find("\\n@app.route", save_start)
+save_end = route_text.find("\n@app.route", save_start)
 if save_end < 0:
     save_end = len(route_text)
 save_block = route_text[save_start:save_end]
