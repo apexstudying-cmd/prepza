@@ -4060,6 +4060,7 @@ register_library_routes(
     _student_has_premium_library=_student_has_premium_library,
     _document_content_has_flagged_material=_document_content_has_flagged_material,
     _flagged_document_ids=_flagged_document_ids,
+    _library_context_matches=lambda viewer, publication: _library_context_matches(viewer, publication),
     get_user_subscription_status=get_user_subscription_status,
     _can_publish_document=_can_publish_document,
     _display_name=lambda user: _display_name(user),

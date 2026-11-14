@@ -36,6 +36,7 @@ def register_library_routes(
     _student_has_premium_library: Any,
     _document_content_has_flagged_material: Any,
     _flagged_document_ids: Any,
+    _library_context_matches: Any,
     get_user_subscription_status: Any,
     _can_publish_document: Any,
     _display_name: Any,

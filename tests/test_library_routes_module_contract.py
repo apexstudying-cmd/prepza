@@ -71,6 +71,7 @@ def test_library_registration_preserves_route_methods_and_admin_guards() -> None
         _student_has_premium_library=lambda *_args: False,
         _document_content_has_flagged_material=lambda *_args: False,
         _flagged_document_ids=lambda *_args: set(),
+        _library_context_matches=lambda *_args: True,
         get_user_subscription_status=lambda *_args: {},
         _can_publish_document=lambda *_args: True,
         _display_name=lambda user: "Student",
