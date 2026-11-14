@@ -109,3 +109,23 @@ Release Browser [run 43171345717](https://github.com/apexstudying-cmd/prepza/act
 The existing-database migration and PostgreSQL 17 custom-format backup/restore rehearsal passed in [run 43171200015](https://github.com/apexstudying-cmd/prepza/actions/runs/43171200015) on commit `73276018786bdaf007396c514fa0f358145138a7`. It preserved a seeded document and generated material while upgrading to `20261030_shared_study_streak`, then restored a 116-public-table backup into a separate disposable database and verified the Alembic revision and sentinel data. This closes the separate migration and backup/restore gates, but not the final one-SHA combined release gate.
 
 Real Paystack sandbox checkout/webhooks and R2 object/header operations remain NOT_TESTED pending safe staging credentials. The KES 100 per item per manually renewed 30-day fee, direct seller contact, moderation and no-buyer-checkout model remain unchanged. Keep Shop IN_PROGRESS and release BLOCKED.
+
+## 11. 13 November 2026 — exact candidate role and responsive verification
+
+Release Browser [43389767185](https://github.com/apexstudying-cmd/prepza/actions/runs/43389767185) passed on exact candidate `0c29859b3eb3b7acf3593e97eb9d08c57ac96acc`. Buyer browse/detail/save/report/direct contact, seller listing/My Listings/pause/sold, manual KES 100 posting-fee verification, and admin moderation/payment-review passed. Responsive checks passed at 360x800, 390x844 and 768x1024; the run also passed B2B browser-to-ledger, 99 disposable PostgreSQL tests and online/offline Study Hub/generated-artifact replay.
+
+Screenshot artifact [14020905208](https://github.com/apexstudying-cmd/prepza/actions/runs/43389767185/artifacts/14020905208) contains 16 images. Reviewed Shop browse on phone/tablet, tablet listing form, stale-cache, buyer listing, seller listing and admin moderation. The shell/cards are consistent with Prepza's navy/gold language; fee disclosure and direct-contact/no-buyer-checkout messaging are visible. The existing global Admin Platform floating control overlaps the bottom navigation on the admin screenshot; track this as a shell-positioning follow-up, not a new Shop tab.
+
+Provider limitation remains: fixtures use synthetic photos and mocked Paystack responses. Real Paystack sandbox checkout/webhooks and R2 upload/read/head/delete/headers are NOT_TESTED pending safe staging credentials. Shop remains IN_PROGRESS; no live provider transaction or production data was used.
+
+## 12. 14 November 2026 — exact candidate buyer/seller/admin flow
+
+Release Browser [43566535290](https://github.com/apexstudying-cmd/prepza/actions/runs/43566535290) passed the complete Shop browser journey on exact candidate `edcfad751e4f3774e297219ecbb4c22cc31ef854`:
+
+- **Buyer:** browse and inspect listing, save and open Saved, report the listing, open ChatDetail, and send an in-app message. The test now logs in the seller first and waits for the seller's E2EE public key so the existing direct-chat encryption bridge can encrypt for both participants.
+- **Seller:** view own listing/My Listings, pause it, mark it sold, and reach the paid listing form with the KES 100 disclosure.
+- **Admin:** approve/reject listings, resolve a buyer report and document payment verification/retry handling.
+- **Responsive:** phone-small 360x800, phone-standard 390x844 and tablet-portrait 768x1024 passed. The global Admin Platform control now clears the existing five-item bottom navigation; no new tab was added.
+- **Visual evidence:** [artifact 14102507070](https://github.com/apexstudying-cmd/prepza/actions/runs/43566535290/artifacts/14102507070) has 17 images; Home/Shop phone, Shop tablet, buyer message, seller listing and admin moderation were reviewed.
+
+This is automated role/browser evidence, not live Paystack or R2 verification. Real Paystack sandbox checkout/webhooks and R2 upload/read/head/delete/response headers remain NOT_TESTED pending safe staging access. The KES 100/manual 30-day seller fee, moderation and direct-contact/no-buyer-checkout model remain unchanged.
