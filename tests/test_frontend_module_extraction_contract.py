@@ -636,12 +636,31 @@ def test_document_ready_module_preserves_document_metadata_and_action_destinatio
         assert contract in source
 
 
-def test_publish_library_screen_remains_in_the_app_shell_until_a_safe_extraction():
-    # This screen has not been extracted yet. Keep its existing route and implementation
-    # explicit rather than asserting a module that does not exist.
+def test_publish_library_screen_is_owned_by_its_feature_module():
+    assert "import PublishLibraryScreen from './screens/library/PublishLibraryScreen'" in APP
+    assert "function PublishLibraryScreen(" not in APP
     assert "case 'publish-library':" in APP
-    assert "function PublishLibraryScreen(" in APP
-    assert "import PublishLibraryScreen from './screens/library/PublishLibraryScreen'" not in APP
+    assert "EmptyState={EmptyState}" in APP
+
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "library" /
+        "PublishLibraryScreen.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "api<{ csrf_token: string }>('/me')",
+        "api<{ documents:",
+        "api<UniversityOption[]>('/universities')",
+        "api<ProgramOption[]>(",
+        "'/library/publish'",
+        "'X-CSRF-Token': csrfToken",
+        "setScreen('create-modal')",
+        "setScreen('upload')",
+        "setScreen('library')",
+        "setScreen('home')",
+        "rightsChecked",
+        "already_in_library",
+    ):
+        assert contract in source
 
 
 def test_publish_library_screen_preserves_document_eligibility_rights_and_submission_contract():
