@@ -178,24 +178,32 @@ replace_route_all_exact_or_skip(
     ),
 )
 
-replace_route_once_or_skip(
-'''    user_id = session.get("user_id")
+browse_start = route_text.find("def browse_library():")
+if browse_start < 0:
+    raise SystemExit("FAIL CLOSED: browse_library route was not found")
+browse_end = route_text.find("\\n@app.route", browse_start)
+if browse_end < 0:
+    browse_end = len(route_text)
+browse_block = route_text[browse_start:browse_end]
+old_browse_viewer = '''    user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
 
-    query = LibraryPublication.query.filter_by(status="approved")''',
-'''    user_id = session.get("user_id")
+    query = LibraryPublication.query.filter_by(status="approved")'''
+new_browse_viewer = '''    user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "Not logged in"}), 401
 
     viewer = db.session.get(User, user_id)
-    query = LibraryPublication.query.filter_by(status="approved")''',
-    "library browse viewer",
-    lambda: (
-        (lambda start: start >= 0 and "viewer = db.session.get(User, user_id)" in route_text[start:route_text.find("def save_library_item(", start)])
-        (route_text.find("def browse_library():"))
-    ),
-)
+    query = LibraryPublication.query.filter_by(status="approved")'''
+browse_viewer_count = browse_block.count(old_browse_viewer)
+if browse_viewer_count == 1:
+    browse_block = browse_block.replace(old_browse_viewer, new_browse_viewer, 1)
+elif browse_viewer_count == 0 and "viewer = db.session.get(User, user_id)" in browse_block:
+    print("Skipped library browse viewer: canonical viewer lookup is already present.")
+else:
+    raise SystemExit(f"FAIL CLOSED: library browse viewer: expected 1 match or verified route, found {browse_viewer_count}")
+route_text = route_text[:browse_start] + browse_block + route_text[browse_end:]
 
 replace_route_once_or_skip(
 '''    university_id = request.args.get("university_id", type=int)
