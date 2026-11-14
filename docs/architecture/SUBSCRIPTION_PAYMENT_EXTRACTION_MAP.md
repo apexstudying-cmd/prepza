@@ -1,6 +1,6 @@
 # Subscription and payment screen extraction map
 
-**Status:** dependency mapping and initial characterization contract are in place; no screen code has moved yet. The test is wired into Frontend Build and passed in run 43583651298 (185 source/module/transform tests, five offline Library tests, TypeScript and production build).
+**Status:** dependency map and inline characterization contract passed. The five screens have now moved to frontend/src/screens/billing/SubscriptionScreens.tsx; shared types and payment status metadata have neutral owners. The extraction Frontend Build and full Release Browser are queued.
 **Current owner:** frontend/src/App.tsx on the consolidated PR #79 branch.
 **Goal:** move the existing student subscription/payment screens into a feature module without changing plan selection, checkout, provider redirect, return routing, payment-history display, or any billing rule.
 
@@ -52,13 +52,20 @@ A repository search for SubscriptionScreen, PaymentScreen, SUBSCRIPTION_PLAN_MET
 
 1. Added tests/test_subscription_screens_module_contract.py before moving code. It passed against the current inline implementation in Frontend Build run 43583651298 before extraction. It should accept only the intended new module owner and assert route wiring, selectedPlan lifting, all endpoints, CSRF header and payload, redirect_url navigation, duplicate-submit guard, payment history fields, pending/failure distinction, and six-second redirect cleanup.
 2. Add billing response types in frontend/src/types/billing.ts and move PAYMENT_STATUS_META to a neutral shared helper with a test proving AdminPlatform and student billing use the same map.
-3. Move the five active screens to frontend/src/screens/billing/SubscriptionScreens.tsx, preserving their component bodies and route IDs. Inject EmptyState/ErrorState; keep Pill and existing shared utilities as imports.
-4. Update App route dispatch and source ownership contracts. Do not move the Paystack return-query parser or selectedPlan state.
-5. Add the new test and any helper path to Frontend Build path filters and test commands. Run focused tests, all frontend source/transform tests, TypeScript and production build.
-6. Run the full Release Browser and cross-system regression on the same exact candidate SHA. Treat that as code regression evidence only; real Paystack sandbox verification remains a separate provider gate requiring safe staging credentials and approval.
+3. The five active screens now live in frontend/src/screens/billing/SubscriptionScreens.tsx. Their component bodies and route IDs were moved; EmptyState/ErrorState are injected and Pill/shared utilities are imported.
+4. App route dispatch now imports the five screen components. The Paystack return-query parser and selectedPlan state remain in App.
+5. The module contract test is updated and wired into Frontend Build; the extraction build is queued.
+6. Run the full Release Browser and cross-system regression on the exact extraction candidate. Treat that as code regression evidence only; real Paystack sandbox verification remains a separate provider gate requiring safe staging credentials and approval.
 
 ## Explicit non-goals
 
 - No pricing, Free/Plus/Pro allowance, entitlement, payment, refund, cancellation, webhook, subscription-period or provider behavior changes.
 - No live Paystack checkout, test charge, production payment, purchase or paid service during the refactor.
 - No change to the existing backend payment contracts or return URL semantics.
+
+
+## 2026-11-14 — Extraction implemented; verification pending
+
+The five student screens have moved to frontend/src/screens/billing/SubscriptionScreens.tsx. App.tsx still owns selectedPlan, route dispatch and Paystack return-query parsing. SubscriptionPlan, SubscriptionStatus and PaymentHistoryItem now live in frontend/src/types/billing.ts. PAYMENT_STATUS_META moved to frontend/src/lib/paymentStatus.ts; AdminPlatform re-exports it to preserve the existing module export. App injects its existing ErrorState and EmptyState components.
+
+The implementation preserves the existing GET plan/status/usage/history requests, CSRF-protected POST /subscription/upgrade payload, redirect_url navigation, duplicate-submit guard, payment pending/failure messaging, and six-second success redirect with cleanup. No provider call was made. The Frontend Build [43584116109](https://github.com/apexstudying-cmd/prepza/actions/runs/43584116109) and Release Browser [43584116201](https://github.com/apexstudying-cmd/prepza/actions/runs/43584116201) were queued when this note was written; do not mark the extraction verified until both complete.
