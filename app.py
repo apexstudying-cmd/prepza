@@ -6295,7 +6295,7 @@ register_social_follow_routes(
     Document=Document,
     XpEvent=XpEvent,
     StudyTimeLog=StudyTimeLog,
-    _display_name=_display_name,
+    _display_name=lambda user: _display_name(user),
     get_signed_url=get_signed_url,
     should_notify=lambda user_id, category: should_notify(user_id, category),
     send_push_notification=lambda *args, **kwargs: send_push_notification(*args, **kwargs),
