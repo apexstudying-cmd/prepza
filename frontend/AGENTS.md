@@ -33,6 +33,7 @@ python -m pytest -q \
   tests/test_generation_ui_build_contract.py \
   tests/test_frontend_module_extraction_contract.py \
   tests/test_publish_library_transform_module.py \
+  tests/test_subscription_screens_module_contract.py \
   tests/test_document_study_progress_transform.py \
   tests/test_frontend_ambassador_module_contract.py
 ```
