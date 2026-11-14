@@ -105,6 +105,7 @@ def test_splash_screen_uses_the_canonical_192px_icon():
     profile_screen = source("frontend/src/screens/onboarding/CompleteProfileScreen.tsx")
     login_screen = source("frontend/src/screens/auth/LoginScreen.tsx")
     auth_screens = source("frontend/src/screens/auth/AuthScreens.tsx")
+    upload_flow = source("frontend/src/screens/upload/UploadFlowScreens.tsx")
     assert (
         app.count('src="/icon-192.png"')
         + home.count('src="/icon-192.png"')
@@ -113,6 +114,7 @@ def test_splash_screen_uses_the_canonical_192px_icon():
         + profile_screen.count('src="/icon-192.png"')
         + login_screen.count('src="/icon-192.png"')
         + auth_screens.count('src="/icon-192.png"')
+        + upload_flow.count('src="/icon-192.png"')
         >= 9
     )
 
