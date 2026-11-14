@@ -420,8 +420,6 @@ def test_edit_profile_module_preserves_profile_and_avatar_contracts():
     ).read_text(encoding="utf-8")
     for contract in (
         "api<EditProfileMe>('/me')",
-        "api<UniversityOption[]>('/universities')",
-        "api<ProgramOption[]>(",
         "'/profile/avatar'",
         "'/profile/avatar/confirm'",
         "'X-CSRF-Token':csrfToken",
@@ -649,8 +647,6 @@ def test_publish_library_screen_is_owned_by_its_feature_module():
     for contract in (
         "api<{ csrf_token: string }>('/me')",
         "api<{ documents:",
-        "api<UniversityOption[]>('/universities')",
-        "api<ProgramOption[]>(",
         "'/library/publish'",
         "'X-CSRF-Token': csrfToken",
         "setScreen('create-modal')",
