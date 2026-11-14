@@ -1,18 +1,30 @@
 from pathlib import Path
 
 APP = Path(__file__).resolve().parents[1] / "frontend" / "src" / "App.tsx"
-text = APP.read_text()
+MODULE = Path(__file__).resolve().parents[1] / "frontend" / "src" / "screens" / "library" / "PublishLibraryScreen.tsx"
+TARGET = MODULE if MODULE.exists() else APP
+text = TARGET.read_text()
 
 type_anchor = "type PublishableDoc = { id: number; title: string; status: string; file_type: string | null; page_count: number | null }\n"
-if text.count(type_anchor) != 1:
-    print("Library publish context UX: legacy PublishableDoc anchor is absent in the current App architecture; skipping safely.")
+context_type = "type LibraryAcademicContext = { university_id: number | null; program_id: number | null; year: number | null; semester: number | null }\n"
+if context_type not in text:
+    if TARGET == APP:
+        if text.count(type_anchor) != 1:
+            print("Library publish context UX: neither the extracted module nor the legacy App anchor is available; skipping safely.")
+            raise SystemExit(0)
+        text = text.replace(type_anchor, type_anchor + context_type, 1)
+    else:
+        component_anchor = "function PublishLibraryScreen("
+        start = text.find(component_anchor)
+        if start < 0:
+            raise SystemExit("FAIL CLOSED: PublishLibraryScreen module anchor not found")
+        text = text[:start] + context_type + "\n" + text[start:]
+
+# The prebuild mutates source files. Treat a completed transform as a no-op on
+# subsequent local builds instead of failing because its original anchors moved.
+if "contextChangedFromProfile" in text:
+    print("Library publish context UX: already applied; skipping.")
     raise SystemExit(0)
-if "type LibraryAcademicContext =" not in text:
-    text = text.replace(
-        type_anchor,
-        type_anchor + "type LibraryAcademicContext = { university_id: number | null; program_id: number | null; year: number | null; semester: number | null }\n",
-        1,
-    )
 
 start = text.find("function PublishLibraryScreen(")
 if start < 0:
@@ -88,5 +100,5 @@ replace_once(
 )
 
 text = text[:start] + function + text[end + 2:]
-APP.write_text(text)
+TARGET.write_text(text)
 print("Applied Library publish academic-context UX successfully.")
