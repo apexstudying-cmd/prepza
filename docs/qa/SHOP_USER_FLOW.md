@@ -126,6 +126,6 @@ Release Browser [43566535290](https://github.com/apexstudying-cmd/prepza/actions
 - **Seller:** view own listing/My Listings, pause it, mark it sold, and reach the paid listing form with the KES 100 disclosure.
 - **Admin:** approve/reject listings, resolve a buyer report and document payment verification/retry handling.
 - **Responsive:** phone-small 360x800, phone-standard 390x844 and tablet-portrait 768x1024 passed. The global Admin Platform control now clears the existing five-item bottom navigation; no new tab was added.
-- **Visual evidence:** [artifact 14102507070](https://github.com/apexstudying-cmd/prepza/actions/runs/43566535290}/artifacts/14102507070) has 17 images; Home/Shop phone, Shop tablet, buyer message, seller listing and admin moderation were reviewed.
+- **Visual evidence:** [artifact 14102507070](https://github.com/apexstudying-cmd/prepza/actions/runs/43566535290/artifacts/14102507070) has 17 images; Home/Shop phone, Shop tablet, buyer message, seller listing and admin moderation were reviewed.
 
 This is automated role/browser evidence, not live Paystack or R2 verification. Real Paystack sandbox checkout/webhooks and R2 upload/read/head/delete/response headers remain NOT_TESTED pending safe staging access. The KES 100/manual 30-day seller fee, moderation and direct-contact/no-buyer-checkout model remain unchanged.
