@@ -1,36 +1,67 @@
-"""Characterize the current student subscription and payment screens before extraction."""
+"""Protect the student subscription and payment module boundary."""
 
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = (ROOT / "frontend/src/App.tsx").read_text(encoding="utf-8")
+BILLING = (ROOT / "frontend/src/screens/billing/SubscriptionScreens.tsx").read_text(encoding="utf-8")
+TYPES = (ROOT / "frontend/src/types/billing.ts").read_text(encoding="utf-8")
+PAYMENT_STATUS = (ROOT / "frontend/src/lib/paymentStatus.ts").read_text(encoding="utf-8")
 ADMIN_PLATFORM = (ROOT / "frontend/src/admin/AdminPlatform.tsx").read_text(encoding="utf-8")
 
 
-def test_subscription_and_payment_routes_keep_app_shell_state_and_return_routing():
-    for route in (
-        "case 'subscription':",
-        "case 'payment':",
-        "case 'payment-success':",
-        "case 'payment-failure':",
-        "case 'payment-history':",
+def test_billing_screens_are_module_owned_and_app_keeps_shared_plan_state():
+    for component in (
+        "SubscriptionScreen",
+        "PaymentScreen",
+        "PaymentSuccessScreen",
+        "PaymentFailureScreen",
+        "PaymentHistoryScreen",
     ):
-        assert route in APP
+        assert f"function {component}(" not in APP
+        assert f"function {component}(" in BILLING
 
+    assert "import { SubscriptionScreen, PaymentScreen, PaymentSuccessScreen, PaymentFailureScreen, PaymentHistoryScreen } from './screens/billing/SubscriptionScreens'" in APP
     assert "const [selectedPlan, setSelectedPlan] = useState('plus')" in APP
     assert "selectedPlan={selectedPlan} setSelectedPlan={setSelectedPlan}" in APP
     assert "selectedPlan={selectedPlan}" in APP
+    assert "ErrorState={ErrorState}" in APP
+    assert "EmptyState={EmptyState}" in APP
     assert "paymentStatus === 'success' ? 'payment-success' : 'payment-failure'" in APP
     assert "new URL(window.location.href)" in APP
 
 
+def test_subscription_plan_and_status_types_keep_backend_response_shapes():
+    for contract in (
+        "export type SubscriptionPlan = {",
+        "id: string",
+        "price: number",
+        "period: string | null",
+        "podcast_minutes?: number",
+        "summary_pages?: number",
+        "questions?: number",
+        "mind_map_nodes?: number",
+        "flashcards?: number",
+        "offline_study?: boolean",
+        "premium_library?: boolean",
+        "study_hub_uploads?: boolean",
+        "export type SubscriptionStatus = { plan: string; is_active: boolean; expires_at: string | null }",
+        "export type PaymentHistoryItem = {",
+        "payment_type: string",
+        "content_title?: string | null",
+        "plan: string | null",
+        "amount: number",
+        "status: string",
+        "provider: string | null",
+        "reference: string | null",
+        "created_at: string | null",
+    ):
+        assert contract in TYPES
+
+
 def test_subscription_screen_preserves_plan_status_usage_and_navigation_contracts():
     for contract in (
-        "type SubscriptionPlan = {",
-        "type SubscriptionStatus = { plan: string; is_active: boolean; expires_at: string | null }",
-        "const SUBSCRIPTION_PLAN_META:",
-        "function subscriptionFeatures(plan: SubscriptionPlan): string[]",
         "function SubscriptionScreen(",
         "api<{ plans: SubscriptionPlan[] }>('/subscription/plans')",
         "api<SubscriptionStatus>('/subscription/status')",
@@ -40,8 +71,10 @@ def test_subscription_screen_preserves_plan_status_usage_and_navigation_contract
         "setScreen('payment-history')",
         "status?.is_active",
         "usage.usage?.[feature]",
+        "SUBSCRIPTION_PLAN_META",
+        "function subscriptionFeatures(plan: SubscriptionPlan): string[]",
     ):
-        assert contract in APP
+        assert contract in BILLING
 
 
 def test_payment_screen_preserves_csrf_checkout_payload_redirect_and_duplicate_guard():
@@ -56,12 +89,12 @@ def test_payment_screen_preserves_csrf_checkout_payload_redirect_and_duplicate_g
         "window.location.href = res.redirect_url",
         "setScreen('subscription')",
     ):
-        assert contract in APP
+        assert contract in BILLING
 
 
 def test_payment_success_and_failure_keep_status_and_timing_behavior():
-    success = APP[APP.index("function PaymentSuccessScreen("):APP.index("function PaymentFailureScreen(")]
-    failure = APP[APP.index("function PaymentFailureScreen("):APP.index("type PaymentHistoryItem =")]
+    success = BILLING[BILLING.index("function PaymentSuccessScreen("):BILLING.index("function PaymentFailureScreen(")]
+    failure = BILLING[BILLING.index("function PaymentFailureScreen("):BILLING.index("function PaymentHistoryScreen(")]
 
     for contract in (
         "api<{ payments: PaymentHistoryItem[] }>('/payment-history')",
@@ -83,22 +116,19 @@ def test_payment_success_and_failure_keep_status_and_timing_behavior():
         assert contract in failure
 
 
-def test_payment_history_keeps_response_fields_status_metadata_and_empty_state():
+def test_payment_history_uses_shared_status_metadata_and_shell_feedback_props():
     for contract in (
-        "type PaymentHistoryItem = {",
-        "payment_type: string",
-        "content_title?: string | null",
-        "plan: string | null",
-        "provider: string | null",
-        "reference: string | null",
         "function PaymentHistoryScreen(",
         "api<{ payments: PaymentHistoryItem[] }>('/payment-history')",
         "PAYMENT_STATUS_META[p.status]",
         "<Pill text={meta.label}",
         '<EmptyState icon="💳" title="No payments yet"',
+        "ErrorState",
         "window.history.back()",
     ):
-        assert contract in APP
+        assert contract in BILLING
 
-    assert "export const PAYMENT_STATUS_META:" in ADMIN_PLATFORM
-    assert "from './admin/AdminPlatform'" in APP
+    assert "export const PAYMENT_STATUS_META:" in PAYMENT_STATUS
+    assert "from '../../lib/paymentStatus'" in BILLING
+    assert "export { PAYMENT_STATUS_META } from '../lib/paymentStatus'" in ADMIN_PLATFORM
+    assert "from './admin/AdminPlatform'" not in APP
