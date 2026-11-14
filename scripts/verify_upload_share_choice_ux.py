@@ -3,6 +3,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 app = (root / "frontend/src/App.tsx").read_text(encoding="utf-8")
 upload = (root / "frontend/src/screens/upload/UploadFlowScreens.tsx").read_text(encoding="utf-8")
+navigation = (root / "frontend/src/types/navigation.ts").read_text(encoding="utf-8")
 publish = (root / "frontend/src/screens/library/PublishLibraryScreen.tsx").read_text(encoding="utf-8")
 
 required_app = [
@@ -17,6 +18,9 @@ required_app = [
 for anchor in required_app:
     if anchor not in app:
         raise SystemExit(f"missing app-shell upload/publish anchor: {anchor}")
+
+if "| 'upload-share-choice'" not in navigation:
+    raise SystemExit("upload-share-choice is missing from the shared Screen type")
 
 required_upload = [
     "export function UploadScreen(",
