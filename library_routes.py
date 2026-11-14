@@ -27,6 +27,15 @@ def register_library_routes(
     University: Any,
     Program: Any,
     XpEvent: Any,
+    LIBRARY_ACTIVE_STATUSES: Any,
+    LIBRARY_DESCRIPTION_MAX: Any,
+    LIBRARY_MATERIAL_TYPES: Any,
+    LIBRARY_TITLE_MAX: Any,
+    LIBRARY_XP_ON_APPROVAL: Any,
+    _free_library_publication_ids: Any,
+    _student_has_premium_library: Any,
+    _document_content_has_flagged_material: Any,
+    _flagged_document_ids: Any,
     get_user_subscription_status: Any,
     _can_publish_document: Any,
     _display_name: Any,
@@ -570,8 +579,6 @@ def register_library_routes(
 
         return jsonify({"message": "Report submitted", "report_id": report.id}), 201
 
-
-    LIBRARY_XP_ON_APPROVAL = 50
 
 
     @app.route("/admin/library/queue")

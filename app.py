@@ -4033,6 +4033,10 @@ def _flagged_document_ids():
     ]
 
 
+LIBRARY_XP_ON_APPROVAL = 50
+XP_LIBRARY_PUBLICATION_APPROVED = LIBRARY_XP_ON_APPROVAL
+
+
 register_library_routes(
     app,
     db,
@@ -4047,6 +4051,15 @@ register_library_routes(
     University=University,
     Program=Program,
     XpEvent=XpEvent,
+    LIBRARY_ACTIVE_STATUSES=LIBRARY_ACTIVE_STATUSES,
+    LIBRARY_DESCRIPTION_MAX=LIBRARY_DESCRIPTION_MAX,
+    LIBRARY_MATERIAL_TYPES=LIBRARY_MATERIAL_TYPES,
+    LIBRARY_TITLE_MAX=LIBRARY_TITLE_MAX,
+    LIBRARY_XP_ON_APPROVAL=LIBRARY_XP_ON_APPROVAL,
+    _free_library_publication_ids=_free_library_publication_ids,
+    _student_has_premium_library=_student_has_premium_library,
+    _document_content_has_flagged_material=_document_content_has_flagged_material,
+    _flagged_document_ids=_flagged_document_ids,
     get_user_subscription_status=get_user_subscription_status,
     _can_publish_document=_can_publish_document,
     _display_name=lambda user: _display_name(user),
