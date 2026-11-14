@@ -166,3 +166,9 @@ def register_runtime_feature_routes(
     )
     register_study_retrieval_routes(app, db, login_required, require_csrf)
     register_request_observability(app, db, require_admin, RequestObservabilityEvent)
+
+def register_gamification_routes(app: Any, **dependencies: Any) -> None:
+    """Register XP, streak, study-time and achievement routes."""
+    from gamification_routes import register_gamification_routes as register
+
+    register(app, **dependencies)
