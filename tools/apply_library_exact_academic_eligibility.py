@@ -259,7 +259,7 @@ replace_route_once_or_skip(
     lambda: "relevance_order = []" in route_text and "query.order_by(*relevance_order, order_col)" in route_text,
 )
 
-if "_library_context_matches(viewer, publication)" not in app_text:
+if "def _library_context_matches(viewer, publication):" not in app_text:
     marker = 'LIBRARY_ACTIVE_STATUSES = ("pending", "approved")'
     if app_text.count(marker) != 1:
         raise SystemExit(f"FAIL CLOSED: Library active-status anchor: expected 1 match, found {app_text.count(marker)}")
