@@ -1,6 +1,6 @@
 # Subscription and payment screen extraction map
 
-**Status:** dependency mapping and initial characterization contract are in place; no screen code has moved yet. The test is wired into Frontend Build and its first run is queued.
+**Status:** dependency mapping and initial characterization contract are in place; no screen code has moved yet. The test is wired into Frontend Build and passed in run 43583651298 (185 source/module/transform tests, five offline Library tests, TypeScript and production build).
 **Current owner:** frontend/src/App.tsx on the consolidated PR #79 branch.
 **Goal:** move the existing student subscription/payment screens into a feature module without changing plan selection, checkout, provider redirect, return routing, payment-history display, or any billing rule.
 
@@ -50,7 +50,7 @@ A repository search for SubscriptionScreen, PaymentScreen, SUBSCRIPTION_PLAN_MET
 
 ## Test-first extraction plan
 
-1. Added tests/test_subscription_screens_module_contract.py before moving code. Its initial CI run must pass against the current inline implementation before extraction. It should accept only the intended new module owner and assert route wiring, selectedPlan lifting, all endpoints, CSRF header and payload, redirect_url navigation, duplicate-submit guard, payment history fields, pending/failure distinction, and six-second redirect cleanup.
+1. Added tests/test_subscription_screens_module_contract.py before moving code. It passed against the current inline implementation in Frontend Build run 43583651298 before extraction. It should accept only the intended new module owner and assert route wiring, selectedPlan lifting, all endpoints, CSRF header and payload, redirect_url navigation, duplicate-submit guard, payment history fields, pending/failure distinction, and six-second redirect cleanup.
 2. Add billing response types in frontend/src/types/billing.ts and move PAYMENT_STATUS_META to a neutral shared helper with a test proving AdminPlatform and student billing use the same map.
 3. Move the five active screens to frontend/src/screens/billing/SubscriptionScreens.tsx, preserving their component bodies and route IDs. Inject EmptyState/ErrorState; keep Pill and existing shared utilities as imports.
 4. Update App route dispatch and source ownership contracts. Do not move the Paystack return-query parser or selectedPlan state.
