@@ -4072,30 +4072,29 @@ register_library_routes(
 
 
     # ---------- XP / Achievements / Streaks (Chunk 7) ----------
-    #
-    # Fixed-value MVP: XP amounts and the achievement catalog are hardcoded
-    # constants below rather than admin-editable SystemSetting rows (unlike
-    # content prices) - that's a Phase 17 (Platform Controls) concern, not
-    # this chunk's. All awarding funnels through award_xp()/unlock_achievement(),
-    # which are idempotent the same way admin_approve_library_item already is:
-    # insert into a uniquely-constrained table, and treat IntegrityError as
-    # "already awarded" rather than an error.
+#
+# Fixed-value MVP: XP amounts and the achievement catalog are hardcoded
+# constants below rather than admin-editable SystemSetting rows (unlike
+# content prices) - that's a Phase 17 (Platform Controls) concern, not
+# this chunk's. All awarding funnels through award_xp()/unlock_achievement(),
+# which are idempotent the same way admin_approve_library_item already is:
+# insert into a uniquely-constrained table, and treat IntegrityError as
+# "already awarded" rather than an error.
 
-    XP_DOCUMENT_STUDIED = 15
-    XP_QUIZ_COMPLETED = 20
-    XP_FLASHCARDS_COMPLETED = 10
-    XP_COMMUNITY_HELPFUL_REPLY = 5
-    XP_LIBRARY_PUBLICATION_APPROVED = LIBRARY_XP_ON_APPROVAL  # defined earlier, kept as one source of truth
-    XP_STREAK_MILESTONES = {7: 50, 14: 100, 21: 150, 30: 200}
+XP_DOCUMENT_STUDIED = 15
+XP_QUIZ_COMPLETED = 20
+XP_FLASHCARDS_COMPLETED = 10
+XP_COMMUNITY_HELPFUL_REPLY = 5
+XP_STREAK_MILESTONES = {7: 50, 14: 100, 21: 150, 30: 200}
 
-    # Cumulative XP required to REACH a level: cumulative(L) = 75 * L * (L-1).
-    # Chosen so the curve lands on whole numbers and gives a natural ramp
-    # (Level 4 starts at 900 XP, Level 5 at 1500 XP, etc).
-    LEVEL_TITLES = {
-        1: "Fresher", 2: "Learner", 3: "Achiever", 4: "Scholar", 5: "Sage",
-        6: "Master", 7: "Luminary", 8: "Legend",
-    }
-    LEVEL_TITLE_FALLBACK = "Legend"
+# Cumulative XP required to REACH a level: cumulative(L) = 75 * L * (L-1).
+# Chosen so the curve lands on whole numbers and gives a natural ramp
+# (Level 4 starts at 900 XP, Level 5 at 1500 XP, etc).
+LEVEL_TITLES = {
+    1: "Fresher", 2: "Learner", 3: "Achiever", 4: "Scholar", 5: "Sage",
+    6: "Master", 7: "Luminary", 8: "Legend",
+}
+LEVEL_TITLE_FALLBACK = "Legend"
 
 
 def _level_cumulative_xp(level):
