@@ -306,11 +306,17 @@ replace_route_once_or_skip(
     )),
 )
 
-replace_route_once_or_skip(
-'''    publication = db.session.get(LibraryPublication, publication_id)
+save_start = route_text.find("def save_library_item(")
+if save_start < 0:
+    raise SystemExit("FAIL CLOSED: save_library_item route was not found")
+save_end = route_text.find("\\n@app.route", save_start)
+if save_end < 0:
+    save_end = len(route_text)
+save_block = route_text[save_start:save_end]
+old_save_gate = '''    publication = db.session.get(LibraryPublication, publication_id)
     if not publication or publication.status != "approved":
-        return jsonify({"error": "Library item not found"}), 404''',
-'''    publication = db.session.get(LibraryPublication, publication_id)
+        return jsonify({"error": "Library item not found"}), 404'''
+new_save_gate = '''    publication = db.session.get(LibraryPublication, publication_id)
     if not publication or publication.status != "approved":
         return jsonify({"error": "Library item not found"}), 404
 
@@ -318,10 +324,15 @@ replace_route_once_or_skip(
     if not viewer:
         return jsonify({"error": "Account not found"}), 404
     if not _library_context_matches(viewer, publication):
-        return jsonify({"error": "This Library item is not available for your university, course, year, and semester"}), 403''',
-    "save exact academic gate",
-    lambda: "_library_context_matches(viewer, publication)" in route_text,
-)
+        return jsonify({"error": "This Library item is not available for your university, course, year, and semester"}), 403'''
+save_gate_count = save_block.count(old_save_gate)
+if save_gate_count == 1:
+    save_block = save_block.replace(old_save_gate, new_save_gate, 1)
+elif save_gate_count == 0 and "_library_context_matches(viewer, publication)" in save_block:
+    print("Skipped save exact academic gate: canonical save guard is already present.")
+else:
+    raise SystemExit(f"FAIL CLOSED: save exact academic gate: expected 1 match or verified canonical route, found {save_gate_count}")
+route_text = route_text[:save_start] + save_block + route_text[save_end:]
 
 APP.write_text(app_text, encoding="utf-8")
 LIBRARY_ROUTES.write_text(route_prefix + "\n".join(("    " + line) if line else "" for line in route_text.splitlines()) + "\n", encoding="utf-8")
