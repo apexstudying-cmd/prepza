@@ -75,7 +75,7 @@ def test_publish_library_context_transform_targets_module_preserves_screen_and_i
     shutil.copyfile(SCRIPT, root / "tools/apply_library_publish_context_ux.py")
     shutil.copyfile(MODULE, root / "frontend/src/screens/library/PublishLibraryScreen.tsx")
 
-    app = "import PublishLibraryScreen from './screens/library/PublishLibraryScreen'\\n"
+    app = "import PublishLibraryScreen from './screens/library/PublishLibraryScreen'\n"
     (root / "frontend/src/App.tsx").write_text(app, encoding="utf-8")
 
     run_transform(root)
@@ -99,13 +99,13 @@ def test_publish_library_context_transform_keeps_legacy_app_fallback(tmp_path):
     # retained for older worktrees where the feature module does not exist.
     legacy = MODULE.read_text(encoding="utf-8")
     legacy = legacy.replace(
-        "type LibraryAcademicContext = { university_id: number | null; program_id: number | null; year: number | null; semester: number | null }\\n",
+        "type LibraryAcademicContext = { university_id: number | null; program_id: number | null; year: number | null; semester: number | null }\n",
         "",
         1,
     )
     legacy = legacy.replace(
-        "import type { PublishableDoc } from '../../types/library'\\n",
-        "type PublishableDoc = { id: number; title: string; status: string; file_type: string | null; page_count: number | null }\\n",
+        "import type { PublishableDoc } from '../../types/library'\n",
+        "type PublishableDoc = { id: number; title: string; status: string; file_type: string | null; page_count: number | null }\n",
         1,
     )
     (root / "frontend/src/App.tsx").write_text(legacy, encoding="utf-8")
