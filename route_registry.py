@@ -202,3 +202,10 @@ def register_library_routes(app: Any, db: Any, **dependencies: Any) -> None:
     from library_routes import register_library_routes as register
 
     register(app, db, **dependencies)
+
+
+def register_ambassador_routes(app: Any, db: Any, **dependencies: Any) -> None:
+    """Register student-facing ambassador and referral endpoints."""
+    from ambassador_routes import register_ambassador_routes as register
+
+    register(app, db, **dependencies)

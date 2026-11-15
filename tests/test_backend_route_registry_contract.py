@@ -6,7 +6,7 @@ from types import ModuleType
 
 from flask import Blueprint, Flask
 
-from route_registry import register_foundation_routes
+from route_registry import register_ambassador_routes, register_foundation_routes
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_SOURCE = (ROOT / "app.py").read_text(encoding="utf-8")
@@ -124,3 +124,75 @@ def test_app_delegates_all_later_route_registrations_to_registry_in_order() -> N
         "register_request_observability(app",
     ):
         assert direct_call not in APP_SOURCE
+
+
+
+def test_ambassador_routes_are_owned_by_the_feature_module_in_original_order() -> None:
+    assert "register_ambassador_routes(" in APP_SOURCE
+    assert "def ambassador_apply(" not in APP_SOURCE
+    assert "def ambassador_request_payout(" not in APP_SOURCE
+    assert "AMBASSADOR_PAYOUT_DESTINATION_REGEX" not in APP_SOURCE
+    assert "def get_ambassador_settings(" in APP_SOURCE
+    assert "def compute_ambassador_tier(" in APP_SOURCE
+    assert "def generate_referral_code(" in APP_SOURCE
+    assert "from ambassador_routes import register_ambassador_routes as register" in REGISTRY_SOURCE
+
+    expected_calls = (
+        "register_notification_preference_routes(",
+        "register_ambassador_routes(",
+        "register_opportunity_feature_routes(",
+    )
+    positions = [APP_SOURCE.rindex(call) for call in expected_calls]
+    assert positions == sorted(positions)
+
+
+def test_ambassador_route_registry_preserves_paths_methods_and_security_decorators() -> None:
+    app = Flask("prepza-ambassador-route-contract")
+    limiter_calls: list[tuple[str, str]] = []
+    csrf_calls: list[str] = []
+
+    class RecordingLimiter:
+        def limit(self, rule: str):
+            def decorate(view):
+                limiter_calls.append((view.__name__, rule))
+                return view
+            return decorate
+
+    def require_csrf(view):
+        csrf_calls.append(view.__name__)
+        return view
+
+    register_ambassador_routes(
+        app,
+        object(),
+        User=object(),
+        Ambassador=object(),
+        Referral=object(),
+        AmbassadorPayout=object(),
+        limiter=RecordingLimiter(),
+        require_csrf=require_csrf,
+        base_url="https://prepza.example",
+        get_ambassador_settings=lambda: {},
+        compute_ambassador_tier=lambda *_: (1, 10),
+        generate_referral_code=lambda *_: "PREPZA123",
+    )
+
+    routes = {
+        rule.endpoint: (rule.rule, frozenset(rule.methods - {"HEAD", "OPTIONS"}))
+        for rule in app.url_map.iter_rules()
+        if rule.endpoint != "static"
+    }
+    assert routes == {
+        "ambassador_apply": ("/ambassador/apply", frozenset({"POST"})),
+        "ambassador_status": ("/ambassador/status", frozenset({"GET"})),
+        "ambassador_dashboard": ("/ambassador/dashboard", frozenset({"GET"})),
+        "ambassador_referral_qr": ("/ambassador/referral-qr", frozenset({"GET"})),
+        "ambassador_referrals": ("/ambassador/referrals", frozenset({"GET"})),
+        "ambassador_payouts": ("/ambassador/payouts", frozenset({"GET"})),
+        "ambassador_request_payout": ("/ambassador/payouts/request", frozenset({"POST"})),
+    }
+    assert limiter_calls == [
+        ("ambassador_apply", "5 per hour"),
+        ("ambassador_request_payout", "5 per hour"),
+    ]
+    assert csrf_calls == ["ambassador_apply", "ambassador_request_payout"]

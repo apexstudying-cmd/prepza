@@ -1,14 +1,14 @@
 {
   "version": 1,
-  "last_verified_date": "2026-11-14",
-  "last_verified_commit": "c494d147393035ac40bc8875f62d1ff6339c477a",
+  "last_verified_date": "2026-11-15",
+  "last_verified_commit": "b24d583f054f056161c714a15d558406672acb4d",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
     {
       "id": "database_alembic",
       "status": "PASS",
-      "evidence": "PASS on exact candidate c494d147393035ac40bc8875f62d1ff6339c477a: Release Browser [43570716679](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716679) built the production image, started disposable PostgreSQL 17/Redis, applied Alembic migrations and exercised the controlled SQL migration ledger."
+      "evidence": "PASS on exact PR #79 code head b24d583f054f056161c714a15d558406672acb4d: Release Browser [43686511971](https://github.com/apexstudying-cmd/prepza/actions/runs/43686511971) completed the production-image, disposable PostgreSQL 17/Redis, Alembic and controlled SQL-ledger checks."
     },
     {
       "id": "authentication_session_csrf",
@@ -68,42 +68,42 @@
     {
       "id": "mobile_responsive_visual",
       "status": "PASS",
-      "evidence": "PASS on exact candidate c494d147393035ac40bc8875f62d1ff6339c477a, Release Browser [43570716679](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716679): phone-small 360x800, phone-standard 390x844 and tablet-portrait 768x1024 browser checks passed. Screenshot artifact [14103724866](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716679/artifacts/14103724866) was captured. Shop source is unchanged since the prior reviewed 17-image artifact [14102507070](https://github.com/apexstudying-cmd/prepza/actions/runs/43566535290/artifacts/14102507070), which covered Home/Shop phone, Shop tablet, buyer, seller and admin states."
+      "evidence": "PASS on exact code head b24d583f054f056161c714a15d558406672acb4d, Release Browser [43686511971](https://github.com/apexstudying-cmd/prepza/actions/runs/43686511971): phone-small 360x800, phone-standard 390x844 and tablet-portrait 768x1024 responsive checks passed."
     },
     {
       "id": "storage_backup_restore",
       "status": "PASS",
-      "evidence": "PASS on exact candidate c494d147393035ac40bc8875f62d1ff6339c477a: PostgreSQL Backup Restore Rehearsal [43570716644](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716644) passed both existing-database upgrade/data-preservation and PostgreSQL 17 custom-format backup/restore jobs. The restored database matched Alembic state, public-table count and sentinel data; the application smoke-tested against restored data."
+      "evidence": "PASS on exact code head b24d583f054f056161c714a15d558406672acb4d, PostgreSQL Backup Restore Rehearsal [43686511937](https://github.com/apexstudying-cmd/prepza/actions/runs/43686511937): both existing-database upgrade/data-preservation and PostgreSQL custom-format dump/restore jobs succeeded."
     },
     {
       "id": "cross_system_journeys",
       "status": "PASS",
-      "evidence": "PASS on exact candidate c494d147393035ac40bc8875f62d1ff6339c477a, Release Browser [43570716679](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716679): Shop buyer/seller/admin journeys, B2B browser-to-ledger metering, 99 disposable PostgreSQL QA tests, responsive phone/tablet checks, online/offline Study Hub and generated-artifact replay all passed. Disposable services were cleaned up."
+      "evidence": "PASS on exact code head b24d583f054f056161c714a15d558406672acb4d, Release Browser [43686511971](https://github.com/apexstudying-cmd/prepza/actions/runs/43686511971): responsive browser, Shop buyer/seller/admin journeys, B2B browser-to-ledger, disposable PostgreSQL QA, Study Hub offline and generated-artifact journeys passed."
     },
     {
       "id": "ci_release_workflows",
       "status": "PASS",
-      "evidence": "PASS on exact candidate c494d147393035ac40bc8875f62d1ff6339c477a: all 17 triggered workflows succeeded — Release Browser 43570716679, PostgreSQL Backup Restore 43570716644, Frontend Build 43570716681, Study Hub Runtime 43570716706, AI Economics 43570716647, Kokoro 43570716735, Admin Route 43570716672, Prepza Control API 43570716834, Backend Academic Catalog 43570716768, B2B Contract 43570716791, E2EE Security 43570716703, AI Generation 43570716695, E2EE Chat 43570716700, Student Frontend 43570716655, Student Contract 43570716719, Backend Shared Extension 43570716698 and Study Navigation 43570716671. StudyHub Library Flow [43570716663](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716663) was SKIPPED by path condition and is not counted as a pass."
+      "evidence": "PASS on exact PR #79 code head b24d583f054f056161c714a15d558406672acb4d: 17 triggered workflows succeeded, including Frontend Build 43686512095, Release Browser 43686511971, PostgreSQL Backup Restore 43686511937 and Backend Shared Extension Contract 43686512119. StudyHub Library Flow 43686511919 was SKIPPED by path condition and is not counted as a pass."
     },
     {
       "id": "existing_database_migration",
       "status": "PASS",
-      "evidence": "PASS on exact candidate c494d147393035ac40bc8875f62d1ff6339c477a, run [43570716644](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716644): a representative prior-revision database with seeded document/material data upgraded to Alembic head without losing the seeded rows; Shop/streak schema and relationships were verified. Disposable CI only."
+      "evidence": "PASS on exact code head b24d583f054f056161c714a15d558406672acb4d, PostgreSQL Backup Restore Rehearsal [43686511937](https://github.com/apexstudying-cmd/prepza/actions/runs/43686511937): the existing-database upgrade/data-preservation job succeeded on the candidate."
     },
     {
       "id": "clean_full_regression",
       "status": "PASS",
-      "evidence": "PASS on one exact SHA c494d147393035ac40bc8875f62d1ff6339c477a: Release Browser [43570716679](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716679) and PostgreSQL Backup Restore [43570716644](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716644) both checked out and asserted this exact SHA. Browser, Shop roles, B2B, 99 PostgreSQL tests, online/offline artifacts, existing-database upgrade and PostgreSQL 17 backup/restore all passed. No production system was touched."
+      "evidence": "PASS on one exact SHA b24d583f054f056161c714a15d558406672acb4d: Release Browser [43686511971](https://github.com/apexstudying-cmd/prepza/actions/runs/43686511971) and PostgreSQL Backup Restore [43686511937](https://github.com/apexstudying-cmd/prepza/actions/runs/43686511937) both ran for this candidate; browser/cross-system and both database recovery jobs succeeded."
     },
     {
       "id": "b2b_monetization_integrity",
       "status": "IN_PROGRESS",
-      "evidence": "IN_PROGRESS on exact candidate c494d147393035ac40bc8875f62d1ff6339c477a: Release Browser [43570716679](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716679) passed B2B browser-to-ledger checks, including offscreen/offline no-billing, fresh visibility, lost-response UUID retry, rapid-click debounce, duplicate-click idempotency and report reconciliation. The backend still cannot independently prove the client's 50%-visible/1.5-second dwell condition; do not claim tamper-proof viewability or CPA/conversion billing."
+      "evidence": "IN_PROGRESS on exact candidate b24d583f054f056161c714a15d558406672acb4d: Release Browser [43686511971](https://github.com/apexstudying-cmd/prepza/actions/runs/43686511971) passed the current B2B browser-to-ledger contract. Backend-independent proof of the client's 50%-visible/1.5-second dwell condition remains unresolved; do not claim tamper-proof viewability or CPA billing."
     },
     {
       "id": "shop_marketplace",
       "status": "IN_PROGRESS",
-      "evidence": "IN_PROGRESS on exact candidate c494d147393035ac40bc8875f62d1ff6339c477a: Release Browser [43570716679](https://github.com/apexstudying-cmd/prepza/actions/runs/43570716679) passed buyer browse/detail/save/report/contact and encrypted in-app message; seller My Listings/pause/sold/KES 100 paid listing form; admin approve/reject/report/payment review. Existing visual review artifact [14102507070](https://github.com/apexstudying-cmd/prepza/actions/runs/43566535290/artifacts/14102507070) covers phone/tablet buyer/seller/admin. The classifieds model is unchanged. Real Paystack sandbox checkout/webhooks and R2 object/header operations remain NOT_TESTED pending safe staging evidence."
+      "evidence": "IN_PROGRESS on exact candidate b24d583f054f056161c714a15d558406672acb4d: Release Browser [43686511971](https://github.com/apexstudying-cmd/prepza/actions/runs/43686511971) passed buyer browse/detail/save/report/direct-contact, seller listing/My Listings/pause/sold and admin moderation/payment-review journeys. Real Paystack sandbox checkout/webhooks and R2 object/header operations remain NOT_TESTED pending safe staging evidence."
     },
     {
       "id": "payment_recovery_idempotency",
@@ -123,7 +123,7 @@
     {
       "id": "documentation_audit",
       "status": "IN_PROGRESS",
-      "evidence": "IN_PROGRESS: the exact candidate c494d147393035ac40bc8875f62d1ff6339c477a verification, upload-flow extraction, release tracker and architecture/QA notes are synchronized in this update. Broader audit remains open for provider/staging evidence, page-text/index invalidation and human citation review, external monitoring/request-ID delivery, B2B viewability, Home/PWA review and remaining frontend/backend boundaries."
+      "evidence": "IN_PROGRESS: release and architecture records reconcile the exact verified code head b24d583f054f056161c714a15d558406672acb4d; the current ambassador route extraction is separately marked NOT_TESTED pending its own exact-head CI. Provider/staging, page-text/citation, external monitoring/request-ID, B2B viewability, Home/PWA and deployment review remain open."
     },
     {
       "id": "vps_or_render_deployment",

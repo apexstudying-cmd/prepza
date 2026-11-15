@@ -485,3 +485,19 @@ No production database, deployment, live payment, new paid service or billable G
 ## 2026-11-14 — Subscription/Payment characterization suite
 
 The initial characterization suite for the existing inline SubscriptionScreen, PaymentScreen, PaymentSuccessScreen, PaymentFailureScreen and PaymentHistoryScreen passed before extraction. Frontend Build [43583651298](https://github.com/apexstudying-cmd/prepza/actions/runs/43583651298) on test/workflow head 7f9b2072472710c2d794b090e88a3647609e4809 passed 185 source/module/transform tests and five offline Library tests, then TypeScript, production Vite build, service-worker and architecture audits. This protects lifted selectedPlan state, plan/status/usage API reads, CSRF checkout request/payload, Paystack redirect_url navigation, duplicate-submit guard, payment-history statuses, pending/failure distinction and success timer cleanup. No billing implementation moved and no payment request was made.
+
+
+## 15 November 2026 — latest verified candidate before ambassador route extraction
+
+Exact code head: `b24d583f054f056161c714a15d558406672acb4d` on PR #79.
+
+- **Frontend Build:** [43686512095](https://github.com/apexstudying-cmd/prepza/actions/runs/43686512095) PASS — source/transform contracts, offline Library regression, functional-wiring audit, ORM/schema audit, TypeScript, service-worker validation and production Vite build.
+- **Release Browser and Cross-System Regression:** [43686511971](https://github.com/apexstudying-cmd/prepza/actions/runs/43686511971) PASS — the responsive/cross-system release job completed successfully on this code head.
+- **PostgreSQL Backup Restore Rehearsal:** [43686511937](https://github.com/apexstudying-cmd/prepza/actions/runs/43686511937) PASS — both the existing-database upgrade/data-preservation job and the PostgreSQL custom dump/restore job succeeded.
+- **Workflow inventory:** 17 triggered workflows succeeded. StudyHub Library Flow [43686511919](https://github.com/apexstudying-cmd/prepza/actions/runs/43686511919) was SKIPPED by its path condition and is not counted as a pass.
+- **Source snapshot:** App.tsx 2,130 lines; app.py 6,328; PublishLibraryScreen 241; SubscriptionScreens 415; AdminSection 172; useAdminSectionController 934.
+- **Disposition:** this is a verified code candidate, not a launch approval. Shop automated role journeys and responsive checks are covered by Release Browser, but real Paystack/R2 evidence remains NOT_TESTED. B2B browser metering passes its current contract, but server-side proof of the client dwell condition remains unresolved.
+
+## 15 November 2026 — ambassador route extraction (verification pending)
+
+The student ambassador endpoints are being moved into `ambassador_routes.py` through the existing route registry. The existing settings/tier/referral-code helpers remain in `app.py` for shared referral lifecycle hooks. Route registration order, endpoint names, methods, CSRF and rate-limit decorators are preserved. The existing real-DB payout-bundle regression remains in `tests/test_local_qa_real_world.py`; new route-registry contracts cover all seven endpoint mappings and guard placement. **NOT_TESTED** until the workflows triggered by the new code head complete.
