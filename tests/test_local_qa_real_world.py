@@ -2628,3 +2628,85 @@ def test_document_access_denies_direct_id_for_wrong_library_cohort(world):
         headers=_csrf(world["student_b"].id),
     )
     assert response.status_code == 404
+
+
+def test_ambassador_payout_request_persists_bundle_and_rejects_duplicates(world):
+    """A payout request must persist its Paystack recipient and reserve only unlocked referrals."""
+    app_module = __import__("app")
+    now = datetime.utcnow()
+
+    ambassador = app_module.Ambassador(
+        user_id=world["student_a"].id,
+        referral_code="QAAMBASSADOR",
+        status="active",
+    )
+    db.session.add(ambassador)
+    db.session.flush()
+
+    payment = app_module.Payment(
+        user_id=world["student_b"].id,
+        content_item_id=None,
+        amount=1000,
+        provider="paystack",
+        reference="qa-ambassador-payout-payment",
+        provider_reference="qa-ambassador-payout-provider",
+        payment_type="subscription",
+        plan="plus",
+        status="success",
+        subscription_starts_at=now - timedelta(days=30),
+        subscription_expires_at=now - timedelta(days=1),
+    )
+    db.session.add(payment)
+    db.session.flush()
+
+    referral = app_module.Referral(
+        ambassador_id=ambassador.id,
+        referred_user_id=world["student_b"].id,
+        referral_code_used=ambassador.referral_code,
+        status="activated",
+        first_payment_id=payment.id,
+        first_payment_at=now - timedelta(days=30),
+        commission_rate_applied=10,
+        commission_amount=600,
+        unlock_at=now - timedelta(days=1),
+    )
+    db.session.add(referral)
+    db.session.commit()
+
+    client = _client_for(world["student_a"].id)
+    endpoint = "/ambassador/payouts/request"
+    headers = _csrf(world["student_a"].id)
+
+    missing_names = client.post(
+        endpoint,
+        json={"payout_destination": "+254712345678"},
+        headers=headers,
+    )
+    assert missing_names.status_code == 400
+    assert app_module.AmbassadorPayout.query.count() == 0
+    assert referral.payout_id is None
+
+    payload = {
+        "payout_destination": "+254712345678",
+        "recipient_first_name": "QA",
+        "recipient_last_name": "Student",
+    }
+    created = client.post(endpoint, json=payload, headers=headers)
+    assert created.status_code == 201, created.get_data(as_text=True)
+    response = created.get_json()
+    assert response == {"id": response["id"], "amount": 600, "status": "pending"}
+
+    payout = db.session.get(app_module.AmbassadorPayout, response["id"])
+    db.session.refresh(referral)
+    assert payout is not None
+    assert payout.ambassador_id == ambassador.id
+    assert payout.amount == 600
+    assert payout.status == "pending"
+    assert payout.payout_destination == "+254712345678"
+    assert payout.recipient_first_name == "QA"
+    assert payout.recipient_last_name == "Student"
+    assert referral.payout_id == payout.id
+
+    duplicate = client.post(endpoint, json=payload, headers=headers)
+    assert duplicate.status_code == 409
+    assert app_module.AmbassadorPayout.query.count() == 1
