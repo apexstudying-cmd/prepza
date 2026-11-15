@@ -10,6 +10,7 @@ BACKEND = ROOT / "app.py"
 APP_FACTORY = ROOT / "app_factory.py"
 ROUTE_REGISTRY = ROOT / "route_registry.py"
 STUDY_ROUTES = ROOT / "gamification_routes.py"
+AMBASSADOR_ROUTES = ROOT / "ambassador_routes.py"
 MANIFEST = FRONTEND / "public" / "manifest.json"
 
 errors = []
@@ -23,6 +24,7 @@ require_file(BACKEND, "Flask app.py")
 require_file(APP_FACTORY, "Flask app factory")
 require_file(ROUTE_REGISTRY, "backend route registry")
 require_file(STUDY_ROUTES, "Study activity route module")
+require_file(AMBASSADOR_ROUTES, "Ambassador route module")
 require_file(FRONTEND / "src" / "StudyActivityScreen.tsx", "StudyActivityScreen")
 require_file(FRONTEND / "src" / "share" / "StudyShareSheet.tsx", "StudyShareSheet")
 require_file(FRONTEND / "public" / "manifest.json", "PWA manifest")
@@ -47,11 +49,25 @@ if BACKEND.exists():
     backend_text = BACKEND.read_text(encoding="utf-8")
     for needle, label in [
         ("register_gamification_routes(", "study activity route registration"),
-        ('@app.route("/ambassador/referral-qr")', "ambassador QR endpoint"),
+        ("register_ambassador_routes(", "ambassador route registration"),
         ("register_foundation_routes(app, db)", "foundation route registry call"),
     ]:
         if needle not in backend_text:
             errors.append(f"app.py missing {label}: {needle}")
+
+if AMBASSADOR_ROUTES.exists():
+    ambassador_route_text = AMBASSADOR_ROUTES.read_text(encoding="utf-8")
+    for needle, label in [
+        ('@app.route("/ambassador/apply", methods=["POST"])', "ambassador application endpoint"),
+        ('@app.route("/ambassador/status")', "ambassador status endpoint"),
+        ('@app.route("/ambassador/dashboard")', "ambassador dashboard endpoint"),
+        ('@app.route("/ambassador/referral-qr")', "ambassador QR endpoint"),
+        ('@app.route("/ambassador/referrals")', "ambassador referrals endpoint"),
+        ('@app.route("/ambassador/payouts")', "ambassador payouts endpoint"),
+        ('@app.route("/ambassador/payouts/request", methods=["POST"])', "ambassador payout request endpoint"),
+    ]:
+        if needle not in ambassador_route_text:
+            errors.append(f"ambassador_routes.py missing {label}: {needle}")
 
 if STUDY_ROUTES.exists():
     study_route_text = STUDY_ROUTES.read_text(encoding="utf-8")
@@ -78,6 +94,8 @@ if ROUTE_REGISTRY.exists():
     registry_text = ROUTE_REGISTRY.read_text(encoding="utf-8")
     for needle, label in [
         ("def register_foundation_routes(", "foundation route registrar"),
+        ("def register_ambassador_routes(", "ambassador route registrar"),
+        ("from ambassador_routes import register_ambassador_routes as register", "ambassador route module binding"),
         ("register_usage_billing(app, db)", "usage billing registration"),
         ("register_organisation_billing(app, db)", "organisation billing registration"),
         ("register_discovery(app, db)", "discovery billing registration"),

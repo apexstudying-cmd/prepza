@@ -196,3 +196,12 @@ def test_ambassador_route_registry_preserves_paths_methods_and_security_decorato
         ("ambassador_request_payout", "5 per hour"),
     ]
     assert csrf_calls == ["ambassador_apply", "ambassador_request_payout"]
+
+
+
+def test_launch_wiring_audit_tracks_the_ambassador_route_module_owner() -> None:
+    launch_wiring = (ROOT / "tools" / "verify_launch_wiring.py").read_text(encoding="utf-8")
+    assert 'AMBASSADOR_ROUTES = ROOT / "ambassador_routes.py"' in launch_wiring
+    assert '"register_ambassador_routes("' in launch_wiring
+    assert "if AMBASSADOR_ROUTES.exists():" in launch_wiring
+    assert '@app.route("/ambassador/referral-qr")' in launch_wiring
