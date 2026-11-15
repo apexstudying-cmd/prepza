@@ -5483,6 +5483,15 @@ def ambassador_request_payout():
         status="pending",
     )
     db.session.add(payout)
+    db.session.flush()  # assign payout.id before referrals reference it
+
+    for referral in eligible:
+        referral.payout_id = payout.id
+
+    db.session.commit()
+
+    return jsonify({"id": payout.id, "amount": payout.amount, "status": payout.status}), 201
+
 
 # ---------- Student chat runtime (base conversation API) ----------
 # The chat UX is intentionally polling-based. Message bodies are opaque:
