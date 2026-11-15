@@ -29,7 +29,7 @@ PRESERVED_SCREEN_CONTRACTS = (
     "setStep(4)",
     "setStep(5)",
     "setStep(3)",
-    "api<{ csrf_token: string }>('/me')",
+    "api<{ csrf_token: string; university_id: number | null; program_id: number | null; year: number | null; semester: number | null }>('/me')",
     "api<{ documents:",
     "('/documents')",
     "('/library/publish'",
