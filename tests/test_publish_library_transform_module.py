@@ -51,6 +51,7 @@ def run_transform(root: Path) -> subprocess.CompletedProcess[str]:
 
 
 def assert_publish_screen_contract(source: str) -> None:
+    assert "What happens if rejected?" not in source
     for marker in PRESERVED_SCREEN_CONTRACTS:
         assert marker in source, f"PublishLibrary screen contract disappeared: {marker}"
 
@@ -74,6 +75,7 @@ def test_publish_library_context_transform_targets_module_preserves_screen_and_i
     (root / "frontend/src/screens/library").mkdir(parents=True)
     shutil.copyfile(SCRIPT, root / "tools/apply_library_publish_context_ux.py")
     shutil.copyfile(MODULE, root / "frontend/src/screens/library/PublishLibraryScreen.tsx")
+    assert "Library moderation" in (root / "frontend/src/screens/library/PublishLibraryScreen.tsx").read_text(encoding="utf-8")
 
     app = "import PublishLibraryScreen from './screens/library/PublishLibraryScreen'\n"
     (root / "frontend/src/App.tsx").write_text(app, encoding="utf-8")
@@ -98,6 +100,7 @@ def test_publish_library_context_transform_keeps_legacy_app_fallback(tmp_path):
     # Build a legacy inline owner from the same screen source. The fallback is
     # retained for older worktrees where the feature module does not exist.
     legacy = MODULE.read_text(encoding="utf-8")
+    assert "Library moderation" in legacy
     legacy = legacy.replace(
         "type LibraryAcademicContext = { university_id: number | null; program_id: number | null; year: number | null; semester: number | null }\n",
         "",
