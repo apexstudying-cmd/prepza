@@ -11,6 +11,7 @@ APP_FACTORY = ROOT / "app_factory.py"
 ROUTE_REGISTRY = ROOT / "route_registry.py"
 STUDY_ROUTES = ROOT / "gamification_routes.py"
 AMBASSADOR_ROUTES = ROOT / "ambassador_routes.py"
+DOCUMENT_READER_ROUTES = ROOT / "document_reader_routes.py"
 MANIFEST = FRONTEND / "public" / "manifest.json"
 
 errors = []
@@ -25,6 +26,7 @@ require_file(APP_FACTORY, "Flask app factory")
 require_file(ROUTE_REGISTRY, "backend route registry")
 require_file(STUDY_ROUTES, "Study activity route module")
 require_file(AMBASSADOR_ROUTES, "Ambassador route module")
+require_file(DOCUMENT_READER_ROUTES, "Document reader route module")
 require_file(FRONTEND / "src" / "StudyActivityScreen.tsx", "StudyActivityScreen")
 require_file(FRONTEND / "src" / "share" / "StudyShareSheet.tsx", "StudyShareSheet")
 require_file(FRONTEND / "public" / "manifest.json", "PWA manifest")
@@ -50,6 +52,7 @@ if BACKEND.exists():
     for needle, label in [
         ("register_gamification_routes(", "study activity route registration"),
         ("register_ambassador_routes(", "ambassador route registration"),
+        ("register_document_reader_routes(", "document reader route registration"),
         ("register_foundation_routes(app, db)", "foundation route registry call"),
     ]:
         if needle not in backend_text:
@@ -68,6 +71,23 @@ if AMBASSADOR_ROUTES.exists():
     ]:
         if needle not in ambassador_route_text:
             errors.append(f"ambassador_routes.py missing {label}: {needle}")
+
+if DOCUMENT_READER_ROUTES.exists():
+    document_reader_text = DOCUMENT_READER_ROUTES.read_text(encoding="utf-8")
+    for needle, label in [
+        ('@app.route("/documents/<int:document_id>/reading", methods=["GET"])', "reader progress endpoint"),
+        ('@app.route("/documents/<int:document_id>/reading", methods=["POST"])', "reader progress update endpoint"),
+        ('@app.route("/documents/<int:document_id>/reading/page/<int:page_num>")', "private reader page endpoint"),
+        ('@require_csrf', "reader progress CSRF protection"),
+        ('bucket="documents"', "private document storage bucket"),
+        ('mimetype="image/png"', "rendered image response"),
+        ('Cache-Control"] = "private, no-store, max-age=0"', "private no-store cache policy"),
+        ("get_studyable_document(user_id, document_id)", "server-side document study authorization"),
+    ]:
+        if needle not in document_reader_text:
+            errors.append(f"document_reader_routes.py missing {label}: {needle}")
+    if "from app import" in document_reader_text or "import app" in document_reader_text:
+        errors.append("document_reader_routes.py must not import the Flask entry module")
 
 if STUDY_ROUTES.exists():
     study_route_text = STUDY_ROUTES.read_text(encoding="utf-8")
@@ -95,6 +115,8 @@ if ROUTE_REGISTRY.exists():
     for needle, label in [
         ("def register_foundation_routes(", "foundation route registrar"),
         ("def register_ambassador_routes(", "ambassador route registrar"),
+        ("def register_document_reader_routes(", "document reader route registrar"),
+        ("from document_reader_routes import register_document_reader_routes as register", "document reader route module binding"),
         ("from ambassador_routes import register_ambassador_routes as register", "ambassador route module binding"),
         ("register_usage_billing(app, db)", "usage billing registration"),
         ("register_organisation_billing(app, db)", "organisation billing registration"),
