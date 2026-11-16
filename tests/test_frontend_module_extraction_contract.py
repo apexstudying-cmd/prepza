@@ -46,7 +46,11 @@ def test_extracted_onboarding_preserves_academic_profile_update_contract():
 
 def test_settings_screen_is_owned_by_its_feature_module():
     assert "import SettingsScreen from './screens/settings/SettingsScreen'" in APP
-    assert "import Pill from './ui/Pill'" in APP
+    settings_source = (
+        ROOT / "frontend" / "src" / "screens" / "settings" / "SettingsScreen.tsx"
+    ).read_text(encoding="utf-8")
+    assert "import Pill from '../../ui/Pill'" in settings_source
+    assert "import Pill from './ui/Pill'" not in APP
     assert "case 'settings':" in APP
     assert "function SettingsScreen(" not in APP
     assert "function Pill(" not in APP
@@ -830,5 +834,53 @@ def test_generated_study_screens_keep_offline_generation_and_completion_contract
         "'X-CSRF-Token': csrfToken",
         "newly_unlocked_achievements",
         "setScreen('document-study')",
+    ):
+        assert contract in source
+
+
+def test_create_modal_screen_is_owned_by_its_feature_module():
+    assert "import CreateModal from './screens/create/CreateModalScreen'" in APP
+    assert "case 'create-modal':" in APP
+    assert "<CreateModal setScreen={setScreen} />" in APP
+    assert "function CreateModal(" not in APP
+
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "create" / "CreateModalScreen.tsx"
+    ).read_text(encoding="utf-8")
+    assert "export default function CreateModal" in source
+    assert "import type { Screen } from '../../types/navigation'" in source
+    assert "import Pill from '../../ui/Pill'" in source
+
+
+def test_create_modal_preserves_existing_menu_content_styling_and_navigation():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "create" / "CreateModalScreen.tsx"
+    ).read_text(encoding="utf-8")
+
+    menu_items = (
+        ("📤", "Upload Document", "PDF, Word, PowerPoint, Images, Notes", "setScreen('upload')"),
+        ("📖", "Publish to Prepza Library", "Share educational materials · Earn XP", "setScreen('publish-library')"),
+        ("👥", "Create Group", "Start a course or study group", "setScreen('group-create')"),
+        ("🚀", "Share Opportunity", "Jobs, internships, scholarships, events", "setScreen('share-opp-form')"),
+    )
+    for icon, label, description, action in menu_items:
+        assert icon in source
+        assert label in source
+        assert description in source
+        assert action in source
+    assert source.count("label: '") == 4
+    for contract in (
+        "setScreen('home')",
+        "Ic.close()",
+        "background: T.pageBg",
+        "background: N.navy",
+        "background: T.card",
+        "N.gold",
+        "N.goldL",
+        "N.navy2",
+        "N.navy3",
+        "item.gold && <Pill text=\"CORE\" />",
+        "fontFamily: 'Plus Jakarta Sans'",
+        "className=\"scrollbar-hide\"",
     ):
         assert contract in source
