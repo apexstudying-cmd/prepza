@@ -123,7 +123,7 @@
     {
       "id": "documentation_audit",
       "status": "IN_PROGRESS",
-      "evidence": "IN_PROGRESS on 2026-11-16: PR #79 includes the ambassador route extraction and active CreateModal feature boundary; exact-head frontend build, release browser and backup/restore all pass on 38e656e6670bbafcc5f22233210c8f3183e22269. Broader review remains open for provider/staging, page-text/citation, external monitoring/request-ID, B2B viewability, Home/PWA and deployment evidence."
+      "evidence": "IN_PROGRESS on 2026-11-16: exact code head 38e656e6670bbafcc5f22233210c8f3183e22269 passes frontend, full release-browser and backup/restore CI. Active frontend route audit identifies EduUploadForm as the only remaining inline route component; it remains compatibility-reachable through the persisted screen stack and is the next boundary. Backend subscription plans/status/upgrade routes remain inline; provider/staging, page-text/citation, external monitoring/request-ID, B2B viewability, Home/PWA and deployment evidence remain open."
     },
     {
       "id": "vps_or_render_deployment",
@@ -162,8 +162,8 @@
     }
   ],
   "next_actions": [
-    "Architecture: continue the single draft PR #79. The active Create menu now lives in frontend/src/screens/create/CreateModalScreen.tsx with its original component body byte-equivalent after normalizing only export default. Audit remaining inline route declarations for real reachability and extract only confirmed active screens; preserve existing UI, route IDs, state ownership, API calls and behavior. Do not move unmounted legacy declarations.",
-    "Architecture: current backend boundaries include app factory/shared extensions, auth guards, model domains, route registry, document-reader, gamification, group, Library, notification, social-follow and ambassador routes. Map remaining document/generation, base-chat and subscription dependencies before each bounded extraction, with route/method/decorator/response/authorization contracts first.",
+    "Architecture: continue the single draft PR #79. CreateModal is extracted with its original component body byte-equivalent. The route-switch audit found EduUploadForm (34 lines) is the only remaining inline route component; it remains in Screen/route dispatch/BottomNav grouping and can be restored from the sessionStorage-persisted screen stack. Extract its unchanged body with a typed TopBar prop, preserving its local content-type state, styling, back behavior and Upload destination. Do not remove the route or extract unmounted DocumentStudyScreen.",
+    "Architecture: after the final frontend route boundary, continue backend decomposition. Current backend boundaries include app factory/shared extensions, auth guards, model domains, route registry, document-reader, gamification, group, Library, notification, social-follow and ambassador routes. Next characterize the inline student subscription plans/status/upgrade routes in app.py against student_subscription_billing.py, then move one bounded route family with exact method/decorator/response/authorization tests; map document/generation and base-chat dependencies afterward.",
     "Home/PWA verification: rebuild the exact candidate locally, confirm splash/login/home brand marks use /icon-192.png, five Home Quick Actions remain Upload, My Study, Library, Morio and Shop, and inspect installed PWA/offline shell.",
     "Staging access needed: apply migrations/20261029_document_page_text.sql and migrations/20261029_request_observability.sql through controlled backup/restore, then verify schema and rollback/restore evidence.",
     "Staging access needed: run the read-only document inventory first, then native-text-only page-text backfill. Scanned/mixed PDFs must remain skipped; no paid OCR.",
