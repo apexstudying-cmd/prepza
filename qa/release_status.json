@@ -8,7 +8,7 @@
     {
       "id": "database_alembic",
       "status": "PASS",
-      "evidence": "PASS on exact latest candidate 38e656e6670bbafcc5f22233210c8f3183e22269: Release Browser 43819732136 built the production image, started disposable PostgreSQL 17/Redis, applied Alembic migrations and exercised the controlled SQL migration ledger. Later browser steps remain in progress."
+      "evidence": "PASS on exact candidate 38e656e6670bbafcc5f22233210c8f3183e22269: Release Browser 43819732136 built the production image, started disposable PostgreSQL 17/Redis, applied Alembic migrations and exercised the controlled SQL migration ledger."
     },
     {
       "id": "authentication_session_csrf",
@@ -68,42 +68,42 @@
     {
       "id": "mobile_responsive_visual",
       "status": "PASS",
-      "evidence": "PASS on exact latest candidate 38e656e6670bbafcc5f22233210c8f3183e22269, Release Browser 43819732136: phone/tablet responsive browser checks passed; Shop role journeys also passed."
+      "evidence": "PASS on exact candidate 38e656e6670bbafcc5f22233210c8f3183e22269, Release Browser 43819732136: phone-small, phone-standard and tablet-portrait responsive browser checks passed. Screenshot artifact 14204415875 contains 17 images."
     },
     {
       "id": "storage_backup_restore",
       "status": "PASS",
-      "evidence": "PASS on exact latest candidate 38e656e6670bbafcc5f22233210c8f3183e22269, PostgreSQL Backup Restore Rehearsal 43819732082: PostgreSQL custom-format backup/restore, restored schema/data/Alembic verification and application smoke test passed."
+      "evidence": "PASS on exact candidate 38e656e6670bbafcc5f22233210c8f3183e22269, PostgreSQL Backup Restore Rehearsal 43819732082: PostgreSQL custom-format backup/restore, restored schema/data/Alembic verification and application smoke test passed."
     },
     {
       "id": "cross_system_journeys",
-      "status": "IN_PROGRESS",
-      "evidence": "IN_PROGRESS on exact latest candidate 38e656e6670bbafcc5f22233210c8f3183e22269, Release Browser 43819732136: responsive browser, Shop buyer/seller/admin, B2B browser-to-ledger and full disposable PostgreSQL QA steps passed; online/offline generated-artifact replay and screenshot upload were still pending at the latest inspection."
+      "status": "PASS",
+      "evidence": "PASS on exact candidate 38e656e6670bbafcc5f22233210c8f3183e22269, Release Browser 43819732136: responsive browser, Shop buyer/seller/admin, B2B browser-to-ledger, 100 disposable PostgreSQL QA tests, Study Hub offline lifecycle and generated-artifact/podcast Blob replay all passed; disposable services were cleaned up."
     },
     {
       "id": "ci_release_workflows",
-      "status": "IN_PROGRESS",
-      "evidence": "IN_PROGRESS on exact latest candidate 38e656e6670bbafcc5f22233210c8f3183e22269: 16 triggered workflows succeeded, Release Browser 43819732136 remained in progress, and StudyHub Library Flow 43819732065 was SKIPPED by path condition. Frontend Build 43819731996 and PostgreSQL Backup Restore 43819732082 passed. The previous exact candidate 76c5508514e9fdd4e396c600a5566dc4ff07a257 had all 17 triggered workflows pass; do not substitute that adjacent SHA for the latest candidate."
+      "status": "PASS",
+      "evidence": "PASS on exact PR #79 code head 38e656e6670bbafcc5f22233210c8f3183e22269: all 17 triggered workflows succeeded, including Release Browser 43819732136, PostgreSQL Backup Restore 43819732082, Frontend Build 43819731996, Study Hub Runtime 43819732154, E2EE, B2B, AI, Admin, Backend Shared Extension, navigation and student contracts. StudyHub Library Flow 43819732065 was SKIPPED by path condition and is not counted as passing."
     },
     {
       "id": "existing_database_migration",
       "status": "PASS",
-      "evidence": "PASS on exact latest candidate 38e656e6670bbafcc5f22233210c8f3183e22269, PostgreSQL Backup Restore Rehearsal 43819732082: representative prior-revision database upgrade and document/material data-preservation checks passed."
+      "evidence": "PASS on exact candidate 38e656e6670bbafcc5f22233210c8f3183e22269, PostgreSQL Backup Restore Rehearsal 43819732082: representative prior-revision database upgrade and document/material data-preservation checks passed."
     },
     {
       "id": "clean_full_regression",
-      "status": "IN_PROGRESS",
-      "evidence": "IN_PROGRESS on one exact SHA 38e656e6670bbafcc5f22233210c8f3183e22269: PostgreSQL Backup Restore 43819732082 passed both jobs; Release Browser 43819732136 passed image/migration/ledger, responsive, Shop, B2B and full PostgreSQL QA steps, with online/offline generated-artifact replay still running at the latest inspection."
+      "status": "PASS",
+      "evidence": "PASS on one exact SHA 38e656e6670bbafcc5f22233210c8f3183e22269: Release Browser 43819732136 and PostgreSQL Backup Restore 43819732082 both asserted this exact SHA. Browser/cross-system passed production image, migrations/ledger, phone/tablet, Shop buyer/seller/admin, B2B, 100 PostgreSQL QA tests, offline Study Hub and generated-artifact replay; both existing-database preservation and custom restore jobs passed."
     },
     {
       "id": "b2b_monetization_integrity",
       "status": "IN_PROGRESS",
-      "evidence": "PASS for the current candidate's browser-to-ledger regression in Release Browser 43819732136; the backend still cannot independently prove the client's 50%-visible/1.5-second dwell condition. Do not claim tamper-proof viewability or CPA billing."
+      "evidence": "PASS for current candidate browser-to-ledger regression in Release Browser 43819732136, including offline/offscreen no-billing and duplicate-click idempotency. Backend-independent proof of the client's 50%-visible/1.5-second dwell condition remains unresolved; do not claim tamper-proof viewability or CPA billing."
     },
     {
       "id": "shop_marketplace",
       "status": "IN_PROGRESS",
-      "evidence": "PASS for the current candidate's responsive Shop buyer/seller/admin browser journeys in Release Browser 43819732136. The classifieds model is unchanged. Real Paystack sandbox checkout/webhooks and R2 object/header operations remain NOT_TESTED pending safe staging evidence."
+      "evidence": "PASS for current candidate responsive Shop buyer browse/detail/save/report/contact, seller listing/My Listings/pause/sold and admin moderation/payment-review browser journeys in Release Browser 43819732136. The classifieds model is unchanged. Real Paystack sandbox checkout/webhooks and R2 object/header operations remain NOT_TESTED pending safe staging evidence."
     },
     {
       "id": "payment_recovery_idempotency",
@@ -123,7 +123,7 @@
     {
       "id": "documentation_audit",
       "status": "IN_PROGRESS",
-      "evidence": "IN_PROGRESS on 2026-11-16: PR #79 now contains the ambassador route extraction (verified on 76c5508514e9fdd4e396c600a5566dc4ff07a257) and the active CreateModal feature boundary on latest code head 38e656e6670bbafcc5f22233210c8f3183e22269. Frontend Build and backup/restore pass on the latest head; Release Browser remains in progress. Provider/staging, retrieval/citation, external monitoring/request-ID, B2B viewability, Home/PWA and deployment review remain open."
+      "evidence": "IN_PROGRESS on 2026-11-16: PR #79 includes the ambassador route extraction and active CreateModal feature boundary; exact-head frontend build, release browser and backup/restore all pass on 38e656e6670bbafcc5f22233210c8f3183e22269. Broader review remains open for provider/staging, page-text/citation, external monitoring/request-ID, B2B viewability, Home/PWA and deployment evidence."
     },
     {
       "id": "vps_or_render_deployment",
@@ -132,8 +132,8 @@
     },
     {
       "id": "browser_study_hub_offline_content_artifacts",
-      "status": "IN_PROGRESS",
-      "evidence": "Study Hub Runtime Regression 43819732154 passed on exact candidate 38e656e6670bbafcc5f22233210c8f3183e22269. The Release Browser's online/offline generated-artifact replay step was still running at the latest inspection; keep the full browser artifact gate IN_PROGRESS until it completes."
+      "status": "PASS",
+      "evidence": "PASS on exact candidate 38e656e6670bbafcc5f22233210c8f3183e22269, Release Browser 43819732136: offline Study Hub lifecycle, podcast playback exception, multiple-document offline reload, Summary/Flashcards/Practice Questions/Mind Maps replay across three documents, cached podcast audio Blob and zero generation POSTs during replay all passed."
     },
     {
       "id": "admin_study_time_visibility",
@@ -162,7 +162,7 @@
     }
   ],
   "next_actions": [
-    "Architecture: continue the single draft PR #79. The active Create menu now lives in frontend/src/screens/create/CreateModalScreen.tsx with its original 32-line component body byte-equivalent after normalizing only export default. Audit remaining inline route declarations for real reachability and extract only confirmed active screens; preserve existing UI, route IDs, state ownership, API calls and behavior. Do not move unmounted legacy declarations.",
+    "Architecture: continue the single draft PR #79. The active Create menu now lives in frontend/src/screens/create/CreateModalScreen.tsx with its original component body byte-equivalent after normalizing only export default. Audit remaining inline route declarations for real reachability and extract only confirmed active screens; preserve existing UI, route IDs, state ownership, API calls and behavior. Do not move unmounted legacy declarations.",
     "Architecture: current backend boundaries include app factory/shared extensions, auth guards, model domains, route registry, document-reader, gamification, group, Library, notification, social-follow and ambassador routes. Map remaining document/generation, base-chat and subscription dependencies before each bounded extraction, with route/method/decorator/response/authorization contracts first.",
     "Home/PWA verification: rebuild the exact candidate locally, confirm splash/login/home brand marks use /icon-192.png, five Home Quick Actions remain Upload, My Study, Library, Morio and Shop, and inspect installed PWA/offline shell.",
     "Staging access needed: apply migrations/20261029_document_page_text.sql and migrations/20261029_request_observability.sql through controlled backup/restore, then verify schema and rollback/restore evidence.",
@@ -174,5 +174,5 @@
     "Keep release BLOCKED; do not deploy or alter production data until all release-scoped gates are closed and deployment is explicitly authorized."
   ],
   "current_main_commit": "7922fa0d27fb275382e9fa4f46bfe4f242acdcf3",
-  "verification_note": "Updated 2026-11-16. Main head is 7922fa0d27fb275382e9fa4f46bfe4f242acdcf3. Latest PR #79 code head is 38e656e6670bbafcc5f22233210c8f3183e22269; Frontend Build 43819731996 passed 190 source/transform/module contracts, 5 offline Library tests, audits, TypeScript, service-worker validation and production build. PostgreSQL Backup Restore 43819732082 passed both existing-database upgrade/data preservation and PostgreSQL custom dump/restore; Study Hub Runtime 43819732154 passed. Release Browser 43819732136 had passed production image, migrations/ledger, responsive phone/tablet, Shop buyer/seller/admin, B2B browser-to-ledger and full disposable PostgreSQL QA; online/offline generated-artifact replay and screenshot upload remained pending at the latest inspection. 16 other triggered workflows succeeded; StudyHub Library Flow 43819732065 was skipped by path condition. The previous exact candidate 76c5508514e9fdd4e396c600a5566dc4ff07a257 passed full Release Browser 43817434101 and PostgreSQL Backup Restore 43817434005 on the same SHA, but this adjacent-SHA evidence is not used to claim full regression on 38e656e. Architecture remains incomplete; Shop real Paystack/R2 checks, provider verification, retrieval/citation, external monitoring, B2B server-verifiable viewability, Home/PWA and production deployment gates remain open. Release stays BLOCKED; no production data, live payment, deployment, new paid service or billable GPU operation was performed."
+  "verification_note": "Updated 2026-11-16. Main head is 7922fa0d27fb275382e9fa4f46bfe4f242acdcf3. Latest PR #79 code head 38e656e6670bbafcc5f22233210c8f3183e22269 passed Frontend Build 43819731996 (190 source/transform/module contracts, 5 offline Library tests, audits, TypeScript, service-worker validation and production build), PostgreSQL Backup Restore 43819732082 (existing-database preservation and PostgreSQL custom dump/restore), Study Hub Runtime 43819732154, and Release Browser 43819732136. The exact-head Release Browser passed production image, disposable PostgreSQL/Redis, Alembic/SQL ledger, responsive phone/tablet, Shop buyer/seller/admin, B2B browser-to-ledger, 100 PostgreSQL QA tests, offline Study Hub lifecycle and generated-artifact/podcast Blob replay; screenshot artifact 14204415875 contains 17 images. All 17 triggered workflows succeeded; StudyHub Library Flow 43819732065 was skipped by path condition. Architecture remains incomplete; Shop real Paystack/R2 checks, provider verification, retrieval/citation, external monitoring, B2B server-verifiable viewability, Home/PWA and production deployment gates remain open. Release stays BLOCKED; no production data, live payment, deployment, new paid service or billable GPU operation was performed."
 }
