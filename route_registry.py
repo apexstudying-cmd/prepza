@@ -209,3 +209,29 @@ def register_ambassador_routes(app: Any, db: Any, **dependencies: Any) -> None:
     from ambassador_routes import register_ambassador_routes as register
 
     register(app, db, **dependencies)
+
+
+def register_document_reader_routes(
+    app: Any,
+    db: Any,
+    *,
+    DocumentReadingProgress: Any,
+    require_csrf: Any,
+    get_studyable_document: Any,
+    document_reader_watermark: Any,
+    fetch_private_file_bytes: Any,
+    render_watermarked_page: Any,
+) -> None:
+    """Register native document-reader progress and private page routes."""
+    from document_reader_routes import register_document_reader_routes as register
+
+    register(
+        app,
+        db,
+        DocumentReadingProgress=DocumentReadingProgress,
+        require_csrf=require_csrf,
+        get_studyable_document=get_studyable_document,
+        document_reader_watermark=document_reader_watermark,
+        fetch_private_file_bytes=fetch_private_file_bytes,
+        render_watermarked_page=render_watermarked_page,
+    )
