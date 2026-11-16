@@ -6,7 +6,7 @@ from types import ModuleType
 
 from flask import Blueprint, Flask
 
-from route_registry import register_ambassador_routes, register_foundation_routes
+from route_registry import register_ambassador_routes, register_document_reader_routes, register_foundation_routes
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_SOURCE = (ROOT / "app.py").read_text(encoding="utf-8")
@@ -205,3 +205,45 @@ def test_launch_wiring_audit_tracks_the_ambassador_route_module_owner() -> None:
     assert '"register_ambassador_routes("' in launch_wiring
     assert "if AMBASSADOR_ROUTES.exists():" in launch_wiring
     assert '@app.route("/ambassador/referral-qr")' in launch_wiring
+
+
+
+def test_document_reader_routes_are_owned_by_the_feature_module_at_the_original_registration_point() -> None:
+    assert "register_document_reader_routes(" in APP_SOURCE
+    assert "def get_document_reading(" not in APP_SOURCE
+    assert "def save_document_reading(" not in APP_SOURCE
+    assert "def render_document_reading_page(" not in APP_SOURCE
+    assert "def _get_studyable_document(" in APP_SOURCE
+    assert "def _document_reader_watermark(" in APP_SOURCE
+    assert "from document_reader_routes import register_document_reader_routes as register" in REGISTRY_SOURCE
+
+    registration = APP_SOURCE.rindex("register_document_reader_routes(")
+    helper = APP_SOURCE.index("def _get_studyable_document(")
+    next_document_route = APP_SOURCE.index('@app.route("/documents/<int:document_id>", methods=["PATCH"])')
+    assert helper < registration < next_document_route
+
+
+def test_document_reader_registry_forwards_explicit_dependencies(monkeypatch) -> None:
+    app = Flask("prepza-document-reader-registry-contract")
+    db = object()
+    dependencies = {
+        "DocumentReadingProgress": object(),
+        "require_csrf": object(),
+        "get_studyable_document": object(),
+        "document_reader_watermark": object(),
+        "fetch_private_file_bytes": object(),
+        "render_watermarked_page": object(),
+    }
+    calls = {}
+    module = ModuleType("document_reader_routes")
+
+    def register(target_app, target_db, **kwargs):
+        calls["args"] = (target_app, target_db)
+        calls["kwargs"] = kwargs
+
+    module.register_document_reader_routes = register
+    monkeypatch.setitem(sys.modules, "document_reader_routes", module)
+
+    register_document_reader_routes(app, db, **dependencies)
+
+    assert calls == {"args": (app, db), "kwargs": dependencies}
