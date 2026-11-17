@@ -1,7 +1,7 @@
 # Subscription and payment screen extraction map
 
-**Status:** the five student billing screens are extracted into `frontend/src/screens/billing/SubscriptionScreens.tsx`; shared types and payment-status metadata have neutral owners. The screen extraction passed Frontend Build, Release Browser and PostgreSQL backup/restore on code head `b24d583f054f056161c714a15d558406672acb4d` (runs 43686512095, 43686511971 and 43686511937); the current PR #79 candidate `4a5cfc10b4e20e308436f5f64f9bbf235be0f243` also passes exact-head Release Browser and backup/restore. This map covers the frontend screens only: app.py still owns payment-history, Paystack callback/webhook and subscription plans/status/upgrade routes. Characterize those backend routes separately before extraction.
-**Current owner:** frontend/src/App.tsx on the consolidated PR #79 branch.
+**Status:** the five student billing screens are extracted into `frontend/src/screens/billing/SubscriptionScreens.tsx`; shared types and payment-status metadata have neutral owners. The student-facing `/subscription/plans`, `/subscription/status` and `/subscription/upgrade` backend routes are now owned by `student_subscription_routes.py` on PR #79 code head `f42d447ddde2c5c72100884f83c2358c6e163535`. Backend Shared Extension Contract, Frontend Build and PostgreSQL Backup Restore pass on that exact SHA; Release Browser remains IN_PROGRESS. `/payment-history` and the shared Paystack callback/webhook remain in `app.py` for separate characterization.
+**Current owners:** frontend screens in `frontend/src/screens/billing/SubscriptionScreens.tsx`; student plan/status/upgrade HTTP routes in `student_subscription_routes.py`; entitlement and recurring/refund lifecycle in `student_subscription_billing.py`; shared payment verification/callback/webhook in `app.py`.
 **Goal:** move the existing student subscription/payment screens into a feature module without changing plan selection, checkout, provider redirect, return routing, payment-history display, or any billing rule.
 
 ## Active route and state ownership
@@ -75,3 +75,14 @@ The implementation preserves the existing GET plan/status/usage/history requests
 - 17 triggered workflows succeeded; StudyHub Library Flow [43686511919](https://github.com/apexstudying-cmd/prepza/actions/runs/43686511919) was skipped by path condition.
 
 This verifies the extracted screen boundary on the candidate before the subsequent ambassador backend slice. It does not verify real Paystack provider behavior or authorize a payment.
+
+
+## 2026-11-17 — Backend student subscription routes extracted
+
+The route-only module `student_subscription_routes.py` owns the existing `GET /subscription/plans`, `GET /subscription/status` and `POST /subscription/upgrade` endpoints. `app.py` passes dependencies explicitly through `register_student_subscription_routes` in `route_registry.py` at the original subscription section, preserving its registration position before ambassador routes.
+
+The module does not own plan configuration or subscription lifecycle policy. `ai_economics.get_plans/get_plan` remains the authoritative plan source; `get_user_subscription_status` remains in the app helper layer; `student_orders.py` still owns pending checkout/order persistence; `student_subscription_billing.py` still owns refund, recurring-charge and subscription lifecycle handlers; and the existing Paystack transaction initializer/verification helpers remain in `app.py`.
+
+The exact route/method map, session authentication, limiter rule/key, CSRF decorator, response fields, pending-checkout recovery, payment creation, order snapshot and validation/error behavior are covered by `tests/test_student_subscription_routes_contract.py` and the registry contract. Backend Shared Extension Contract [44035476830](https://github.com/apexstudying-cmd/prepza/actions/runs/44035476830), Frontend Build [44035476389](https://github.com/apexstudying-cmd/prepza/actions/runs/44035476389) and PostgreSQL Backup Restore [44035476520](https://github.com/apexstudying-cmd/prepza/actions/runs/44035476520) pass on code head `f42d447ddde2c5c72100884f83c2358c6e163535`. Release Browser [44035476605](https://github.com/apexstudying-cmd/prepza/actions/runs/44035476605) remains IN_PROGRESS; do not mark this candidate fully cross-system verified until it completes.
+
+No live Paystack checkout/webhook, payment, production data or provider configuration was used.

@@ -7,8 +7,8 @@
   "gates": [
     {
       "id": "database_alembic",
-      "status": "PASS",
-      "evidence": "PASS on exact candidate 4a5cfc10b4e20e308436f5f64f9bbf235be0f243: Release Browser 44031976661 built the production image, started disposable PostgreSQL 17/Redis, applied Alembic migrations and exercised the controlled SQL migration ledger."
+      "status": "IN_PROGRESS",
+      "evidence": "Previous exact candidate 4a5cfc10b4e20e308436f5f64f9bbf235be0f243 passed the Release Browser migration/SQL-ledger path. On new code head f42d447ddde2c5c72100884f83c2358c6e163535, PostgreSQL Backup Restore Rehearsal 44035476520 passed both Alembic existing-database upgrade and custom-format restore jobs; the full Release Browser migration/ledger path 44035476605 remains IN_PROGRESS."
     },
     {
       "id": "authentication_session_csrf",
@@ -67,33 +67,33 @@
     },
     {
       "id": "mobile_responsive_visual",
-      "status": "PASS",
-      "evidence": "PASS on exact candidate 4a5cfc10b4e20e308436f5f64f9bbf235be0f243, Release Browser 44031976661: phone-small 360x800, phone-standard 390x844 and tablet-portrait 768x1024 responsive browser checks passed. Screenshot artifact 14305199157 contains the responsive screenshots."
+      "status": "IN_PROGRESS",
+      "evidence": "Previous exact candidate 4a5cfc10b4e20e308436f5f64f9bbf235be0f243 passed phone/tablet responsive checks. The new code head f42d447ddde2c5c72100884f83c2358c6e163535 has no UI changes; its same-SHA responsive check is pending in Release Browser 44035476605."
     },
     {
       "id": "storage_backup_restore",
       "status": "PASS",
-      "evidence": "PASS on exact candidate 4a5cfc10b4e20e308436f5f64f9bbf235be0f243, PostgreSQL Backup Restore Rehearsal 44031976660: existing-database upgrade/data preservation and PostgreSQL custom-format backup/restore, restored schema/data/Alembic verification and application smoke test passed."
+      "evidence": "PASS on exact candidate f42d447ddde2c5c72100884f83c2358c6e163535, PostgreSQL Backup Restore Rehearsal 44035476520: existing-database upgrade/data preservation and PostgreSQL 17 custom-format backup/restore both passed, including restored-schema/data/Alembic verification and application smoke test."
     },
     {
       "id": "cross_system_journeys",
-      "status": "PASS",
-      "evidence": "PASS on exact candidate 4a5cfc10b4e20e308436f5f64f9bbf235be0f243, Release Browser 44031976661: production image/migrations/ledger, responsive browser, Shop buyer/seller/admin, B2B browser-to-ledger, 100 disposable PostgreSQL QA tests (0 failed, 3,549 warnings), online/offline Study Hub and generated-artifact/podcast Blob replay all passed; screenshots uploaded and disposable services cleaned up."
+      "status": "IN_PROGRESS",
+      "evidence": "Previous exact candidate 4a5cfc10b4e20e308436f5f64f9bbf235be0f243 passed the full responsive/Shop/B2B/PostgreSQL/offline browser journey. New code head f42d447ddde2c5c72100884f83c2358c6e163535 has Backend Shared Extension Contract 44035476830, Frontend Build 44035476389 and PostgreSQL Backup Restore 44035476520 PASS; Release Browser 44035476605 remains IN_PROGRESS."
     },
     {
       "id": "ci_release_workflows",
-      "status": "PASS",
-      "evidence": "PASS on exact PR #79 code head 4a5cfc10b4e20e308436f5f64f9bbf235be0f243: all 17 triggered workflows succeeded, including Release Browser 44031976661, PostgreSQL Backup Restore 44031976660, Frontend Build 44031976544, Study Hub Runtime 44031976653, E2EE, B2B, AI, Admin, Backend Shared Extension, navigation and student contracts. StudyHub Library Flow 44031976586 was SKIPPED by path condition and is not counted as passing."
+      "status": "IN_PROGRESS",
+      "evidence": "On exact PR #79 head f42d447ddde2c5c72100884f83c2358c6e163535, Backend Shared Extension Contract 44035476830, Frontend Build 44035476389, PostgreSQL Backup Restore 44035476520 and 13 other triggered workflows have succeeded; Release Browser 44035476605 remains IN_PROGRESS; StudyHub Library Flow 44035476415 is SKIPPED by path condition and is not counted as a pass. Current inventory: 16 success, 1 in progress, 1 skipped."
     },
     {
       "id": "existing_database_migration",
       "status": "PASS",
-      "evidence": "PASS on exact candidate 4a5cfc10b4e20e308436f5f64f9bbf235be0f243, PostgreSQL Backup Restore Rehearsal 44031976660: representative prior-revision database upgrade and document/material data-preservation checks passed."
+      "evidence": "PASS on exact candidate f42d447ddde2c5c72100884f83c2358c6e163535, PostgreSQL Backup Restore Rehearsal 44035476520: representative prior-revision database upgrade and document/material data-preservation checks passed."
     },
     {
       "id": "clean_full_regression",
-      "status": "PASS",
-      "evidence": "PASS on one exact SHA 4a5cfc10b4e20e308436f5f64f9bbf235be0f243: Release Browser 44031976661 and PostgreSQL Backup Restore 44031976660 both asserted this exact SHA. Browser/cross-system passed production image, migrations/ledger, phone/tablet, Shop buyer/seller/admin, B2B, 100 PostgreSQL QA tests, offline Study Hub and generated-artifact replay; both existing-database preservation and custom restore jobs passed."
+      "status": "IN_PROGRESS",
+      "evidence": "Backend Shared Extension Contract 44035476830, Frontend Build 44035476389 and PostgreSQL Backup Restore 44035476520 pass on exact SHA f42d447ddde2c5c72100884f83c2358c6e163535. Release Browser 44035476605 is still running; the new candidate is not yet a fully verified one-SHA release regression."
     },
     {
       "id": "b2b_monetization_integrity",
@@ -123,7 +123,7 @@
     {
       "id": "documentation_audit",
       "status": "IN_PROGRESS",
-      "evidence": "IN_PROGRESS on 2026-11-17: exact code head 4a5cfc10b4e20e308436f5f64f9bbf235be0f243 passes Frontend Build (192 source/transform/module tests, 5 offline Library tests, TypeScript and production build), full Release Browser and PostgreSQL backup/restore. No active inline screen component remains in the App route switch; the persisted EduUploadForm route is feature-owned and its Screen/dispatch/BottomNav/sessionStorage compatibility is covered. Backend payment-history, Paystack callback/webhook and subscription plans/status/upgrade routes remain inline and require dependency/contract mapping before extraction. Provider/staging, page-text/citation, external monitoring/request-ID, B2B viewability, Home/PWA and deployment evidence remain open."
+      "evidence": "IN_PROGRESS on 2026-11-17: exact code head f42d447ddde2c5c72100884f83c2358c6e163535 extracts the three student subscription routes into student_subscription_routes.py. Backend Shared Extension Contract, Frontend Build and PostgreSQL Backup Restore pass; Release Browser is pending. All active App route-switch screens are feature-owned. /payment-history and Paystack callback/webhook remain inline; provider/staging, page-text/citation, external monitoring/request-ID, B2B viewability, Home/PWA and deployment evidence remain open."
     },
     {
       "id": "vps_or_render_deployment",
@@ -162,8 +162,8 @@
     }
   ],
   "next_actions": [
-    "Architecture: continue the single draft PR #79. All active App route-switch screens are now feature-owned, including the compatibility-reachable EduUploadForm route in frontend/src/screens/upload/EduUploadFormScreen.tsx. Preserve its Screen ID, dispatch, BottomNav grouping and persisted navigation compatibility. Next characterize the inline backend payment-history, Paystack callback/webhook and subscription plans/status/upgrade routes against route_registry.py and student_subscription_billing.py before a bounded extraction.",
-    "Architecture: continue backend decomposition after route dependency mapping. Current boundaries include app factory/shared extensions, auth guards, model domains, route registry, document-reader, gamification, group, Library, notification, social-follow and ambassador routes. Map document/generation and base-chat dependencies after the student subscription/payment route family, with exact method/decorator/response/authorization contracts before moving code.",
+    "Architecture: continue the single draft PR #79. All active App route-switch screens are feature-owned. The student-facing /subscription/plans, /subscription/status and /subscription/upgrade routes now live in student_subscription_routes.py, registered at the original position through route_registry.py with focused route/registry contracts. Verify Release Browser 44035476605 on exact code head f42d447ddde2c5c72100884f83c2358c6e163535 before marking full regression PASS. Next map /payment-history and the shared Paystack callback/webhook, protecting signature validation, verification retry, duplicate-event idempotency and ambassador transfer dispatch before extraction.",
+    "Architecture: after payment-history/Paystack route characterization, continue document/generation and base-chat route/service boundaries. Preserve the student_subscription_billing.py lifecycle owner, registration order, authorization, response shapes and transaction behavior.",
     "Home/PWA verification: rebuild the exact candidate locally, confirm splash/login/home brand marks use /icon-192.png, five Home Quick Actions remain Upload, My Study, Library, Morio and Shop, and inspect installed PWA/offline shell.",
     "Staging access needed: apply migrations/20261029_document_page_text.sql and migrations/20261029_request_observability.sql through controlled backup/restore, then verify schema and rollback/restore evidence.",
     "Staging access needed: run the read-only document inventory first, then native-text-only page-text backfill. Scanned/mixed PDFs must remain skipped; no paid OCR.",

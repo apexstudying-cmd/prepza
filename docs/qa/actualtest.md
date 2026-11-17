@@ -537,3 +537,20 @@ The first implementation candidate `4ed0420c1a8067009d2d2f8a636f82a99d92f486` ex
 - **Other workflow inventory:** 17 triggered workflows succeeded on this exact SHA. StudyHub Library Flow [run 44031976586](https://github.com/apexstudying-cmd/prepza/actions/runs/44031976586) was SKIPPED by path condition and is not counted as a pass.
 
 The exact-head candidate has no remaining active inline screen component in the App route switch. The unmounted legacy `DocumentStudyScreen` remains untouched. Backend route decomposition is not complete: payment history, Paystack callback/webhook and student subscription plans/status/upgrade routes still need dependency/contract mapping. Overall release remains **BLOCKED** by provider verification, retrieval/citation review, external monitoring/request-ID delivery, independently verified B2B viewability, Home/PWA sign-off and deployment authorization. No live provider, production data, paid infrastructure, deployment or billable GPU work was used.
+
+
+## 2026-11-17 — student subscription route extraction (PR #79)
+
+**Application-code commit:** `f42d447ddde2c5c72100884f83c2358c6e163535`.
+
+Moved only the three student subscription route handlers from `app.py` into `student_subscription_routes.py`, registered through `route_registry.py` at the former subscription route location. Existing route names, paths, methods and registration order are preserved. The module receives the current User/Payment models, DB, limiter, client-address helper, CSRF guard, subscription-status helper, Paystack initializer and student-order helper mapping as explicit dependencies.
+
+New `tests/test_student_subscription_routes_contract.py` covers exact GET/POST route map, rate-limit and CSRF decoration, admin-configured plan response fields, unauthenticated status/upgrade behavior, status payload, pending-checkout recovery (no second provider initialization), successful mocked checkout/payment/order snapshot, and invalid/unavailable/unconfigured plan responses. `tests/test_backend_route_registry_contract.py` protects the app registration point and dependency forwarding. Backend CI compiles the new module and runs both suites.
+
+- **Backend Shared Extension Contract:** [run 44035476830](https://github.com/apexstudying-cmd/prepza/actions/runs/44035476830) PASS.
+- **Frontend Build:** [run 44035476389](https://github.com/apexstudying-cmd/prepza/actions/runs/44035476389) PASS, including launch-wiring/schema audits, TypeScript and production build.
+- **PostgreSQL Backup Restore Rehearsal:** [run 44035476520](https://github.com/apexstudying-cmd/prepza/actions/runs/44035476520) PASS; existing database upgrade/data preservation and custom-format restore jobs both passed.
+- **Release Browser/Cross-System Regression:** [run 44035476605](https://github.com/apexstudying-cmd/prepza/actions/runs/44035476605) IN_PROGRESS at the time of this record. Full responsive, Shop, B2B, PostgreSQL QA and offline-artifact results on this exact SHA are not claimed until it completes.
+- **Workflow inventory:** 16 succeeded, 1 in progress, 1 skipped by path condition.
+
+The extraction did not move or modify `student_subscription_billing.py`, `sync_paystack_payment_status`, Paystack callback/webhook handling, payment history, the subscription plan configuration service, or any UI. No provider request or payment was initiated. Overall release remains BLOCKED.
