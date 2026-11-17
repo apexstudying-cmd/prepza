@@ -1,8 +1,13 @@
 # Upload flow extraction map
 
-**Snapshot:** 14 November 2026, consolidated candidate PR [#79](https://github.com/apexstudying-cmd/prepza/pull/79); exact verified code head `c494d147393035ac40bc8875f62d1ff6339c477a`.
+**Snapshot:** 17 November 2026, consolidated candidate PR [#79](https://github.com/apexstudying-cmd/prepza/pull/79); exact verified code head `4a5cfc10b4e20e308436f5f64f9bbf235be0f243`.
 
-**Status:** the three active screens are extracted together into `frontend/src/screens/upload/UploadFlowScreens.tsx`; exact-head Frontend Build, Release Browser and PostgreSQL backup/restore all PASS on `c494d147393035ac40bc8875f62d1ff6339c477a`. The app remains the route/state owner and injects its existing TopBar. This does not claim launch certification.
+**Status:** Upload/UploadShareChoice/Processing remain extracted into `frontend/src/screens/upload/UploadFlowScreens.tsx`. The compatibility-reachable education-content form is separately extracted into `frontend/src/screens/upload/EduUploadFormScreen.tsx`. Both boundaries pass exact-head Frontend Build, Release Browser and PostgreSQL backup/restore on `4a5cfc10b4e20e308436f5f64f9bbf235be0f243`. App remains the route/state owner and injects the existing TopBar into both modules. This does not claim launch certification.
+
+
+## 17 November 2026 — persisted education-upload compatibility route
+
+The `edu-upload-form` route remains in the shared Screen union, App dispatch, BottomNav Home grouping and sessionStorage-restored navigation stack. The former inline `EduUploadForm` component now lives in `frontend/src/screens/upload/EduUploadFormScreen.tsx`; App injects the existing TopBar and retains setScreen ownership. Its existing local content-type state, six options, fields, exact JSX/styling, back action and Upload destination were moved without behavior or visual changes. The original component body compares byte-for-byte after ignoring only trailing blank lines. The exact candidate `4a5cfc10b4e20e308436f5f64f9bbf235be0f243` passed Frontend Build [44031976544](https://github.com/apexstudying-cmd/prepza/actions/runs/44031976544), Release Browser [44031976661](https://github.com/apexstudying-cmd/prepza/actions/runs/44031976661) and PostgreSQL Backup Restore [44031976660](https://github.com/apexstudying-cmd/prepza/actions/runs/44031976660). The Screen ID and five bottom-navigation items remain unchanged.
 
 ## Active runtime ownership
 

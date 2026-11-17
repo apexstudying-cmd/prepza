@@ -1,6 +1,6 @@
 # Subscription and payment screen extraction map
 
-**Status:** dependency map and inline characterization contract passed. The five screens have now moved to frontend/src/screens/billing/SubscriptionScreens.tsx; shared types and payment status metadata have neutral owners. The extraction Frontend Build and full Release Browser are queued.
+**Status:** the five student billing screens are extracted into `frontend/src/screens/billing/SubscriptionScreens.tsx`; shared types and payment-status metadata have neutral owners. The screen extraction passed Frontend Build, Release Browser and PostgreSQL backup/restore on code head `b24d583f054f056161c714a15d558406672acb4d` (runs 43686512095, 43686511971 and 43686511937); the current PR #79 candidate `4a5cfc10b4e20e308436f5f64f9bbf235be0f243` also passes exact-head Release Browser and backup/restore. This map covers the frontend screens only: app.py still owns payment-history, Paystack callback/webhook and subscription plans/status/upgrade routes. Characterize those backend routes separately before extraction.
 **Current owner:** frontend/src/App.tsx on the consolidated PR #79 branch.
 **Goal:** move the existing student subscription/payment screens into a feature module without changing plan selection, checkout, provider redirect, return routing, payment-history display, or any billing rule.
 
