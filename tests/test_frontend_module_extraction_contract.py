@@ -891,6 +891,8 @@ def test_edu_upload_form_is_owned_by_upload_module_and_keeps_compatibility_route
     assert "case 'edu-upload-form':" in APP
     assert "<EduUploadFormScreen setScreen={setScreen} TopBar={TopBar} />" in APP
     assert "function EduUploadForm(" not in APP
+    assert "// ─── DOC READY" in APP
+    assert "const DOC_CACHE: Record<number, DocumentDetail> = {}" in APP
 
     screen_types = (
         ROOT / "frontend" / "src" / "types" / "navigation.ts"
@@ -898,7 +900,7 @@ def test_edu_upload_form_is_owned_by_upload_module_and_keeps_compatibility_route
     bottom_nav = (
         ROOT / "frontend" / "src" / "navigation" / "BottomNav.tsx"
     ).read_text(encoding="utf-8")
-    navigation = NAVIGATION.read_text(encoding="utf-8")
+    navigation = NAVIGATION
 
     # Persisted navigation stacks may still restore this legacy route. Keep its
     # Screen type and Home-tab grouping even though the component is extracted.

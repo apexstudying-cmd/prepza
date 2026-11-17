@@ -1207,12 +1207,7 @@ function SkeletonNotifications() {
 // fallback while this loads, same as before.
 
 
-// ─── POSTans' }}>Select & Upload File →</button>
-      </div>
-    </div>
-  )
-}
-
+// ─── POST COMPOSER ────────────────────────────────────────────────────────────
 // ─── DOC READY ────────────────────────────────────────────────────────────────
 // ─── DOCUMENT STUDY ───────────────────────────────────────────────────────────
 // Stale-while-revalidate cache keyed by document ID: reopening a document
