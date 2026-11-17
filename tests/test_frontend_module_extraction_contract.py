@@ -884,3 +884,54 @@ def test_create_modal_preserves_existing_menu_content_styling_and_navigation():
         "className=\"scrollbar-hide\"",
     ):
         assert contract in source
+
+
+def test_edu_upload_form_is_owned_by_upload_module_and_keeps_compatibility_route():
+    assert "import EduUploadFormScreen from './screens/upload/EduUploadFormScreen'" in APP
+    assert "case 'edu-upload-form':" in APP
+    assert "<EduUploadFormScreen setScreen={setScreen} TopBar={TopBar} />" in APP
+    assert "function EduUploadForm(" not in APP
+
+    screen_types = (
+        ROOT / "frontend" / "src" / "types" / "navigation.ts"
+    ).read_text(encoding="utf-8")
+    bottom_nav = (
+        ROOT / "frontend" / "src" / "navigation" / "BottomNav.tsx"
+    ).read_text(encoding="utf-8")
+    navigation = NAVIGATION.read_text(encoding="utf-8")
+
+    # Persisted navigation stacks may still restore this legacy route. Keep its
+    # Screen type and Home-tab grouping even though the component is extracted.
+    assert "'edu-upload-form'" in screen_types
+    assert "'edu-upload-form'" in bottom_nav
+    assert "prepza-navigation-state" in navigation
+    assert "storedNavigation?.stack || ['splash']" in navigation
+
+
+def test_edu_upload_form_preserves_existing_content_selection_layout_and_upload_action():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "upload" /
+        "EduUploadFormScreen.tsx"
+    ).read_text(encoding="utf-8")
+
+    for contract in (
+        "export default function EduUploadFormScreen",
+        "const [type, setType] = useState('Notes')",
+        "Upload Educational Content",
+        "onBack={() => window.history.back()}",
+        "Content Type",
+        "['Notes','Summary','Guide','Past Paper','Cheat Sheet','Other']",
+        "type === t ? N.navy : '#F3F4F6'",
+        "type === t ? N.gold : '#6B7280'",
+        "e.g. ACT 101 Interest Theory – Complete Notes",
+        "Unit / Course",
+        "e.g. Kenyatta University",
+        "setScreen('upload')",
+        "Select & Upload File →",
+        'className="scrollbar-hide"',
+        "background: N.bg",
+        "background: N.navy",
+    ):
+        assert contract in source
+    assert "type UploadTopBar = ComponentType<{ title?: string; onBack?: () => void }>" in source
+    assert "import type { Screen } from '../../types/navigation'" in source
