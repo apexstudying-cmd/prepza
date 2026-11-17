@@ -2488,3 +2488,14 @@ The extraction deliberately left `student_subscription_billing.py` in charge of 
 The new route contracts exercise the real Flask route map with mocked dependencies. They protect the 1-per-20-second upgrade limit, CSRF decorator, public plan list, manual session auth, existing response fields, pending-checkout recovery, Paystack initializer arguments, payment/order snapshot and failure responses. This is safer than asserting only that route strings moved to another file.
 
 On code head `f42d447ddde2c5c72100884f83c2358c6e163535`, Backend Shared Extension Contract [44035476830](https://github.com/apexstudying-cmd/prepza/actions/runs/44035476830), Frontend Build [44035476389](https://github.com/apexstudying-cmd/prepza/actions/runs/44035476389), and PostgreSQL Backup Restore [44035476520](https://github.com/apexstudying-cmd/prepza/actions/runs/44035476520) passed. Release Browser [44035476605](https://github.com/apexstudying-cmd/prepza/actions/runs/44035476605) was still running at this update. The next route map should focus on `/payment-history` and the shared Paystack callback/webhook, with exact event dispatch, signature rejection, provider retry, duplicate-delivery idempotency and ambassador transfer handling protected before any move.
+
+## 17 November 2026 — exact-head subscription candidate regression completed
+
+The exact PR #79 head `33024391a7f230704cc74ce338905e13159db313` has completed its previously pending full verification:
+- Release Browser/Cross-System Regression [44035945337](https://github.com/apexstudying-cmd/prepza/actions/runs/44035945337): PASS.
+- Frontend Build [44035945354](https://github.com/apexstudying-cmd/prepza/actions/runs/44035945354): PASS.
+- Backend Shared Extension Contract [44035945449](https://github.com/apexstudying-cmd/prepza/actions/runs/44035945449): PASS.
+- PostgreSQL Backup Restore [44035945370](https://github.com/apexstudying-cmd/prepza/actions/runs/44035945370): PASS, both existing-database upgrade/data preservation and custom-format restore jobs.
+- Workflow inventory: 17 triggered workflows succeeded; StudyHub Library Flow [44035945281](https://github.com/apexstudying-cmd/prepza/actions/runs/44035945281) was SKIPPED by path condition and is not counted as a pass.
+
+This closes the pending automated migration, responsive/cross-system regression and exact-head CI evidence for the student-subscription route extraction. It does not close live-provider verification, retrieval/index/citation review, external monitoring/request-ID, independent B2B viewability, human Home/PWA sign-off or deployment authorization. Overall release remains BLOCKED; PR #79 remains draft and unmerged.

@@ -554,3 +554,14 @@ New `tests/test_student_subscription_routes_contract.py` covers exact GET/POST r
 - **Workflow inventory:** 16 succeeded, 1 in progress, 1 skipped by path condition.
 
 The extraction did not move or modify `student_subscription_billing.py`, `sync_paystack_payment_status`, Paystack callback/webhook handling, payment history, the subscription plan configuration service, or any UI. No provider request or payment was initiated. Overall release remains BLOCKED.
+
+## 17 November 2026 — exact-head subscription candidate regression completed
+
+The exact PR #79 head `33024391a7f230704cc74ce338905e13159db313` has completed its previously pending full verification:
+- Release Browser/Cross-System Regression [44035945337](https://github.com/apexstudying-cmd/prepza/actions/runs/44035945337): PASS.
+- Frontend Build [44035945354](https://github.com/apexstudying-cmd/prepza/actions/runs/44035945354): PASS.
+- Backend Shared Extension Contract [44035945449](https://github.com/apexstudying-cmd/prepza/actions/runs/44035945449): PASS.
+- PostgreSQL Backup Restore [44035945370](https://github.com/apexstudying-cmd/prepza/actions/runs/44035945370): PASS, both existing-database upgrade/data preservation and custom-format restore jobs.
+- Workflow inventory: 17 triggered workflows succeeded; StudyHub Library Flow [44035945281](https://github.com/apexstudying-cmd/prepza/actions/runs/44035945281) was SKIPPED by path condition and is not counted as a pass.
+
+This closes the pending automated migration, responsive/cross-system regression and exact-head CI evidence for the student-subscription route extraction. It does not close live-provider verification, retrieval/index/citation review, external monitoring/request-ID, independent B2B viewability, human Home/PWA sign-off or deployment authorization. Overall release remains BLOCKED; PR #79 remains draft and unmerged.
