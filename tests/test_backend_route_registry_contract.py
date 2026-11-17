@@ -6,7 +6,12 @@ from types import ModuleType
 
 from flask import Blueprint, Flask
 
-from route_registry import register_ambassador_routes, register_document_reader_routes, register_foundation_routes
+from route_registry import (
+    register_ambassador_routes,
+    register_document_reader_routes,
+    register_foundation_routes,
+    register_student_subscription_routes,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_SOURCE = (ROOT / "app.py").read_text(encoding="utf-8")
@@ -245,5 +250,46 @@ def test_document_reader_registry_forwards_explicit_dependencies(monkeypatch) ->
     monkeypatch.setitem(sys.modules, "document_reader_routes", module)
 
     register_document_reader_routes(app, db, **dependencies)
+
+    assert calls == {"args": (app, db), "kwargs": dependencies}
+
+
+
+def test_student_subscription_routes_are_owned_by_the_feature_module_at_the_original_registration_point() -> None:
+    assert "register_student_subscription_routes(" in APP_SOURCE
+    assert "def subscription_plans(" not in APP_SOURCE
+    assert "def subscription_status(" not in APP_SOURCE
+    assert "def subscription_upgrade(" not in APP_SOURCE
+    assert "from student_subscription_routes import register_student_subscription_routes as register" in REGISTRY_SOURCE
+
+    registration = APP_SOURCE.index("register_student_subscription_routes(")
+    ambassador = APP_SOURCE.index("register_ambassador_routes(", registration)
+    assert registration < ambassador
+
+
+def test_student_subscription_route_registry_forwards_explicit_dependencies(monkeypatch) -> None:
+    app = Flask("prepza-student-subscription-registry-contract")
+    db = object()
+    dependencies = {
+        "User": object(),
+        "Payment": object(),
+        "limiter": object(),
+        "get_remote_address": object(),
+        "require_csrf": object(),
+        "get_user_subscription_status": object(),
+        "create_paystack_transaction": object(),
+        "student_order_helpers": object(),
+    }
+    calls = {}
+    module = ModuleType("student_subscription_routes")
+
+    def register(target_app, target_db, **kwargs):
+        calls["args"] = (target_app, target_db)
+        calls["kwargs"] = kwargs
+
+    module.register_student_subscription_routes = register
+    monkeypatch.setitem(sys.modules, "student_subscription_routes", module)
+
+    register_student_subscription_routes(app, db, **dependencies)
 
     assert calls == {"args": (app, db), "kwargs": dependencies}

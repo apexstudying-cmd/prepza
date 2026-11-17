@@ -12,6 +12,7 @@ ROUTE_REGISTRY = ROOT / "route_registry.py"
 STUDY_ROUTES = ROOT / "gamification_routes.py"
 AMBASSADOR_ROUTES = ROOT / "ambassador_routes.py"
 DOCUMENT_READER_ROUTES = ROOT / "document_reader_routes.py"
+STUDENT_SUBSCRIPTION_ROUTES = ROOT / "student_subscription_routes.py"
 MANIFEST = FRONTEND / "public" / "manifest.json"
 
 errors = []
@@ -27,6 +28,7 @@ require_file(ROUTE_REGISTRY, "backend route registry")
 require_file(STUDY_ROUTES, "Study activity route module")
 require_file(AMBASSADOR_ROUTES, "Ambassador route module")
 require_file(DOCUMENT_READER_ROUTES, "Document reader route module")
+require_file(STUDENT_SUBSCRIPTION_ROUTES, "Student subscription route module")
 require_file(FRONTEND / "src" / "StudyActivityScreen.tsx", "StudyActivityScreen")
 require_file(FRONTEND / "src" / "share" / "StudyShareSheet.tsx", "StudyShareSheet")
 require_file(FRONTEND / "public" / "manifest.json", "PWA manifest")
@@ -53,6 +55,7 @@ if BACKEND.exists():
         ("register_gamification_routes(", "study activity route registration"),
         ("register_ambassador_routes(", "ambassador route registration"),
         ("register_document_reader_routes(", "document reader route registration"),
+        ("register_student_subscription_routes(", "student subscription route registration"),
         ("register_foundation_routes(app, db)", "foundation route registry call"),
     ]:
         if needle not in backend_text:
@@ -71,6 +74,18 @@ if AMBASSADOR_ROUTES.exists():
     ]:
         if needle not in ambassador_route_text:
             errors.append(f"ambassador_routes.py missing {label}: {needle}")
+
+if STUDENT_SUBSCRIPTION_ROUTES.exists():
+    subscription_route_text = STUDENT_SUBSCRIPTION_ROUTES.read_text(encoding="utf-8")
+    for needle, label in [
+        ('@app.route("/subscription/plans")', "student subscription plans endpoint"),
+        ('@app.route("/subscription/status")', "student subscription status endpoint"),
+        ('@app.route("/subscription/upgrade", methods=["POST"])', "student subscription upgrade endpoint"),
+        ('"1 per 20 seconds"', "subscription upgrade rate limit"),
+        ("@require_csrf", "subscription upgrade CSRF protection"),
+    ]:
+        if needle not in subscription_route_text:
+            errors.append(f"student_subscription_routes.py missing {label}: {needle}")
 
 if DOCUMENT_READER_ROUTES.exists():
     document_reader_text = DOCUMENT_READER_ROUTES.read_text(encoding="utf-8")
@@ -116,6 +131,8 @@ if ROUTE_REGISTRY.exists():
         ("def register_foundation_routes(", "foundation route registrar"),
         ("def register_ambassador_routes(", "ambassador route registrar"),
         ("def register_document_reader_routes(", "document reader route registrar"),
+        ("def register_student_subscription_routes(", "student subscription route registrar"),
+        ("from student_subscription_routes import register_student_subscription_routes as register", "student subscription route module binding"),
         ("from document_reader_routes import register_document_reader_routes as register", "document reader route module binding"),
         ("from ambassador_routes import register_ambassador_routes as register", "ambassador route module binding"),
         ("register_usage_billing(app, db)", "usage billing registration"),

@@ -235,3 +235,11 @@ def register_document_reader_routes(
         fetch_private_file_bytes=fetch_private_file_bytes,
         render_watermarked_page=render_watermarked_page,
     )
+
+
+
+def register_student_subscription_routes(app: Any, db: Any, **dependencies: Any) -> None:
+    """Register student-facing subscription plans, status and checkout routes."""
+    from student_subscription_routes import register_student_subscription_routes as register
+
+    register(app, db, **dependencies)
