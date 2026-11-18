@@ -2499,3 +2499,16 @@ The exact PR #79 head `33024391a7f230704cc74ce338905e13159db313` has completed i
 - Workflow inventory: 17 triggered workflows succeeded; StudyHub Library Flow [44035945281](https://github.com/apexstudying-cmd/prepza/actions/runs/44035945281) was SKIPPED by path condition and is not counted as a pass.
 
 This closes the pending automated migration, responsive/cross-system regression and exact-head CI evidence for the student-subscription route extraction. It does not close live-provider verification, retrieval/index/citation review, external monitoring/request-ID, independent B2B viewability, human Home/PWA sign-off or deployment authorization. Overall release remains BLOCKED; PR #79 remains draft and unmerged.
+
+## 18 November 2026 — student payment-history route extraction and exact-head regression
+
+The /payment-history handler was a small, isolated route boundary after the subscription plan/status/upgrade extraction. It only needs the Payment model and the existing session. Its body was moved in behavior to student_payment_history_routes.py, registered at the original location through route_registry.py; no payment lifecycle, verification, callback or webhook service moved. The test verifies anonymous 401, GET path/endpoint, user-scoped subscription/add-on filter, descending creation time, response field compatibility, and exclusion of a legacy content payment and another user's record. Registry forwarding is explicit. The launch wiring audit and backend CI compile/test lists now include this owner.
+
+Exact code head 5cd6338a8435233d0480a1b6449a102f4786cdcc:
+- Backend Shared Extension Contract [44255257558](https://github.com/apexstudying-cmd/prepza/actions/runs/44255257558): 94 passed.
+- Frontend Build [44255257473](https://github.com/apexstudying-cmd/prepza/actions/runs/44255257473): 192 source/module + 5 offline Library tests; TypeScript, production build and launch wiring passed.
+- Release Browser [44255257490](https://github.com/apexstudying-cmd/prepza/actions/runs/44255257490): 100 PostgreSQL QA tests, responsive checks, Shop buyer/seller/admin, B2B and Study Hub offline/artifact replay passed.
+- PostgreSQL Backup Restore [44255257455](https://github.com/apexstudying-cmd/prepza/actions/runs/44255257455): existing-db upgrade/data preservation and custom-format backup/restore passed.
+- 17 workflows succeeded; StudyHub Library Flow [44255257439](https://github.com/apexstudying-cmd/prepza/actions/runs/44255257439) skipped by path condition.
+
+The local clone/test environment still has DNS failure and Flask is not installed, so no local pytest run is claimed; the exact-code-head CI above executed the tests. PR #79 remains draft/unmerged and release remains BLOCKED. Next, characterize the shared Paystack callback/webhook without live provider calls before any extraction.

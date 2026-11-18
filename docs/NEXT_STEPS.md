@@ -1,7 +1,7 @@
 # Prepza — Persistent Engineering Execution Tracker
 
-Last updated: 2026-11-17
-Branch: `refactor/architecture-boundaries-2026-11`; consolidated [PR #79](https://github.com/apexstudying-cmd/prepza/pull/79) remains open/draft against main `7922fa0d27fb275382e9fa4f46bfe4f242acdcf3`. Latest application-code head: `f42d447ddde2c5c72100884f83c2358c6e163535`; latest fully cross-system-verified code head remains `4a5cfc10b4e20e308436f5f64f9bbf235be0f243` pending the new Release Browser. On `f42d447`, Backend Shared Extension Contract [44035476830](https://github.com/apexstudying-cmd/prepza/actions/runs/44035476830), Frontend Build [44035476389](https://github.com/apexstudying-cmd/prepza/actions/runs/44035476389), and PostgreSQL Backup Restore [44035476520](https://github.com/apexstudying-cmd/prepza/actions/runs/44035476520) passed; Release Browser [44035476605](https://github.com/apexstudying-cmd/prepza/actions/runs/44035476605) is still IN_PROGRESS. Of 18 triggered workflows, 16 succeeded, 1 is in progress and StudyHub Library Flow was skipped by its path condition. Current source sizes: `frontend/src/App.tsx` 2,066 lines; `app.py` 5897 lines. All active App route-switch screens are module-owned; student subscription plans/status/upgrade routes are now in `student_subscription_routes.py`. Architecture and release remain incomplete/BLOCKED.
+Last updated: 2026-11-18
+Branch: refactor/architecture-boundaries-2026-11; consolidated PR #79 remains open/draft against main 7922fa0d27fb275382e9fa4f46bfe4f242acdcf3. Latest verified application-code head: 5cd6338a8435233d0480a1b6449a102f4786cdcc. On this code head, Backend Shared Extension Contract 44255257558 (94 tests), Frontend Build 44255257473 (192 source/module + 5 offline Library tests), Release Browser 44255257490 (100 PostgreSQL QA tests) and PostgreSQL Backup Restore 44255257455 all passed. 17 triggered workflows succeeded; StudyHub Library Flow was skipped by path condition. Current source sizes: frontend/src/App.tsx 2,066 lines; app.py 5,897 lines. All active App route-switch screens are module-owned; student plan/status/upgrade and /payment-history backend routes are module-owned. Architecture and release remain incomplete/BLOCKED.
 
 Status:
 - [x] completed/verified
@@ -1053,3 +1053,20 @@ The exact PR #79 head `33024391a7f230704cc74ce338905e13159db313` has completed i
 - Workflow inventory: 17 triggered workflows succeeded; StudyHub Library Flow [44035945281](https://github.com/apexstudying-cmd/prepza/actions/runs/44035945281) was SKIPPED by path condition and is not counted as a pass.
 
 This closes the pending automated migration, responsive/cross-system regression and exact-head CI evidence for the student-subscription route extraction. It does not close live-provider verification, retrieval/index/citation review, external monitoring/request-ID, independent B2B viewability, human Home/PWA sign-off or deployment authorization. Overall release remains BLOCKED; PR #79 remains draft and unmerged.
+
+
+## 18 November 2026 — payment-history route boundary verified
+
+The latest behavior-preserving backend slice is code commit 5cd6338a8435233d0480a1b6449a102f4786cdcc. The existing GET /payment-history handler moved from app.py into student_payment_history_routes.py; app.py delegates through route_registry.py at the original route position. The endpoint name, GET method, manual session authentication/401, user filter, subscription/add-on filter, descending creation-time order, response fields and legacy-content exclusion are unchanged. The new contract covers route/method, anonymous access, user/type filtering, ordering and response payload; the registry test protects explicit dependency forwarding and registration placement. The launch-wiring audit and backend workflow now include the module.
+
+**Exact code-head evidence**
+- Backend Shared Extension Contract [44255257558](https://github.com/apexstudying-cmd/prepza/actions/runs/44255257558): PASS, 94 tests passed.
+- Frontend Build [44255257473](https://github.com/apexstudying-cmd/prepza/actions/runs/44255257473): PASS, 192 source/module tests + 5 offline Library tests; TypeScript, production Vite build and launch-wiring/audits passed.
+- Release Browser/Cross-System Regression [44255257490](https://github.com/apexstudying-cmd/prepza/actions/runs/44255257490): PASS, 100 PostgreSQL QA tests (0 failed; 3,549 warnings), responsive phone/tablet, Shop buyer/seller/admin journeys, B2B browser-to-ledger, Study Hub offline lifecycle and generated-artifact replay.
+- PostgreSQL Backup Restore [44255257455](https://github.com/apexstudying-cmd/prepza/actions/runs/44255257455): PASS; existing-database upgrade/data preservation and custom-format backup/restore jobs passed.
+- Workflow inventory: 17 triggered workflows succeeded; StudyHub Library Flow [44255257439](https://github.com/apexstudying-cmd/prepza/actions/runs/44255257439) was SKIPPED by path condition and is not counted as a pass.
+- Responsive screenshots: [artifact 14405628563](https://github.com/apexstudying-cmd/prepza/actions/runs/44255257490/artifacts/14405628563).
+
+No provider calls, payment, UI, styling, navigation, database/production-data changes or deployment occurred. This is automated regression evidence, not live-provider or production certification.
+
+**Next architecture boundary:** characterize the shared Paystack callback/webhook before moving it: HMAC signature rejection, authoritative transaction verification, retry/duplicate delivery, charge/subscription/refund dispatch and ambassador-transfer reconciliation. Keep the lifecycle service and registration order intact.

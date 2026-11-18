@@ -1,7 +1,7 @@
 # Prepza Shop — End-to-End User Flow
 
-**Status:** PASS for responsive and buyer/seller/admin browser journeys on exact consolidated PR #79 code head `4a5cfc10b4e20e308436f5f64f9bbf235be0f243` (Release Browser 44031976661). Shop remains IN_PROGRESS and overall release remains BLOCKED because real Paystack sandbox and R2 provider verification are NOT_TESTED.
-**Last updated:** 17 November 2026.
+**Status:** PASS for responsive and buyer/seller/admin browser journeys on exact verified PR #79 code head 5cd6338a8435233d0480a1b6449a102f4786cdcc (Release Browser 44255257490). Shop remains IN_PROGRESS and overall release remains BLOCKED because real Paystack sandbox and R2 provider verification are NOT_TESTED.
+**Last updated:** 18 November 2026.
 **Commercial rule:** KES 100 per item per manually renewed 30-day listing period, including the first listing.
 **Payment boundary:** Prepza collects only the seller's listing fee. Buyers pay and arrange handover directly with sellers; there is no buyer checkout, cart, escrow, or seller payout flow.
 
@@ -134,3 +134,7 @@ This is automated role/browser evidence, not live Paystack or R2 verification. R
 ## 17 November 2026 — current consolidated candidate evidence
 
 Release Browser and Cross-System Regression [44031976661](https://github.com/apexstudying-cmd/prepza/actions/runs/44031976661) passed on exact PR #79 code head `4a5cfc10b4e20e308436f5f64f9bbf235be0f243`. The run passed responsive phone-small (360x800), phone-standard (390x844) and tablet-portrait (768x1024) checks; Shop buyer browse/detail/save/report/contact, seller listing/My Listings/pause/sold and admin moderation/payment-review journeys; B2B browser-to-ledger regression; and 100 disposable PostgreSQL QA tests (0 failed, 3,549 warnings). Screenshot artifact [14305199157](https://github.com/apexstudying-cmd/prepza/actions/runs/44031976661/artifacts/14305199157) contains the responsive screenshots. This is automated responsive and role-journey evidence, not a student usability study or live-provider certification. Paystack sandbox checkout/webhooks and R2 object/read/head/delete/cache-header verification remain NOT_TESTED without safe staging credentials. Preserve the KES 100 first-and-renewal fee, manual 30-day renewal, direct Prepza chat/WhatsApp contact, server-side payment verification and moderation; no buyer checkout/cart/escrow or seller payout flow.
+
+## 18 November 2026 — exact verified code-head journey
+
+Release Browser/Cross-System Regression [44255257490](https://github.com/apexstudying-cmd/prepza/actions/runs/44255257490) passed on code head 5cd6338a8435233d0480a1b6449a102f4786cdcc: phone-small (360x800), phone-standard (390x844) and tablet-portrait (768x1024); buyer browse/detail/save/report/direct-contact, seller listing/My Listings/pause/sold and admin moderation/payment-review; B2B browser-to-ledger; 100 disposable PostgreSQL QA tests (0 failed, 3,549 warnings); online/offline Study Hub and generated-artifact/podcast Blob replay. Screenshot artifact [14405628563](https://github.com/apexstudying-cmd/prepza/actions/runs/44255257490/artifacts/14405628563) was uploaded. This is automated role/responsive evidence, not a usability study. Real Paystack sandbox checkout/webhooks and R2 object/header operations remain NOT_TESTED; keep Shop IN_PROGRESS and overall release BLOCKED. No Shop UI redesign or commercial rule changes were made in this slice.
