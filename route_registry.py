@@ -243,3 +243,9 @@ def register_student_subscription_routes(app: Any, db: Any, **dependencies: Any)
     from student_subscription_routes import register_student_subscription_routes as register
 
     register(app, db, **dependencies)
+
+def register_student_payment_history_route(app: Any, Payment: Any) -> None:
+    """Register the student payment-history endpoint."""
+    from student_payment_history_routes import register_student_payment_history_route as register
+
+    register(app, Payment)

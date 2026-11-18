@@ -11,6 +11,7 @@ from route_registry import (
     register_document_reader_routes,
     register_foundation_routes,
     register_student_subscription_routes,
+    register_student_payment_history_route,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -293,3 +294,29 @@ def test_student_subscription_route_registry_forwards_explicit_dependencies(monk
     register_student_subscription_routes(app, db, **dependencies)
 
     assert calls == {"args": (app, db), "kwargs": dependencies}
+
+def test_student_payment_history_route_is_owned_by_feature_module_at_original_position() -> None:
+    assert "register_student_payment_history_route(app, Payment)" in APP_SOURCE
+    assert "def payment_history(" not in APP_SOURCE
+    assert "from student_payment_history_routes import register_student_payment_history_route as register" in REGISTRY_SOURCE
+
+    registration = APP_SOURCE.index("register_student_payment_history_route(app, Payment)")
+    document_routes = APP_SOURCE.index("ALLOWED_DOCUMENT_EXTENSIONS =", registration)
+    assert registration < document_routes
+
+
+def test_student_payment_history_route_registry_forwards_explicit_dependencies(monkeypatch) -> None:
+    app = Flask("prepza-student-payment-history-registry-contract")
+    Payment = object()
+    calls = {}
+    module = ModuleType("student_payment_history_routes")
+
+    def register(target_app, target_payment):
+        calls["args"] = (target_app, target_payment)
+
+    module.register_student_payment_history_route = register
+    monkeypatch.setitem(sys.modules, "student_payment_history_routes", module)
+
+    register_student_payment_history_route(app, Payment)
+
+    assert calls == {"args": (app, Payment)}

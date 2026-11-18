@@ -48,6 +48,7 @@ from route_registry import (
     register_ambassador_routes,
     register_document_reader_routes,
     register_student_subscription_routes,
+    register_student_payment_history_route,
 )
 from observability_models import RequestObservabilityEvent
 from security_models import AuditLog, PushSubscription, UserKey
@@ -2399,40 +2400,7 @@ def change_email():
     })
 
 
-@app.route("/payment-history")
-def payment_history():
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not logged in"}), 401
-
-    # Student billing is subscription-first. Individual content purchases are
-    # legacy and must not appear as current student transactions. Keep the
-    # endpoint ready for future usage/add-on payments without reviving content
-    # ownership as a product model.
-    payments = (
-        Payment.query.filter(
-            Payment.user_id == user_id,
-            Payment.payment_type.in_(( "subscription", "addon" )),
-        )
-        .order_by(Payment.created_at.desc())
-        .all()
-    )
-
-    result = []
-    for p in payments:
-        result.append({
-            "id": p.id,
-            "payment_type": p.payment_type,
-            "content_title": None,
-            "plan": p.plan,
-            "amount": p.amount,
-            "status": p.status,
-            "provider": p.provider,
-            "reference": p.reference,
-            "created_at": p.created_at.isoformat() if p.created_at else None,
-        })
-
-    return jsonify({"payments": result})
+register_student_payment_history_route(app, Payment)
 
 
 # ---------- Document routes (student uploads) ----------
