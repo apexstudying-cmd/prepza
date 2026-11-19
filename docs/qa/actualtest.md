@@ -599,3 +599,19 @@ Added `test_student_subscription_billing_registration_and_webhook_dispatch_contr
 - Workflow inventory: 16 succeeded, 1 failed, 1 skipped (StudyHub Library Flow [44472584302](https://github.com/apexstudying-cmd/prepza/actions/runs/44472584302)).
 
 Do not count the new billing regression as PASS until it executes on an exact passing head. No UI styling/navigation, KES 100/30-day listing rule, production data, live provider, payment, payout, deployment, paid service or billable GPU work changed.
+
+## 2026-11-19 — subscription refund-request route repair and exact-head regression (PR #79)
+
+On exact code head `7d12cbfebbc2bf48f501cb25ad2f3d979aae4631`, the existing refund request body had been placed inside GET `/subscription/refund-quote`. This both made the GET handler mutate refund state and left POST `/subscription/refund-request` unregistered. The previous exact-head Release Browser run [44474023200](https://github.com/apexstudying-cmd/prepza/actions/runs/44474023200) passed Shop buyer/seller/admin and B2B journeys, then exposed the missing refund-request route in full PostgreSQL QA. The earlier Shop 403 on candidate `e094830` did not reproduce on the later browser runs.
+
+Commit [7d12cbf](https://github.com/apexstudying-cmd/prepza/commit/7d12cbfebbc2bf48f501cb25ad2f3d979aae4631) restores the original API split: GET quote is read-only and returns the quote; POST request is separately registered with the existing CSRF guard, authenticated session, payment/plan validation, duplicate-request check, upsert and 201 response. Added `tests/test_student_subscription_billing_contract.py` covers route methods, read-only GET, 401, CSRF rejection, persisted fields and duplicate 409. No payment provider call was made and no frontend/UI file changed.
+
+- Backend Shared Extension Contract [44475284636](https://github.com/apexstudying-cmd/prepza/actions/runs/44475284636): PASS, 96 tests.
+- Frontend Build [44475284756](https://github.com/apexstudying-cmd/prepza/actions/runs/44475284756): PASS, 192 source/module + 5 offline Library tests, TypeScript and production build; AdminSection boundary tests included.
+- Release Browser [44475284585](https://github.com/apexstudying-cmd/prepza/actions/runs/44475284585): PASS; responsive phone/tablet, Shop buyer/seller/admin journeys, B2B browser-to-ledger, **101 PostgreSQL QA tests**, Study Hub offline lifecycle, generated materials and podcast audio replay.
+- PostgreSQL Backup Restore [44475284651](https://github.com/apexstudying-cmd/prepza/actions/runs/44475284651): PASS; existing database upgrade/data preservation and custom-format backup/restore both passed.
+- AI Economics [44475284794](https://github.com/apexstudying-cmd/prepza/actions/runs/44475284794): 81 passed; E2EE Security [44475284746](https://github.com/apexstudying-cmd/prepza/actions/runs/44475284746): 16 passed.
+- 17 triggered workflows succeeded; StudyHub Library Flow [44475284566](https://github.com/apexstudying-cmd/prepza/actions/runs/44475284566) was skipped by path condition.
+- Responsive screenshot artifact: [14506038883](https://github.com/apexstudying-cmd/prepza/actions/runs/44475284585/artifacts/14506038883).
+
+The earlier Shop CSRF failure did not recur in the later exact-head Shop browser journeys. Automated Shop flows now pass, but Paystack sandbox and R2 provider operations remain NOT_TESTED. B2B browser-to-ledger passes, but independent server-side verification of the 50%-visible/1.5-second dwell condition remains open. Architecture refactor remains incomplete: characterize the shared Paystack callback/webhook and recover the missing ambassador-transfer helper contract before moving that boundary. Retrieval/index/citation review, external monitoring/request-ID delivery, Home/PWA sign-off and deployment authorization remain open. Release remains **BLOCKED**; PR #79 remains draft/unmerged.

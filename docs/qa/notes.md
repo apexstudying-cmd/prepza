@@ -2522,3 +2522,33 @@ Exact candidate `e094830e323e9993c2b2dbef6844f9105a4b5523`: Frontend Build 44472
 Separate webhook-transfer gap discovered during characterization: `app.py` calls `_apply_paystack_transfer_result`; `admin_reconciled_ambassadors.py` calls `initiate_paystack_transfer` and `sync_paystack_transfer_status`. No definitions for these functions were found in the current source tree. Do not infer money-transfer status transitions or implement provider-side payout initiation without recovering the intended contract and using explicitly authorized safe staging. The shared Paystack callback/webhook must remain in place until its complete behavior is characterized.
 
 No local pytest run is claimed. No live provider, refund, payout, production data, deployment, paid service or billable AI/GPU operation was used.
+
+## 19 November 2026 — refund quote/request route ownership corrected; exact-head CI green
+
+### Defect found on the previous candidate
+
+Release Browser run [44474023200](https://github.com/apexstudying-cmd/prepza/actions/runs/44474023200) on documentation head `b379926` got through responsive checks, Shop buyer/seller/admin journeys and B2B browser-to-ledger. Its full disposable PostgreSQL suite then failed one test: `test_student_subscription_billing_registration_and_webhook_dispatch_contract` expected `/subscription/refund-request`, but that route was absent. The exact assertion was at `tests/test_local_qa_real_world.py:2731`; 100 other tests passed.
+
+Source inspection showed the regression was not a brittle path assertion: the refund-request database write body was nested under GET `/subscription/refund-quote`. The GET handler therefore attempted to create a refund request, while the intended POST endpoint (and its CSRF decorator) was missing. The historical pre-truncation implementation confirms GET quote returns only `calculate_refund_quote(...)` and the separate POST route owns the request insert. The earlier buyer-chat 403 on `e094830` was not reproduced in the subsequent Shop browser runs; do not attribute that earlier transient failure to this billing repair.
+
+### Small behavior-preserving repair
+
+Code commit [7d12cbf](https://github.com/apexstudying-cmd/prepza/commit/7d12cbfebbc2bf48f501cb25ad2f3d979aae4631) separates the handlers without changing the refund policy or database write semantics:
+- GET `/subscription/refund-quote` returns the quote and performs no write.
+- POST `/subscription/refund-request` has the existing `require_csrf` guard, manual session authentication, payment ID/plan validation, active-payment lookup, duplicate guard, same `ON CONFLICT (payment_id) DO UPDATE`, and original 201 response.
+- Added `tests/test_student_subscription_billing_contract.py` to protect route methods, GET read-only behavior, anonymous 401, CSRF 403, insert parameters, commit and duplicate 409.
+- Updated `.github/workflows/backend-extension-contract.yml` so the lifecycle module is compiled and the new contract runs in focused backend CI.
+- No frontend/UI, navigation, pricing, subscription policy, provider call, payment, refund, payout, production data or deployment change.
+
+### Exact code-head evidence
+
+- Backend Shared Extension Contract [44475284636](https://github.com/apexstudying-cmd/prepza/actions/runs/44475284636): **96 passed**.
+- Frontend Build [44475284756](https://github.com/apexstudying-cmd/prepza/actions/runs/44475284756): **192 source/module + 5 offline Library tests passed**, TypeScript and Vite production build passed; AdminSection boundary tests are in this suite.
+- Release Browser [44475284585](https://github.com/apexstudying-cmd/prepza/actions/runs/44475284585): **101 passed, 0 failed**. Responsive phone/tablet passed; Shop buyer browse/detail/save/report/ChatDetail/in-app message, seller listing/pause/sold, admin moderation/payment review passed; B2B browser-to-ledger passed; Study Hub visibility/inactivity/podcast/back/offline/reconnect and all 12 generated-material plus podcast Blob replays passed with zero generation POSTs during offline replay.
+- PostgreSQL Backup Restore [44475284651](https://github.com/apexstudying-cmd/prepza/actions/runs/44475284651): both existing-database upgrade/data preservation and custom-format backup/restore passed. Existing document/material rows, current Alembic revision, Shop schema/payment-review fields, restored sentinel/table count and app smoke requests were verified.
+- AI Economics [44475284794](https://github.com/apexstudying-cmd/prepza/actions/runs/44475284794): 81 passed. E2EE Security [44475284746](https://github.com/apexstudying-cmd/prepza/actions/runs/44475284746): 16 passed. The other triggered workflows also passed.
+- Inventory: 17 triggered workflows succeeded; StudyHub Library Flow [44475284566](https://github.com/apexstudying-cmd/prepza/actions/runs/44475284566) was skipped by path condition.
+
+### Still open
+
+The exact-head regression for this repair is green, but PR #79 is not ready to merge and the architecture refactor is not complete. The shared Paystack callback/webhook must be characterized before extraction. `app.py` calls `_apply_paystack_transfer_result`; `admin_reconciled_ambassadors.py` calls `initiate_paystack_transfer` and `sync_paystack_transfer_status`; no definitions were found in the current source tree. Recover their intended behavior from Git history and mocks before making any transfer-state change. Do not initiate live payouts. Shop's browser journeys pass, but Paystack sandbox/R2 provider operations remain NOT_TESTED. B2B independent dwell verification, retrieval/index/citation review, external monitoring/request-ID delivery, human Home/PWA sign-off and deployment authorization remain open. Release remains BLOCKED.
