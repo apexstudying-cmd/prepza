@@ -612,6 +612,27 @@ def register_student_subscription_billing(app, db, Payment, User, require_csrf, 
         if not payment:
             return jsonify({"error": "No active paid subscription found for the requested entitlement"}), 404
 
+        return jsonify(calculate_refund_quote(db, payment))
+
+    @app.post("/subscription/refund-request")
+    @require_csrf
+    def subscription_refund_request():
+        user_id = session.get("user_id")
+        if not user_id:
+            return jsonify({"error": "Not logged in"}), 401
+        payload = request.get_json(silent=True) or {}
+        requested_payment_id = payload.get("payment_id")
+        requested_plan = payload.get("plan")
+        try:
+            requested_payment_id = int(requested_payment_id) if requested_payment_id is not None else None
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid payment_id"}), 400
+        if requested_plan not in (None, "plus", "pro"):
+            return jsonify({"error": "Invalid subscription plan"}), 400
+        payment = _active_payment(db, user_id, requested_payment_id, requested_plan)
+        if not payment:
+            return jsonify({"error": "No active paid subscription found for the requested entitlement"}), 404
+
         existing = db.session.execute(
             text("SELECT status FROM student_refund_request WHERE payment_id=:pid"),
             {"pid": payment["id"]},
