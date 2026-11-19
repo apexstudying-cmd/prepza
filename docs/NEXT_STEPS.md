@@ -1,7 +1,7 @@
 # Prepza — Persistent Engineering Execution Tracker
 
-Last updated: 2026-11-18
-Branch: refactor/architecture-boundaries-2026-11; consolidated PR #79 remains open/draft against main 7922fa0d27fb275382e9fa4f46bfe4f242acdcf3. Latest verified application-code head: 5cd6338a8435233d0480a1b6449a102f4786cdcc. On this code head, Backend Shared Extension Contract 44255257558 (94 tests), Frontend Build 44255257473 (192 source/module + 5 offline Library tests), Release Browser 44255257490 (100 PostgreSQL QA tests) and PostgreSQL Backup Restore 44255257455 all passed. 17 triggered workflows succeeded; StudyHub Library Flow was skipped by path condition. Current source sizes: frontend/src/App.tsx 2,066 lines; app.py 5,897 lines. All active App route-switch screens are module-owned; student plan/status/upgrade and /payment-history backend routes are module-owned. Architecture and release remain incomplete/BLOCKED.
+Last updated: 2026-11-19
+Branch: refactor/architecture-boundaries-2026-11; consolidated PR #79 remains open/draft against main 7922fa0d27fb275382e9fa4f46bfe4f242acdcf3. Latest candidate code head: e094830e323e9993c2b2dbef6844f9105a4b5523. Exact-head Frontend Build 44472584288, Backend Shared Extension Contract 44472584299, Student Contract Validation 44472584308, Admin Route Contract 44472584408 and PostgreSQL Backup Restore 44472584319 passed. Release Browser 44472584583 failed at the buyer in-app chat send (403 Missing or invalid CSRF token); B2B, full PostgreSQL QA and offline/artifact steps were SKIPPED. Workflow inventory: 16 success, 1 failure, 1 skipped. Current source sizes: frontend/src/App.tsx 2,066 lines; app.py 5,865 lines; student_subscription_billing.py 860 lines. All active App route-switch screens are module-owned; student plan/status/upgrade and /payment-history backend routes are module-owned. Architecture and release remain incomplete/BLOCKED.
 
 Status:
 - [x] completed/verified
@@ -1070,3 +1070,19 @@ The latest behavior-preserving backend slice is code commit 5cd6338a8435233d0480
 No provider calls, payment, UI, styling, navigation, database/production-data changes or deployment occurred. This is automated regression evidence, not live-provider or production certification.
 
 **Next architecture boundary:** characterize the shared Paystack callback/webhook before moving it: HMAC signature rejection, authoritative transaction verification, retry/duplicate delivery, charge/subscription/refund dispatch and ambassador-transfer reconciliation. Keep the lifecycle service and registration order intact.
+
+## 19 November 2026 — subscription billing registration restored; Shop regression blocker
+
+Code commit [e094830](https://github.com/apexstudying-cmd/prepza/commit/e094830e323e9993c2b2dbef6844f9105a4b5523) restores the deleted tail of `student_subscription_billing.py` from its historical pre-truncation source. The function had ended inside the refund-quote route and returned `None`, leaving `_student_subscription_billing` without its handler map and removing the existing refund-request, cancellation and admin-refund route registrations. The original `record_usage`, `quote`, `subscription_created`, `recurring_charge`, `refund_webhook` and `subscription_webhook` mapping is restored. Current schema ownership and race-safe subscription upsert code were retained; no provider request was made.
+
+A regression was added to `tests/test_local_qa_real_world.py` for route registration, missing-secret fail-closed behavior, subscription lifecycle dispatch, all five refund events, recurring-charge fallback and unknown-event acknowledgement. It is **NOT_TESTED on this head** because Release Browser failed before its full PostgreSQL QA step.
+
+- Frontend Build [44472584288](https://github.com/apexstudying-cmd/prepza/actions/runs/44472584288): PASS.
+- Backend Shared Extension Contract [44472584299](https://github.com/apexstudying-cmd/prepza/actions/runs/44472584299): PASS.
+- Student Contract Validation [44472584308](https://github.com/apexstudying-cmd/prepza/actions/runs/44472584308): PASS.
+- Admin Route Contract [44472584408](https://github.com/apexstudying-cmd/prepza/actions/runs/44472584408): PASS.
+- PostgreSQL Backup Restore [44472584319](https://github.com/apexstudying-cmd/prepza/actions/runs/44472584319): PASS, including existing-database upgrade/data preservation and custom-format restore.
+- Release Browser [44472584583](https://github.com/apexstudying-cmd/prepza/actions/runs/44472584583): FAIL. Phone/tablet responsive checks passed; the buyer opened ChatDetail and loaded the conversation, but the first in-app message POST returned `403 Missing or invalid CSRF token`. Seller/admin journeys, B2B, full PostgreSQL QA and offline/artifact checks were SKIPPED.
+- Workflow inventory: 16 success, 1 failure, 1 skipped; StudyHub Library Flow [44472584302](https://github.com/apexstudying-cmd/prepza/actions/runs/44472584302) was skipped by path condition.
+
+Next: trace the Shop contact-to-ChatDetail session/CSRF token continuity without weakening CSRF or changing the UI. Then rerun Release Browser so the new billing regression executes. The ambassador transfer branch also needs characterization: `_apply_paystack_transfer_result`, `initiate_paystack_transfer` and `sync_paystack_transfer_status` are referenced but no definitions were found in the current source tree. Do not invent transfer semantics or initiate live payouts. Release remains BLOCKED.

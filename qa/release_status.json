@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "last_verified_date": "2026-11-18",
-  "last_verified_commit": "5cd6338a8435233d0480a1b6449a102f4786cdcc",
+  "last_verified_date": "2026-11-19",
+  "last_verified_commit": "e094830e323e9993c2b2dbef6844f9105a4b5523",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -77,13 +77,13 @@
     },
     {
       "id": "cross_system_journeys",
-      "status": "PASS",
-      "evidence": "PASS on exact PR #79 verified code head 5cd6338a8435233d0480a1b6449a102f4786cdcc: Release Browser/Cross-System Regression 44255257490 passed Shop buyer/seller/admin, B2B browser-to-ledger, full disposable PostgreSQL QA and online/offline Study Hub/generated-artifact journeys."
+      "status": "FAIL",
+      "evidence": "Exact candidate e094830e323e9993c2b2dbef6844f9105a4b5523: Release Browser 44472584583 passed responsive phone/tablet checks but failed the buyer in-app message POST with 403 Missing or invalid CSRF token. B2B, full PostgreSQL QA and offline/artifact steps were SKIPPED."
     },
     {
       "id": "ci_release_workflows",
-      "status": "PASS",
-      "evidence": "Exact PR #79 verified code head 5cd6338a8435233d0480a1b6449a102f4786cdcc: 17 triggered workflows succeeded. StudyHub Library Flow 44255257439 was SKIPPED by path condition and is not counted as a pass. Backend Shared Extension Contract 44255257558 (94 passed), Frontend Build 44255257473 (192 source/module + 5 offline Library tests, TypeScript, Vite and launch-wiring passed), PostgreSQL Backup Restore 44255257455 and Release Browser 44255257490 all succeeded."
+      "status": "FAIL",
+      "evidence": "Exact candidate e094830e323e9993c2b2dbef6844f9105a4b5523: 16 workflows succeeded, Release Browser 44472584583 failed, and StudyHub Library Flow 44472584302 was skipped. Frontend Build 44472584288, Backend Shared Extension Contract 44472584299, Student Contract Validation 44472584308, Admin Route Contract 44472584408 and PostgreSQL Backup Restore 44472584319 passed."
     },
     {
       "id": "existing_database_migration",
@@ -92,8 +92,8 @@
     },
     {
       "id": "clean_full_regression",
-      "status": "PASS",
-      "evidence": "PASS on exact PR #79 verified code head 5cd6338a8435233d0480a1b6449a102f4786cdcc: Release Browser/Cross-System Regression 44255257490 completed successfully, including responsive checks, Shop buyer/seller/admin, B2B, 100 PostgreSQL QA tests and offline/artifact journeys. This does not certify live-provider behavior or production readiness."
+      "status": "FAIL",
+      "evidence": "Release Browser 44472584583 failed at the Shop in-app chat send before B2B, full disposable PostgreSQL QA and offline/generated-artifact journeys. The new subscription billing registration/webhook-dispatch test was not reached."
     },
     {
       "id": "b2b_monetization_integrity",
@@ -102,13 +102,13 @@
     },
     {
       "id": "shop_marketplace",
-      "status": "IN_PROGRESS",
-      "evidence": "Automated responsive and buyer/seller/admin journeys PASS on exact code head 5cd6338a8435233d0480a1b6449a102f4786cdcc in Release Browser 44255257490, including direct contact, seller lifecycle and admin moderation/payment review. Classifieds model unchanged. Real Paystack sandbox checkout/webhooks and R2 object/header operations remain NOT_TESTED pending safe staging evidence."
+      "status": "FAIL",
+      "evidence": "Latest exact-head run 44472584583: responsive phone/tablet checks PASS; buyer opened ChatDetail and loaded the conversation, but sending the first in-app message returned 403 Missing or invalid CSRF token. Seller/admin journeys were not reached. Paystack sandbox and R2 operations remain NOT_TESTED."
     },
     {
       "id": "payment_recovery_idempotency",
-      "status": "PASS",
-      "evidence": "GitHub Actions Release Browser and Cross-System Regression run 40502457332 on runtime commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015: full disposable PostgreSQL QA suite passed, including invalid Paystack signature rejection, temporary verification failure/retry, duplicate student webhook without duplicate entitlement extension, duplicate B2B refund replay, and two distinct same-amount refund events with replay deduplicated. The B2B browser-to-ledger step also passed with server-side rapid-click debounce and no extra advertiser debit. The overall release-browser workflow is still running its online/offline generated-artifact journey; this gate only records the recovery cases already completed."
+      "status": "NOT_TESTED",
+      "evidence": "Historical retry/idempotency evidence is on an earlier runtime commit. On e094830e323e9993c2b2dbef6844f9105a4b5523 the full PostgreSQL QA step was skipped after the Shop failure, so the new subscription/refund/recurring dispatch regression was not executed."
     },
     {
       "id": "external_provider_verification",
@@ -123,7 +123,7 @@
     {
       "id": "documentation_audit",
       "status": "IN_PROGRESS",
-      "evidence": "Updated 2026-11-18 architecture, current-task, actual-test, notes, release ledger and Shop QA/UX evidence to exact verified code head 5cd6338a8435233d0480a1b6449a102f4786cdcc. The broader documentation audit remains IN_PROGRESS."
+      "evidence": "Updated 2026-11-19 task, actual-test and release-ledger evidence to candidate e094830e323e9993c2b2dbef6844f9105a4b5523; broader documentation audit remains open."
     },
     {
       "id": "vps_or_render_deployment",
@@ -162,7 +162,9 @@
     }
   ],
   "next_actions": [
-    "Architecture: continue single draft PR #79. All active App route-switch screens are feature-owned; student plan/status/upgrade and /payment-history routes are module-owned. Exact code head 5cd6338a8435233d0480a1b6449a102f4786cdcc has Backend Shared Extension Contract 44255257558 (94 tests), Frontend Build 44255257473, Release Browser 44255257490 and PostgreSQL Backup Restore 44255257455 PASS; 17 triggered workflows succeeded and StudyHub Library Flow 44255257439 was skipped. Next characterize shared Paystack callback/webhook signature, event dispatch, retries/idempotency and ambassador transfers before any extraction.",
+    "Immediate Shop blocker: reproduce the 403 on POST /chats/<id>/messages, capture the session csrf_token and X-CSRF-Token at /me and send time, inspect cookie/session continuity through Shop contact and ChatDetail, then fix the smallest owning client/session defect. Do not weaken CSRF or change the UI.",
+    "After the Shop journey is repaired, rerun Release Browser on the exact latest PR #79 head so the new subscription registration/webhook-dispatch regression executes. Confirm subscription creation/lifecycle, refund dispatch, recurring-charge fallback and unknown-event acknowledgement before extracting callback code.",
+    "Ambassador-transfer characterization is blocked: _apply_paystack_transfer_result, initiate_paystack_transfer and sync_paystack_transfer_status are referenced but have no definitions in the current source tree. Do not invent transfer semantics or initiate live payouts; recover the intended contract with mocks.",
     "Architecture: after payment-history and Paystack callback/webhook characterization, continue document/generation and base-chat route/service boundaries. Preserve student_subscription_billing.py lifecycle ownership, registration order, authorization, response shapes and transaction behavior.",
     "Home/PWA verification: rebuild the exact candidate locally, confirm splash/login/home brand marks use /icon-192.png, five Home Quick Actions remain Upload, My Study, Library, Morio and Shop, and inspect installed PWA/offline shell.",
     "Staging access needed: apply migrations/20261029_document_page_text.sql and migrations/20261029_request_observability.sql through controlled backup/restore, then verify schema and rollback/restore evidence.",
@@ -174,5 +176,5 @@
     "Keep release BLOCKED; do not deploy or alter production data until all release-scoped gates are closed and deployment is explicitly authorized."
   ],
   "current_main_commit": "7922fa0d27fb275382e9fa4f46bfe4f242acdcf3",
-  "verification_note": "Updated 2026-11-18. Main remains 7922fa0d27fb275382e9fa4f46bfe4f242acdcf3; PR #79 exact verified application-code head 5cd6338a8435233d0480a1b6449a102f4786cdcc. Backend Shared Extension Contract 44255257558 passed 94 tests; Frontend Build 44255257473 passed 192 source/module tests and 5 offline Library tests, TypeScript, production Vite and launch wiring; Release Browser/Cross-System Regression 44255257490 passed responsive phone/tablet, Shop buyer/seller/admin, B2B browser-to-ledger, 100 disposable PostgreSQL QA tests (0 failures, 3,549 warnings), and online/offline Study Hub/artifact journeys; PostgreSQL Backup Restore 44255257455 passed existing-database upgrade/data-preservation and custom-format backup/restore. 17 triggered workflows succeeded; StudyHub Library Flow 44255257439 was skipped by path condition. Release remains BLOCKED: live Paystack/SES/OpenAI/R2/audio provider checks are NOT_TESTED; retrieval/index/citation review, external Sentry/request-ID, independently verified B2B viewability, human Home/PWA sign-off and deployment authorization remain open. No production data, live payment, deployment, paid service or billable GPU work was performed."
+  "verification_note": "Updated 2026-11-19. PR #79 candidate code head e094830e323e9993c2b2dbef6844f9105a4b5523; main remains 7922fa0d27fb275382e9fa4f46bfe4f242acdcf3. Frontend Build 44472584288, Backend Shared Extension Contract 44472584299, Student Contract Validation 44472584308, Admin Route Contract 44472584408 and PostgreSQL Backup Restore 44472584319 passed. Release Browser 44472584583 failed after responsive checks: buyer POST /chats/<id>/messages returned 403 Missing or invalid CSRF token. B2B, full PostgreSQL QA and offline/artifact steps were SKIPPED; the new billing dispatch regression was not executed. Workflow inventory: 16 success, 1 failure, 1 skipped (StudyHub Library Flow 44472584302). Shop is FAIL, exact-head payment recovery is NOT_TESTED, release remains BLOCKED. No live provider, payment, payout, production data, deployment, paid service or billable GPU work was performed."
 }

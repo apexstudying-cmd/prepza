@@ -581,3 +581,21 @@ The latest behavior-preserving backend slice is code commit 5cd6338a8435233d0480
 No provider calls, payment, UI, styling, navigation, database/production-data changes or deployment occurred. This is automated regression evidence, not live-provider or production certification.
 
 **Next architecture boundary:** characterize the shared Paystack callback/webhook before moving it: HMAC signature rejection, authoritative transaction verification, retry/duplicate delivery, charge/subscription/refund dispatch and ambassador-transfer reconciliation. Keep the lifecycle service and registration order intact.
+
+## 2026-11-19 — subscription billing registration repair and exact-head regression
+
+Candidate code head: `e094830e323e9993c2b2dbef6844f9105a4b5523` on the existing PR #79 branch.
+
+Source-history inspection found that `student_subscription_billing.py` had been truncated: `register_student_subscription_billing` ended inside the refund-quote route and returned no handler map. This left `_student_subscription_billing` as `None` at app registration and removed the original refund-request, cancellation and admin-refund route registrations. The missing tail was restored from historical commit `a86b1fc90c1d73b57e345100c13e11250e66d6fa`, retaining the current module's later schema-ownership and race-safe-upsert changes. No payment/refund API was called.
+
+Added `test_student_subscription_billing_registration_and_webhook_dispatch_contract` to `tests/test_local_qa_real_world.py`. It protects the returned handler map, restored route map, missing-secret 503, `subscription.create`, subscription lifecycle events, all five refund event dispatches, recurring-charge fallback and unknown-event acknowledgement. **This new regression test is NOT_TESTED on this candidate**, because Release Browser failed before the full PostgreSQL QA step.
+
+- Frontend Build [44472584288](https://github.com/apexstudying-cmd/prepza/actions/runs/44472584288): PASS.
+- Backend Shared Extension Contract [44472584299](https://github.com/apexstudying-cmd/prepza/actions/runs/44472584299): PASS.
+- Student Contract Validation [44472584308](https://github.com/apexstudying-cmd/prepza/actions/runs/44472584308): PASS.
+- Admin Route Contract [44472584408](https://github.com/apexstudying-cmd/prepza/actions/runs/44472584408): PASS.
+- PostgreSQL Backup Restore [44472584319](https://github.com/apexstudying-cmd/prepza/actions/runs/44472584319): PASS.
+- Release Browser [44472584583](https://github.com/apexstudying-cmd/prepza/actions/runs/44472584583): FAIL at `scripts/test_browser_shop_journeys.py`; responsive phone/tablet checks passed, but the buyer's POST to `/chats/<id>/messages` returned 403 `Missing or invalid CSRF token`. B2B, full PostgreSQL QA and offline/generated-artifact journeys were SKIPPED.
+- Workflow inventory: 16 succeeded, 1 failed, 1 skipped (StudyHub Library Flow [44472584302](https://github.com/apexstudying-cmd/prepza/actions/runs/44472584302)).
+
+Do not count the new billing regression as PASS until it executes on an exact passing head. No UI styling/navigation, KES 100/30-day listing rule, production data, live provider, payment, payout, deployment, paid service or billable GPU work changed.
