@@ -1,7 +1,7 @@
 # Prepza Shop — End-to-End User Flow
 
-**Status:** PASS for responsive and buyer/seller/admin browser journeys on exact verified PR #79 code head 5cd6338a8435233d0480a1b6449a102f4786cdcc (Release Browser 44255257490). Shop remains IN_PROGRESS and overall release remains BLOCKED because real Paystack sandbox and R2 provider verification are NOT_TESTED.
-**Last updated:** 18 November 2026.
+**Status:** FAIL on latest PR #79 candidate e094830e323e9993c2b2dbef6844f9105a4b5523 (Release Browser 44472584583). Phone/tablet responsive checks PASS, but the buyer's first in-app message POST returns 403 Missing or invalid CSRF token; seller/admin journeys are not reached on this candidate. Real Paystack sandbox and R2 verification remain NOT_TESTED; overall release remains BLOCKED.
+**Last updated:** 19 November 2026.
 **Commercial rule:** KES 100 per item per manually renewed 30-day listing period, including the first listing.
 **Payment boundary:** Prepza collects only the seller's listing fee. Buyers pay and arrange handover directly with sellers; there is no buyer checkout, cart, escrow, or seller payout flow.
 
@@ -138,3 +138,9 @@ Release Browser and Cross-System Regression [44031976661](https://github.com/ape
 ## 18 November 2026 — exact verified code-head journey
 
 Release Browser/Cross-System Regression [44255257490](https://github.com/apexstudying-cmd/prepza/actions/runs/44255257490) passed on code head 5cd6338a8435233d0480a1b6449a102f4786cdcc: phone-small (360x800), phone-standard (390x844) and tablet-portrait (768x1024); buyer browse/detail/save/report/direct-contact, seller listing/My Listings/pause/sold and admin moderation/payment-review; B2B browser-to-ledger; 100 disposable PostgreSQL QA tests (0 failed, 3,549 warnings); online/offline Study Hub and generated-artifact/podcast Blob replay. Screenshot artifact [14405628563](https://github.com/apexstudying-cmd/prepza/actions/runs/44255257490/artifacts/14405628563) was uploaded. This is automated role/responsive evidence, not a usability study. Real Paystack sandbox checkout/webhooks and R2 object/header operations remain NOT_TESTED; keep Shop IN_PROGRESS and overall release BLOCKED. No Shop UI redesign or commercial rule changes were made in this slice.
+
+## 19 November 2026 — latest candidate browser result
+
+Release Browser [44472584583](https://github.com/apexstudying-cmd/prepza/actions/runs/44472584583) on candidate `e094830e323e9993c2b2dbef6844f9105a4b5523` passed phone-small (360x800), phone-standard (390x844) and tablet-portrait (768x1024) responsive checks. The buyer flow created the seller conversation and ChatDetail loaded it, but the first message POST to `/chats/<id>/messages` returned 403 `{"error":"Missing or invalid CSRF token"}`. The run stopped at this point: seller listing/status and moderator journeys, B2B browser-to-ledger, full PostgreSQL QA and offline/artifact journeys were SKIPPED. Do not describe the buyer/seller/admin flow as PASS on this candidate.
+
+The frontend already requests `/me` for the session-bound `csrf_token` and sends it as `X-CSRF-Token` when posting a chat message. The exact mismatch has not yet been isolated; inspect token/cookie continuity from login through Shop contact and ChatDetail. Preserve the existing CSRF protection and UI. The prior 18 November browser pass remains historical evidence for code head 5cd6338, not a substitute for the latest candidate. KES 100 per item per manually renewed 30-day period, direct Prepza chat/WhatsApp contact, payment verification and moderation remain unchanged. Live Paystack/R2 operations remain NOT_TESTED.

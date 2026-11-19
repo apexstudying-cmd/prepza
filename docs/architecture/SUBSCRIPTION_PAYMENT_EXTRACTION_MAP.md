@@ -1,6 +1,6 @@
 # Subscription and payment screen extraction map
 
-**Status:** the five student billing screens and student plan/status/upgrade backend routes are extracted. GET /payment-history is now in student_payment_history_routes.py on verified code head 5cd6338a8435233d0480a1b6449a102f4786cdcc; app.py delegates through route_registry.py at its original route position. Backend, frontend, release-browser and backup/restore CI passed on this code SHA. The shared Paystack callback/webhook remain in app.py for separate characterization.
+**Status:** the five student billing screens and student plan/status/upgrade backend routes are extracted; GET /payment-history is in student_payment_history_routes.py. On candidate e094830e323e9993c2b2dbef6844f9105a4b5523, the truncated registration tail in student_subscription_billing.py has been restored and a webhook-dispatch regression added, but that regression is NOT_TESTED because Release Browser 44472584583 failed before full QA. The shared Paystack callback/webhook remain in app.py; no callback extraction is authorized until all event paths are characterized.
 **Current owners:** frontend screens in frontend/src/screens/billing/SubscriptionScreens.tsx; plan/status/upgrade HTTP routes in student_subscription_routes.py; payment history in student_payment_history_routes.py; entitlement and recurring/refund lifecycle in student_subscription_billing.py; shared payment verification/callback/webhook in app.py.
 **Goal:** move the existing student subscription/payment screens into a feature module without changing plan selection, checkout, provider redirect, return routing, payment-history display, or any billing rule.
 
@@ -98,3 +98,11 @@ The existing GET /payment-history handler is extracted to student_payment_histor
 
 
 Next: characterize the shared Paystack callback/webhook signature, authoritative verification, retry and duplicate-delivery idempotency, event dispatch and ambassador-transfer reconciliation before any extraction.
+
+## 19 November 2026 — restore subscription billing registration tail
+
+The current `student_subscription_billing.py` had stopped inside `register_student_subscription_billing` after the no-active-subscription refund-quote response. The function consequently returned `None`, so `app.py` did not receive the `record_usage`, `quote`, `subscription_created`, `recurring_charge`, `refund_webhook` and `subscription_webhook` handler map. The deleted tail also contained the existing refund-request, cancellation and admin-refund route registrations. The original continuation was restored from historical commit `a86b1fc90c1d73b57e345100c13e11250e66d6fa`; current schema ownership and race-safe upsert logic were kept intact.
+
+The new regression in `tests/test_local_qa_real_world.py` protects route registration and dispatch for subscription creation/lifecycle, refund events and recurring-charge fallback. It is **NOT_TESTED** on candidate `e094830e323e9993c2b2dbef6844f9105a4b5523`: Release Browser [44472584583](https://github.com/apexstudying-cmd/prepza/actions/runs/44472584583) failed at the Shop buyer's first in-app chat message (403 CSRF) before the full PostgreSQL QA step. Do not extract the shared callback/webhook until this test executes on an exact passing head.
+
+Ambassador-transfer branch is not yet characterizable: `_apply_paystack_transfer_result`, `initiate_paystack_transfer` and `sync_paystack_transfer_status` are referenced but no definitions were found in the current source tree. Keep transfer initiation out of scope; recover the intended local status/idempotency contract with mocks and no live payout.
