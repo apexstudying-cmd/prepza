@@ -2818,3 +2818,112 @@ def test_student_subscription_billing_registration_and_webhook_dispatch_contract
     deliver("customer.updated", {})
     assert calls == before_unknown_event
     assert calls == expected_calls
+
+def test_ambassador_transfer_routes_delegate_to_mocked_provider_boundary(world, monkeypatch):
+    """Characterize the transfer call seam without inventing payout state transitions."""
+    import app as app_module
+    import admin_reconciled_ambassadors as admin_routes
+
+    ambassador = app_module.Ambassador.query.filter_by(user_id=world["student_a"].id).first()
+    if ambassador is None:
+        ambassador = app_module.Ambassador(
+            user_id=world["student_a"].id,
+            referral_code="QA-TRANSFER-BOUNDARY",
+            status="active",
+        )
+        db.session.add(ambassador)
+        db.session.flush()
+
+    payout = app_module.AmbassadorPayout(
+        ambassador_id=ambassador.id,
+        amount=600,
+        status="pending",
+        payout_destination="+254712345678",
+        recipient_first_name="QA",
+        recipient_last_name="Transfer",
+    )
+    db.session.add(payout)
+    db.session.commit()
+
+    reference = "qa-transfer-boundary-contract"
+    boundary_calls = []
+    applied_statuses = []
+
+    def fake_initiate(received_payout):
+        boundary_calls.append(("initiate", received_payout.id))
+        return reference, "success"
+
+    def fake_sync(received_payout):
+        boundary_calls.append(("sync", received_payout.id, received_payout.paystack_transfer_code))
+
+    def fake_apply(received_payout, status):
+        # Deliberately record the boundary only. The missing production helper
+        # owns money-state transitions; this mock must not invent them.
+        applied_statuses.append((received_payout.id, status))
+
+    monkeypatch.setattr(admin_routes, "initiate_paystack_transfer", fake_initiate, raising=False)
+    monkeypatch.setattr(admin_routes, "sync_paystack_transfer_status", fake_sync, raising=False)
+    monkeypatch.setattr(admin_routes, "_apply_paystack_transfer_result", fake_apply, raising=False)
+    monkeypatch.setattr(app_module, "_apply_paystack_transfer_result", fake_apply, raising=False)
+
+    admin_client = _client_for(world["admin"].id)
+    approved = admin_client.post(
+        f"/admin/payouts/{payout.id}/approve",
+        json={},
+        headers=_csrf(world["admin"].id),
+    )
+    assert approved.status_code == 200, approved.get_data(as_text=True)
+    assert approved.get_json() == {
+        "id": payout.id,
+        "status": "approved",
+        "paystack_transfer_code": reference,
+    }
+    db.session.refresh(payout)
+    assert payout.status == "approved"
+    assert payout.paystack_transfer_code == reference
+    assert boundary_calls == [("initiate", payout.id)]
+    assert applied_statuses == [(payout.id, "success")]
+
+    synced = admin_client.post(
+        f"/admin/payouts/{payout.id}/sync-status",
+        json={},
+        headers=_csrf(world["admin"].id),
+    )
+    assert synced.status_code == 200, synced.get_data(as_text=True)
+    assert synced.get_json() == {
+        "id": payout.id,
+        "status": "approved",
+        "rejection_reason": None,
+        "paid_at": None,
+    }
+    assert boundary_calls[-1] == ("sync", payout.id, reference)
+
+    secret = "ci-only-ambassador-transfer-webhook-secret"
+    monkeypatch.setattr(app_module, "PAYSTACK_SECRET_KEY", secret)
+    webhook_client = app_module.app.test_client()
+    for event, expected_status in (
+        ("transfer.success", "success"),
+        ("transfer.failed", "failed"),
+        ("transfer.reversed", "reversed"),
+    ):
+        payload = {"event": event, "data": {"reference": reference}}
+        raw_body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        signature = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha512).hexdigest()
+        response = webhook_client.post(
+            "/payment/paystack/webhook",
+            data=raw_body,
+            content_type="application/json",
+            headers={"X-Paystack-Signature": signature},
+        )
+        assert response.status_code == 200, response.get_data(as_text=True)
+        assert response.get_json() == {"status": "ok"}
+
+    assert applied_statuses == [
+        (payout.id, "success"),  # immediate transfer result from the mocked initiation
+        (payout.id, "success"),
+        (payout.id, "failed"),
+        (payout.id, "reversed"),
+    ]
+    # The mock is intentionally state-neutral; provider outcome handling remains unimplemented.
+    assert payout.status == "approved"
+    assert payout.paid_at is None

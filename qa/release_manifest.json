@@ -398,12 +398,20 @@
             "Current disposition:** NOT_TESTED",
             "Never silently fall back to production credentials."
           ]
+        },
+        {
+          "kind": "provider_tests",
+          "path": "tests/test_local_qa_real_world.py",
+          "anchors": [
+            "def test_ambassador_transfer_routes_delegate_to_mocked_provider_boundary"
+          ]
         }
       ],
       "required_test_commands": [
-        "python -m pytest tests/test_provider_boundary_mocks.py -q"
+        "python -m pytest tests/test_provider_boundary_mocks.py -q",
+        "python -m pytest tests/test_local_qa_real_world.py -k ambassador_transfer_routes_delegate_to_mocked_provider_boundary -q"
       ],
-      "notes": "Mocked provider boundary tests pass, but live/sandbox Paystack checkout/webhook, controlled SES delivery, bounded OpenAI generation, real R2 operations and configured audio/GPU provider health are NOT_TESTED pending safe staging credentials and provider-side evidence. Never start billable GPU inference without explicit approval."
+      "notes": "Mocked provider boundary tests pass, but live/sandbox Paystack checkout/webhook, controlled SES delivery, bounded OpenAI generation, real R2 operations and configured audio/GPU provider health are NOT_TESTED pending safe staging credentials and provider-side evidence. Never start billable GPU inference without explicit approval. Ambassador payout admin/webhook delegation is covered only with injected mocks in the disposable PostgreSQL QA suite; the production transfer helper definitions and money-state transitions remain NOT_TESTED and must not be inferred from this seam test."
     },
     {
       "id": "shop_marketplace",
