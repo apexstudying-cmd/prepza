@@ -2710,3 +2710,111 @@ def test_ambassador_payout_request_persists_bundle_and_rejects_duplicates(world)
     duplicate = client.post(endpoint, json=payload, headers=headers)
     assert duplicate.status_code == 409
     assert app_module.AmbassadorPayout.query.count() == 1
+
+
+def test_student_subscription_billing_registration_and_webhook_dispatch_contract(world, monkeypatch):
+    """Protect the existing refund routes and every non-transfer Paystack dispatch branch."""
+    import app as app_module
+
+    handlers = app_module._student_subscription_billing
+    assert isinstance(handlers, dict)
+    assert set(handlers) == {
+        "record_usage",
+        "quote",
+        "subscription_created",
+        "recurring_charge",
+        "refund_webhook",
+        "subscription_webhook",
+    }
+
+    registered_paths = {rule.rule for rule in app_module.app.url_map.iter_rules()}
+    assert {
+        "/subscription/refund-policy",
+        "/subscription/refund-quote",
+        "/subscription/refund-request",
+        "/subscription/cancel",
+        "/admin/subscription-refunds",
+        "/admin/subscription-refunds/<int:refund_id>/execute",
+    } <= registered_paths
+
+    client = app_module.app.test_client()
+    monkeypatch.setattr(app_module, "PAYSTACK_SECRET_KEY", "")
+    unconfigured = client.post(
+        "/payment/paystack/webhook",
+        data=b"{}",
+        content_type="application/json",
+    )
+    assert unconfigured.status_code == 503
+
+    secret = "ci-only-webhook-dispatch-secret"
+    monkeypatch.setattr(app_module, "PAYSTACK_SECRET_KEY", secret)
+    calls = []
+    verified_references = []
+
+    monkeypatch.setitem(
+        handlers,
+        "subscription_created",
+        lambda db_arg, payload: calls.append(("subscription_created", payload)),
+    )
+    monkeypatch.setitem(
+        handlers,
+        "subscription_webhook",
+        lambda db_arg, event, payload: calls.append(("subscription_webhook", event, payload)),
+    )
+    monkeypatch.setitem(
+        handlers,
+        "refund_webhook",
+        lambda db_arg, event, payload: calls.append(("refund_webhook", event, payload)),
+    )
+    monkeypatch.setitem(
+        handlers,
+        "recurring_charge",
+        lambda db_arg, payload: calls.append(("recurring_charge", payload)),
+    )
+
+    def no_existing_payment(reference):
+        verified_references.append(reference)
+        return None
+
+    monkeypatch.setattr(app_module, "sync_paystack_payment_status", no_existing_payment)
+
+    def deliver(event, data):
+        payload = {"event": event, "data": data}
+        raw_body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        signature = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha512).hexdigest()
+        response = client.post(
+            "/payment/paystack/webhook",
+            data=raw_body,
+            content_type="application/json",
+            headers={"X-Paystack-Signature": signature},
+        )
+        assert response.status_code == 200, response.get_data(as_text=True)
+        assert response.get_json() == {"status": "ok"}
+        return payload
+
+    expected_calls = []
+    payload = deliver("subscription.create", {"subscription_code": "qa-subscription-created"})
+    expected_calls.append(("subscription_created", payload))
+
+    for event in ("subscription.not_renew", "subscription.disable", "invoice.payment_failed"):
+        payload = deliver(event, {"subscription_code": "qa-subscription-lifecycle"})
+        expected_calls.append(("subscription_webhook", event, payload))
+
+    for event in (
+        "refund.pending",
+        "refund.processing",
+        "refund.needs-attention",
+        "refund.processed",
+        "refund.failed",
+    ):
+        payload = deliver(event, {"transaction_reference": "qa-refund-transaction"})
+        expected_calls.append(("refund_webhook", event, payload))
+
+    recurring_payload = deliver("charge.success", {"reference": "qa-recurring-charge"})
+    expected_calls.append(("recurring_charge", recurring_payload))
+    assert verified_references == ["qa-recurring-charge"]
+
+    before_unknown_event = list(calls)
+    deliver("customer.updated", {})
+    assert calls == before_unknown_event
+    assert calls == expected_calls
