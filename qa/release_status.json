@@ -180,12 +180,5 @@
     "Keep release BLOCKED; do not deploy or alter production data until all release-scoped gates are closed and deployment is explicitly authorized."
   ],
   "current_main_commit": "7922fa0d27fb275382e9fa4f46bfe4f242acdcf3",
-  "verification_note": "Updated 2026-11-19. Main remains 7922fa0d27fb275382e9fa4f46bfe4f242acdcf3; PR #79 exact verified code head 7d12cbfebbc2bf48f501cb25ad2f3d979aae4631. Backend Shared Extension Contract 44475284636 passed 96 tests; Frontend Build 44475284756 passed 192 source/module + 5 offline Library tests, TypeScript, production build and launch-wiring audits; Release Browser 44475284585 passed responsive phone/tablet, Shop buyer/seller/admin, B2B browser-to-ledger, 101 PostgreSQL QA tests, Study Hub offline lifecycle and generated-artifact replay; PostgreSQL Backup Restore 44475284651 passed existing-database upgrade/data preservation and custom-format restore. 17 triggered workflows succeeded; StudyHub Library Flow 44475284566 was skipped by path condition. The refund quote/request API regression is repaired and its exact-head tests pass. Shop Paystack/R2 provider operations, independent B2B viewability, retrieval/citation review, external monitoring, human Home/PWA sign-off and deployment authorization remain open. Release remains BLOCKED; no live provider, payment, payout, production data, deployment, paid service or billable GPU work was performed.",
-  "gate_counts": {
-    "PASS": 23,
-    "IN_PROGRESS": 5,
-    "NOT_TESTED": 2,
-    "DEFERRED": 1,
-    "BLOCKED": 1
-  }
+  "verification_note": "Updated 2026-11-19. Main remains 7922fa0d27fb275382e9fa4f46bfe4f242acdcf3; PR #79 exact verified code head 7d12cbfebbc2bf48f501cb25ad2f3d979aae4631. Backend Shared Extension Contract 44475284636 passed 96 tests; Frontend Build 44475284756 passed 192 source/module + 5 offline Library tests, TypeScript, production build and launch-wiring audits; Release Browser 44475284585 passed responsive phone/tablet, Shop buyer/seller/admin, B2B browser-to-ledger, 101 PostgreSQL QA tests, Study Hub offline lifecycle and generated-artifact replay; PostgreSQL Backup Restore 44475284651 passed existing-database upgrade/data preservation and custom-format restore. 17 triggered workflows succeeded; StudyHub Library Flow 44475284566 was skipped by path condition. The refund quote/request API regression is repaired and its exact-head tests pass. Shop Paystack/R2 provider operations, independent B2B viewability, retrieval/citation review, external monitoring, human Home/PWA sign-off and deployment authorization remain open. Release remains BLOCKED; no live provider, payment, payout, production data, deployment, paid service or billable GPU work was performed."
 }
