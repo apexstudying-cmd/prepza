@@ -615,3 +615,25 @@ Commit [7d12cbf](https://github.com/apexstudying-cmd/prepza/commit/7d12cbfebbc2b
 - Responsive screenshot artifact: [14506038883](https://github.com/apexstudying-cmd/prepza/actions/runs/44475284585/artifacts/14506038883).
 
 The earlier Shop CSRF failure did not recur in the later exact-head Shop browser journeys. Automated Shop flows now pass, but Paystack sandbox and R2 provider operations remain NOT_TESTED. B2B browser-to-ledger passes, but independent server-side verification of the 50%-visible/1.5-second dwell condition remains open. Architecture refactor remains incomplete: characterize the shared Paystack callback/webhook and recover the missing ambassador-transfer helper contract before moving that boundary. Retrieval/index/citation review, external monitoring/request-ID delivery, Home/PWA sign-off and deployment authorization remain open. Release remains **BLOCKED**; PR #79 remains draft/unmerged.
+
+
+## 2026-11-19 — ambassador transfer call-boundary characterization
+
+Code/test commit [19a4c73](https://github.com/apexstudying-cmd/prepza/commit/19a4c7376bfa775b42c109ab3444683b3f0f1615) adds `test_ambassador_transfer_routes_delegate_to_mocked_provider_boundary` to `tests/test_local_qa_real_world.py` and records it in `qa/release_manifest.json`.
+
+The test uses only injected mocks in the disposable PostgreSQL environment. It verifies:
+- Admin payout approval delegates to `initiate_paystack_transfer(payout)` and records the returned transfer reference.
+- Admin status synchronization delegates to `sync_paystack_transfer_status(payout)`.
+- Signed `transfer.success`, `transfer.failed` and `transfer.reversed` webhooks dispatch the corresponding status to `_apply_paystack_transfer_result(payout, status)`.
+- The fake apply handler is state-neutral; no paid/rejected/pending transition is asserted or invented.
+
+Historical inspection: `admin_reconciled_ambassadors.py` first appeared in [54108e7](https://github.com/apexstudying-cmd/prepza/commit/54108e732958c2907dab28b97082d9ba0717965c). Its parent `a478144028dac084fd21d6fbdb047be29f7702f2` already contained the webhook reference but no helper definitions; the current source tree also contains only call sites. Model comments specify a reusable Paystack recipient code and transfer-reference lookup, but not failure/reversal money-state behavior. Therefore the mock test protects the integration seam only; it does not make transfers operational.
+
+Exact-head CI on `19a4c7376bfa775b42c109ab3444683b3f0f1615`:
+- Backend Shared Extension Contract [44479377130](https://github.com/apexstudying-cmd/prepza/actions/runs/44479377130): PASS, 96 tests.
+- Frontend Build [44479377187](https://github.com/apexstudying-cmd/prepza/actions/runs/44479377187): PASS, 192 source/module tests + 5 offline Library tests, TypeScript and production Vite build.
+- Release Browser [44479377175](https://github.com/apexstudying-cmd/prepza/actions/runs/44479377175): PASS, **102 PostgreSQL QA tests, 0 failures**; responsive phone/tablet, Shop buyer/seller/admin, B2B browser-to-ledger, Study Hub offline and generated-material/podcast replay all passed.
+- PostgreSQL Backup Restore [44479377074](https://github.com/apexstudying-cmd/prepza/actions/runs/44479377074): PASS, existing-database upgrade/data preservation and custom-format restore.
+- Workflow inventory: 17 triggered workflows succeeded; StudyHub Library Flow [44479377186](https://github.com/apexstudying-cmd/prepza/actions/runs/44479377186) was SKIPPED by path condition.
+
+Disposition: mocked route/webhook delegation test PASS; actual transfer recipient creation, transfer API call, verification, retry/deduplication and success/failure/reversal state transitions remain NOT_TESTED. No provider credentials were used and no live transfer occurred.
