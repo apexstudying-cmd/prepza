@@ -1,6 +1,6 @@
 # Ambassador student-route extraction map
 
-Status: implementation added to PR #79; exact-head verification pending.
+Status: the seven student-facing ambassador routes are verified on exact application-code head `7d12cbfebbc2bf48f501cb25ad2f3d979aae4631` in PR #79. The admin Paystack transfer helpers are a separate unresolved service contract and are not covered by this student-route extraction.
 
 ## Scope
 
@@ -41,4 +41,4 @@ Move only the seven student-facing HTTP handlers from the Flask composition modu
 
 The previous exact candidate `b24d583f054f056161c714a15d558406672acb4d` passed Frontend Build [43686512095](https://github.com/apexstudying-cmd/prepza/actions/runs/43686512095), Release Browser [43686511971](https://github.com/apexstudying-cmd/prepza/actions/runs/43686511971) and PostgreSQL Backup Restore [43686511937](https://github.com/apexstudying-cmd/prepza/actions/runs/43686511937). Those results predate this route move.
 
-The current extraction is **NOT_TESTED** until Backend Shared Extension Contract, Frontend Build, Release Browser and PostgreSQL Backup Restore finish on the new exact PR head.
+The extraction is verified on exact code head `7d12cbfebbc2bf48f501cb25ad2f3d979aae4631`: Backend Shared Extension Contract [44475284636](https://github.com/apexstudying-cmd/prepza/actions/runs/44475284636) PASS (96 tests); Frontend Build [44475284756](https://github.com/apexstudying-cmd/prepza/actions/runs/44475284756) PASS (192 source/module + 5 offline Library tests); Release Browser [44475284585](https://github.com/apexstudying-cmd/prepza/actions/runs/44475284585) PASS (101 PostgreSQL QA tests, Shop and B2B browser journeys); PostgreSQL Backup Restore [44475284651](https://github.com/apexstudying-cmd/prepza/actions/runs/44475284651) PASS. The student-facing route extraction does not verify the separate Paystack transfer service: `_apply_paystack_transfer_result`, `initiate_paystack_transfer` and `sync_paystack_transfer_status` remain unresolved references. No live provider transfer was attempted.
