@@ -647,7 +647,7 @@ The new Flask/SQLite contract covers the exact route map and authorization outco
 
 An initial test run on intermediate commit `8edc15c` failed because the test fixture gave two entries equal timestamps and expected deterministic tie ordering. That was a fixture defect, not a production route failure. The fixture now uses distinct timestamps; the production `ORDER BY created_at DESC` behavior was preserved without adding an unrequested tie-breaker.
 
-**Exact application-code/PR head:** [a5d17da6478333803966f263669db44d156d9c82](https://github.com/apexstudying-cmd/prepza/commit/a5d17da6478333803966f263669db44d156d9c82)
+**Exact application-code head:** [a5d17da6478333803966f263669db44d156d9c82](https://github.com/apexstudying-cmd/prepza/commit/a5d17da6478333803966f263669db44d156d9c82)
 
 - Backend Shared Extension Contract [44686577859](https://github.com/apexstudying-cmd/prepza/actions/runs/44686577859): PASS — **100 passed, 6 warnings**; new route and registry contracts included.
 - Frontend Build [44686577881](https://github.com/apexstudying-cmd/prepza/actions/runs/44686577881): PASS — **192 source/module + 5 offline Library tests**; TypeScript, production Vite build, launch-wiring and architecture audits passed.
