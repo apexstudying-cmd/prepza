@@ -68,6 +68,7 @@ on:
     branches: [main]
     paths:
       - 'app.py'
+      - 'admin_audit_routes.py'
       - 'document_reader_routes.py'
       - 'app_factory.py'
       - 'route_registry.py'
@@ -103,6 +104,7 @@ on:
       - 'tests/test_backend_extensions_contract.py'
       - 'tests/test_app_factory_contract.py'
       - 'tests/test_backend_route_registry_contract.py'
+      - 'tests/test_admin_audit_routes_contract.py'
       - 'tests/test_student_subscription_routes_contract.py'
       - 'tests/test_student_subscription_billing_contract.py'
       - 'tests/test_student_payment_history_routes_contract.py'
