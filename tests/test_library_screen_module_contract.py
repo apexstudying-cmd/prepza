@@ -65,7 +65,7 @@ def test_library_types_and_shared_material_helpers_keep_existing_contracts():
         assert contract in types
     assert "export const LIBRARY_MATERIAL_TYPES:" in helpers
     assert "export const materialTypeLabel" in helpers
-    assert "from './lib/library'" in APP
+    assert "from '../../lib/library'" in SCREEN_PATH.read_text(encoding="utf-8")
     assert "type LibraryPublicationSummary =" not in APP
     assert "type SavedLibraryItem =" not in APP
     assert "type MySubmission =" not in APP
