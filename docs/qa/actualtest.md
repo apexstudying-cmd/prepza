@@ -656,3 +656,18 @@ An initial test run on intermediate commit `8edc15c` failed because the test fix
 - Workflow inventory: **17 triggered workflows succeeded;** StudyHub Library Flow [44686577858](https://github.com/apexstudying-cmd/prepza/actions/runs/44686577858) was SKIPPED by path condition and is not counted as a pass.
 
 No UI, navigation, API payload, authorization rule, database schema, Shop business rule, payment behavior, provider call, production data or deployment changed. The new route boundary is PASS. The broader architecture refactor remains incomplete; ambassador transfers and external providers remain NOT_TESTED, and release remains BLOCKED.
+
+
+## 20 November 2026 — Library screen module-ownership test correction and exact-head regression
+
+Main's latest commit `7922fa0d27fb275382e9fa4f46bfe4f242acdcf3` was a test-only correction: the Library material helper import is owned by `LibraryScreen.tsx`, not `App.tsx`. The PR #79 branch was one commit behind main, so the same assertion was applied to `tests/test_library_screen_module_contract.py` in code commit [`a48aefc`](https://github.com/apexstudying-cmd/prepza/commit/a48aefc81fa9f3f58d1d0ba9e7a3dbd04285c00e). It now checks `from '../../lib/library'` in the screen module. No production source, UI, API, navigation, styling or runtime behavior changed.
+
+Exact application-code/test head `a48aefc81fa9f3f58d1d0ba9e7a3dbd04285c00e`:
+- Backend Shared Extension Contract [44688623735](https://github.com/apexstudying-cmd/prepza/actions/runs/44688623735): PASS — 100 tests, 6 warnings.
+- Frontend Build [44688623559](https://github.com/apexstudying-cmd/prepza/actions/runs/44688623559): PASS — 192 source/module tests and 5 offline Library tests; TypeScript, production Vite build, screen/offline/calling audits and launch-wiring audit passed.
+- Release Browser/Cross-System Regression [44688623523](https://github.com/apexstudying-cmd/prepza/actions/runs/44688623523): PASS — 102 PostgreSQL QA tests, 0 failures; production image, disposable PostgreSQL/Redis, Alembic and controlled migration ledger, phone/tablet responsive checks, Shop buyer/seller/admin journeys, B2B browser-to-ledger, Study Hub offline lifecycle, 12 generated-material replays and podcast audio Blob replay passed. The suite emitted 3,557 warnings, primarily existing deprecations. Screenshot artifact [14607827213](https://github.com/apexstudying-cmd/prepza/actions/runs/44688623523/artifacts/14607827213).
+- PostgreSQL Backup Restore Rehearsal [44688623724](https://github.com/apexstudying-cmd/prepza/actions/runs/44688623724): PASS — existing-database upgrade/data preservation and PostgreSQL 17 custom-format backup/restore.
+- Admin Route Contract [44688623534](https://github.com/apexstudying-cmd/prepza/actions/runs/44688623534), Study Hub Runtime [44688623671](https://github.com/apexstudying-cmd/prepza/actions/runs/44688623671), E2EE Chat [44688623554](https://github.com/apexstudying-cmd/prepza/actions/runs/44688623554), B2B contract [44688623637](https://github.com/apexstudying-cmd/prepza/actions/runs/44688623637), and the remaining triggered workflows: PASS.
+- Workflow inventory: 17 triggered workflows succeeded; StudyHub Library Flow [44688623679](https://github.com/apexstudying-cmd/prepza/actions/runs/44688623679) was SKIPPED by path condition and is not counted as a pass.
+
+Disposition: Library module-ownership assertion PASS; frontend TypeScript/production build PASS; backend contract PASS; full responsive, Shop, B2B, PostgreSQL, Study Hub and artifact regression PASS. StudyHub Library Flow was SKIPPED by its path condition. Existing Shop provider operations (Paystack sandbox and R2 object/header verification) remain NOT_TESTED; Shop remains IN_PROGRESS and release remains BLOCKED.
