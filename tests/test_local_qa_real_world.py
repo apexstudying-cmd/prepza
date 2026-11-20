@@ -1211,6 +1211,69 @@ def test_paystack_webhook_rejects_bad_signature_retries_then_deduplicates_entitl
     ).scalars().all()
     assert order_statuses == ["fulfilled"]
 
+
+@pytest.mark.parametrize(
+    ("event", "callback_key"),
+    [
+        ("charge.success", "recurring_charge"),
+        ("subscription.create", "subscription_created"),
+        ("subscription.not_renew", "subscription_webhook"),
+        ("subscription.disable", "subscription_webhook"),
+        ("invoice.payment_failed", "subscription_webhook"),
+        ("refund.pending", "refund_webhook"),
+        ("refund.processed", "refund_webhook"),
+        ("refund.failed", "refund_webhook"),
+    ],
+)
+def test_paystack_webhook_dispatches_signed_lifecycle_events_without_changing_payload(
+    world, monkeypatch, event, callback_key
+):
+    """Lock the existing signed event-to-lifecycle dispatch contract before extraction."""
+    import app as app_module
+
+    secret = "ci-only-webhook-dispatch-secret"
+    monkeypatch.setattr(app_module, "PAYSTACK_SECRET_KEY", secret)
+    payload = {
+        "event": event,
+        "data": {
+            "reference": f"qa-dispatch-{event.replace('.', '-')}",
+            "subscription_code": "SUB_test_dispatch",
+            "customer": {"customer_code": "CUS_test_dispatch"},
+        },
+    }
+    received = []
+
+    def capture(*args):
+        received.append(args)
+
+    monkeypatch.setitem(
+        app_module._student_subscription_billing, callback_key, capture
+    )
+    if event == "charge.success":
+        monkeypatch.setattr(
+            app_module, "sync_paystack_payment_status", lambda reference: None
+        )
+
+    raw_body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    signature = hmac.new(
+        secret.encode("utf-8"), raw_body, hashlib.sha512
+    ).hexdigest()
+    response = app_module.app.test_client().post(
+        "/payment/paystack/webhook",
+        data=raw_body,
+        content_type="application/json",
+        headers={"X-Paystack-Signature": signature},
+    )
+
+    assert response.status_code == 200, response.get_data(as_text=True)
+    assert response.get_json() == {"status": "ok"}
+    assert len(received) == 1
+    if callback_key in ("recurring_charge", "subscription_created"):
+        assert received[0] == (db, payload)
+    else:
+        assert received[0] == (db, event, payload)
+
+
 def test_csrf_and_session_version_fail_closed(world):
     client = _client_for(world["student_a"].id)
 
