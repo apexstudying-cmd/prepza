@@ -249,3 +249,10 @@ def register_student_payment_history_route(app: Any, Payment: Any) -> None:
     from student_payment_history_routes import register_student_payment_history_route as register
 
     register(app, Payment)
+
+
+def register_admin_audit_routes(app: Any, db: Any, AuditLog: Any, User: Any, require_admin: Any) -> None:
+    """Register the append-only administrative audit-log reader."""
+    from admin_audit_routes import register_admin_audit_routes as register
+
+    register(app, db, AuditLog, User, require_admin)

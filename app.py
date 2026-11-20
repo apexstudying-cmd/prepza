@@ -49,6 +49,7 @@ from route_registry import (
     register_document_reader_routes,
     register_student_subscription_routes,
     register_student_payment_history_route,
+    register_admin_audit_routes,
 )
 from observability_models import RequestObservabilityEvent
 from security_models import AuditLog, PushSubscription, UserKey
@@ -5773,70 +5774,7 @@ def log_admin_action(actor_id, action, target_type=None, target_id=None, details
     ))
 
 
-@app.route("/admin/audit-logs")
-@require_admin
-def admin_list_audit_logs():
-    """
-    Lists audit log entries, newest first. Optional filters:
-    actor_id (exact match), action (substring match), target_type
-    (exact match), days (window, default 30, same convention as
-    /admin/ai-usage), page (1-indexed, 50 per page).
-    """
-    try:
-        days = int(request.args.get("days", 30))
-    except ValueError:
-        days = 30
-    days = max(1, min(days, 365))
-    window_start = datetime.utcnow() - timedelta(days=days)
-
-    query = AuditLog.query.filter(AuditLog.created_at >= window_start)
-
-    actor_id = request.args.get("actor_id", type=int)
-    if actor_id:
-        query = query.filter(AuditLog.actor_id == actor_id)
-
-    action_filter = (request.args.get("action") or "").strip()
-    if action_filter:
-        query = query.filter(AuditLog.action.ilike(f"%{action_filter}%"))
-
-    target_type = (request.args.get("target_type") or "").strip()
-    if target_type:
-        query = query.filter(AuditLog.target_type == target_type)
-
-    try:
-        page = max(1, int(request.args.get("page", 1)))
-    except ValueError:
-        page = 1
-    per_page = 50
-
-    entries = (
-        query.order_by(AuditLog.created_at.desc())
-        .offset((page - 1) * per_page)
-        .limit(per_page)
-        .all()
-    )
-
-    result = []
-    for e in entries:
-        actor = db.session.get(User, e.actor_id) if e.actor_id else None
-        parsed_details = None
-        if e.details:
-            try:
-                parsed_details = json.loads(e.details)
-            except (TypeError, ValueError):
-                parsed_details = e.details
-        result.append({
-            "id": e.id,
-            "actor_id": e.actor_id,
-            "actor_email": actor.email if actor else None,
-            "action": e.action,
-            "target_type": e.target_type,
-            "target_id": e.target_id,
-            "details": parsed_details,
-            "created_at": e.created_at.isoformat() if e.created_at else None,
-        })
-
-    return jsonify({"page": page, "logs": result})
+register_admin_audit_routes(app, db, AuditLog, User, require_admin)
 
 register_control_feature_routes(app, db, SystemSetting, User, Document, DocumentContent, GeneratedMaterial, log_admin_action, limiter)
 

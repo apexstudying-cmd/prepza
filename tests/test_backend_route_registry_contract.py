@@ -12,6 +12,7 @@ from route_registry import (
     register_foundation_routes,
     register_student_subscription_routes,
     register_student_payment_history_route,
+    register_admin_audit_routes,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -92,6 +93,7 @@ def test_app_delegates_all_later_route_registrations_to_registry_in_order() -> N
         "register_notification_feature_routes(",
         "register_opportunity_feature_routes(",
         "register_chat_feature_routes(",
+        "register_admin_audit_routes(app, db, AuditLog, User, require_admin)",
         "register_control_feature_routes(",
         "register_admin_reconciled_routes(app)",
         "register_runtime_feature_routes(",
@@ -106,6 +108,7 @@ def test_app_delegates_all_later_route_registrations_to_registry_in_order() -> N
         "register_notification_feature_routes",
         "register_opportunity_feature_routes",
         "register_chat_feature_routes",
+        "register_admin_audit_routes",
         "register_control_feature_routes",
         "register_admin_reconciled_routes",
         "register_runtime_feature_routes",
@@ -320,3 +323,34 @@ def test_student_payment_history_route_registry_forwards_explicit_dependencies(m
     register_student_payment_history_route(app, Payment)
 
     assert calls == {"args": (app, Payment)}
+
+
+def test_admin_audit_route_is_module_owned_at_its_original_registration_point() -> None:
+    assert "register_admin_audit_routes(app, db, AuditLog, User, require_admin)" in APP_SOURCE
+    assert "def admin_list_audit_logs(" not in APP_SOURCE
+    assert "from admin_audit_routes import register_admin_audit_routes as register" in REGISTRY_SOURCE
+
+    helper = APP_SOURCE.index("def log_admin_action(")
+    registration = APP_SOURCE.index("register_admin_audit_routes(app, db, AuditLog, User, require_admin)")
+    control_routes = APP_SOURCE.index("register_control_feature_routes(app,")
+    assert helper < registration < control_routes
+
+
+def test_admin_audit_route_registry_forwards_explicit_dependencies(monkeypatch) -> None:
+    app = Flask("prepza-admin-audit-registry-contract")
+    db = object()
+    AuditLog = object()
+    User = object()
+    require_admin = object()
+    calls = {}
+    module = ModuleType("admin_audit_routes")
+
+    def register(target_app, target_db, target_audit_log, target_user, target_guard):
+        calls["args"] = (target_app, target_db, target_audit_log, target_user, target_guard)
+
+    module.register_admin_audit_routes = register
+    monkeypatch.setitem(sys.modules, "admin_audit_routes", module)
+
+    register_admin_audit_routes(app, db, AuditLog, User, require_admin)
+
+    assert calls["args"] == (app, db, AuditLog, User, require_admin)
