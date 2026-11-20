@@ -100,7 +100,7 @@ def test_admin_audit_route_preserves_filters_order_pagination_and_detail_parsing
         )
         other_entry = AuditLog(
             actor_id=ids["ordinary"], action="document.updated", target_type="document",
-            target_id=1000, details=json.dumps({"source": "test"}), created_at=now,
+            target_id=1000, details=json.dumps({"source": "test"}), created_at=now - timedelta(hours=2),
         )
         with app.app_context():
             db.session.add_all([*entries, old_entry, other_entry])
@@ -123,19 +123,20 @@ def test_admin_audit_route_preserves_filters_order_pagination_and_detail_parsing
 
         second_page = client.get("/admin/audit-logs?days=9999&page=2")
         assert second_page.status_code == 200
-        assert second_page.get_json() == {
-            "page": 2,
-            "logs": [{
-                "id": expected_ids[50],
-                "actor_id": ids["admin"],
-                "actor_email": "audit-admin@example.test",
-                "action": "user.updated",
-                "target_type": "user",
-                "target_id": 50,
-                "details": None,
-                "created_at": entries[50].created_at.isoformat(),
-            }],
+        second_payload = second_page.get_json()
+        assert second_payload["page"] == 2
+        assert [row["id"] for row in second_payload["logs"]] == [expected_ids[50], other_id]
+        assert second_payload["logs"][0] == {
+            "id": expected_ids[50],
+            "actor_id": ids["admin"],
+            "actor_email": "audit-admin@example.test",
+            "action": "user.updated",
+            "target_type": "user",
+            "target_id": 50,
+            "details": None,
+            "created_at": entries[50].created_at.isoformat(),
         }
+        assert second_payload["logs"][1]["created_at"] == other_entry.created_at.isoformat()
 
         filtered = client.get(
             f"/admin/audit-logs?actor_id={ids['ordinary']}&action=UPDATED&target_type=document&page=0"
