@@ -2567,3 +2567,26 @@ Commit [19a4c73](https://github.com/apexstudying-cmd/prepza/commit/19a4c7376bfa7
 Exact-head Release Browser [44479377175](https://github.com/apexstudying-cmd/prepza/actions/runs/44479377175) passed all stages, including **102 PostgreSQL tests, 0 failures**, responsive phone/tablet, Shop buyer/seller/admin, B2B browser-to-ledger and offline/generated-artifact replay. Backend Shared Extension [44479377130](https://github.com/apexstudying-cmd/prepza/actions/runs/44479377130) passed 96 tests; Frontend Build [44479377187](https://github.com/apexstudying-cmd/prepza/actions/runs/44479377187) passed 192 source/module + 5 offline Library tests, TypeScript and production build; Backup Restore [44479377074](https://github.com/apexstudying-cmd/prepza/actions/runs/44479377074) passed existing-database upgrade and custom restore. Seventeen triggered workflows succeeded; StudyHub Library Flow was skipped.
 
 **Status:** mocked delegation PASS; actual transfer implementation and all provider-side payout behavior NOT_TESTED. Do not add transfer state transitions, run a live payout, or extract the shared webhook as though this dependency were resolved. No production data, UI, provider, live payment, payout or deployment was touched.
+
+
+## 20 November 2026 — moving the audit-log reader without moving its authority
+
+The admin audit-log GET handler was a useful next extraction because it reads an existing model and delegates authorization to the established persisted-role guard; it does not own a payment, moderation or write transition. The module `admin_audit_routes.py` therefore receives `db`, `AuditLog`, `User` and the original `require_admin` function as explicit dependencies. It does not import `app.py`, create its own extension, or duplicate authorization logic.
+
+The registration call stays exactly where the old decorator registered the route: after `log_admin_action` and before control/admin route registration. The endpoint name, GET method, filters, day-window clamp, descending created-at sort, 50-row pagination, actor lookup, JSON parsing fallback and response payload were moved as-is. The audit-writing helper remains separate and retains its existing transaction behavior.
+
+The new route contract uses real Flask request handling and SQLite tables to verify 401/403/allowed access, filters, ordering, page two, and JSON/string detail serialization. A registry test checks the explicit dependency tuple and registration order. The backend workflow includes both files in compilation/test coverage and watches the new paths on PRs and main pushes.
+
+### Test-fixture correction, not a production ordering change
+
+The first exact CI attempt on `8edc15c` failed because the fixture inserted a second audit row with the same timestamp as the newest row. SQL only guarantees the requested descending timestamp ordering; it does not promise an order among equal timestamps. I corrected the fixture to use unique timestamps and asserted the second page contains the expected older entries. I did **not** add an ID tie-breaker to production code, because that would change behavior beyond the extraction. The corrected exact head passes.
+
+### Exact-head evidence — a5d17da6478333803966f263669db44d156d9c82
+
+- Backend Shared Extension [44686577859](https://github.com/apexstudying-cmd/prepza/actions/runs/44686577859): **100 passed, 6 warnings**.
+- Frontend Build [44686577881](https://github.com/apexstudying-cmd/prepza/actions/runs/44686577881): **192 source/module + 5 offline Library tests passed**, TypeScript and Vite production build passed.
+- Release Browser [44686577870](https://github.com/apexstudying-cmd/prepza/actions/runs/44686577870): **102 PostgreSQL QA tests passed, 0 failed**; responsive phone/tablet, Shop buyer/seller/admin, B2B browser-to-ledger, Study Hub offline lifecycle and generated-material/podcast replay passed. The suite emitted 3,557 warnings, mostly existing deprecation warnings; these are not test failures. Screenshot artifact 14606388788 was uploaded.
+- PostgreSQL Backup Restore [44686577998](https://github.com/apexstudying-cmd/prepza/actions/runs/44686577998): both existing-database upgrade/data preservation and custom-format restore passed.
+- Seventeen triggered workflows succeeded; StudyHub Library Flow [44686577858](https://github.com/apexstudying-cmd/prepza/actions/runs/44686577858) was skipped by its path condition.
+
+The code extraction changes no UI, API contract, role policy, model schema, business rule or provider behavior. The route boundary is now covered. The shared Paystack callback/webhook and missing ambassador transfer helpers remain unresolved; do not invent money-state transitions or initiate live payouts. Retrieval/index/citation accuracy, independent B2B dwell verification, external monitoring, human Home/PWA sign-off and deployment readiness remain open. Release stays BLOCKED.

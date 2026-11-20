@@ -1,24 +1,24 @@
 {
   "version": 1,
-  "last_verified_date": "2026-11-19",
-  "last_verified_commit": "19a4c7376bfa775b42c109ab3444683b3f0f1615",
+  "last_verified_date": "2026-11-20",
+  "last_verified_commit": "a5d17da6478333803966f263669db44d156d9c82",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
     {
       "id": "database_alembic",
       "status": "PASS",
-      "evidence": "PASS on exact code head 19a4c7376bfa775b42c109ab3444683b3f0f1615: PostgreSQL Backup Restore Rehearsal 44479377074 passed the existing-database upgrade and data-preservation rehearsal plus custom-format dump/restore."
+      "evidence": "PASS on exact code head a5d17da6478333803966f263669db44d156d9c82: Release Browser 44686577870 built the production image, started disposable PostgreSQL/Redis, applied Alembic migrations and exercised the controlled SQL migration ledger successfully."
     },
     {
       "id": "authentication_session_csrf",
       "status": "PASS",
-      "evidence": "PASS on exact code head 19a4c7376bfa775b42c109ab3444683b3f0f1615: Release Browser 44479377175 passed Shop buyer in-app chat and the full 102-case PostgreSQL QA suite; no UI or auth behavior changed in this test-only commit."
+      "evidence": "PASS on exact code head a5d17da6478333803966f263669db44d156d9c82: Release Browser 44686577870 passed the 102-case PostgreSQL QA suite and Shop buyer in-app contact; admin audit route separately verifies anonymous 401 and persisted role/suspension 403/allow behavior in Backend Shared Extension 44686577859."
     },
     {
       "id": "authorization_ownership",
       "status": "PASS",
-      "evidence": "PASS on exact code head 19a4c7376bfa775b42c109ab3444683b3f0f1615: Release Browser 44479377175 passed Shop buyer/seller/admin journeys and all 102 PostgreSQL QA tests."
+      "evidence": "PASS on exact code head a5d17da6478333803966f263669db44d156d9c82: Release Browser 44686577870 passed Shop buyer/seller/admin journeys and 102 PostgreSQL QA tests; the new admin audit route uses the persisted require_admin guard and has 401/403/allow regression coverage."
     },
     {
       "id": "economics_entitlements",
@@ -63,52 +63,52 @@
     {
       "id": "browser_study_hub_offline_lifecycle",
       "status": "PASS",
-      "evidence": "PASS on exact code head 7d12cbfebbc2bf48f501cb25ad2f3d979aae4631: Release Browser 44475284585 verified visible activity, hidden/inactivity pause, podcast exception, browser back, offline accumulation/reload and reconnect reconciliation."
+      "evidence": "PASS on exact code head a5d17da6478333803966f263669db44d156d9c82: Release Browser 44686577870 verified offline activity pause/resume, reload persistence and reconnect behavior."
     },
     {
       "id": "mobile_responsive_visual",
       "status": "PASS",
-      "evidence": "PASS on exact code head 19a4c7376bfa775b42c109ab3444683b3f0f1615: Release Browser 44479377175 passed phone-small 360x800, phone-standard 390x844 and tablet-portrait 768x1024. Human Home/PWA sign-off remains separate."
+      "evidence": "PASS on exact code head a5d17da6478333803966f263669db44d156d9c82: Release Browser 44686577870 passed phone-small 360x800, phone-standard 390x844 and tablet-portrait 768x1024 responsive checks; screenshot artifact 14606388788 was uploaded."
     },
     {
       "id": "storage_backup_restore",
       "status": "PASS",
-      "evidence": "PASS on exact code head 19a4c7376bfa775b42c109ab3444683b3f0f1615, PostgreSQL Backup Restore 44479377074: existing-database upgrade/data preservation and custom-format backup/restore passed, including restored Alembic state, sentinel data, table count and application smoke requests."
+      "evidence": "PASS on exact code head a5d17da6478333803966f263669db44d156d9c82, PostgreSQL Backup Restore 44686577998: existing-database upgrade/data preservation and PostgreSQL 17 custom-format backup/restore both passed."
     },
     {
       "id": "cross_system_journeys",
       "status": "PASS",
-      "evidence": "PASS on exact code head 19a4c7376bfa775b42c109ab3444683b3f0f1615: Release Browser 44479377175 passed responsive phone/tablet, Shop buyer/seller/admin, B2B browser-to-ledger, 102 PostgreSQL QA tests and online/offline generated-artifact journeys."
+      "evidence": "PASS on exact code head a5d17da6478333803966f263669db44d156d9c82: Release Browser 44686577870 passed responsive phone/tablet, Shop buyer/seller/admin, B2B browser-to-ledger, 102 PostgreSQL QA tests, Study Hub offline lifecycle and generated-material/podcast replay."
     },
     {
       "id": "ci_release_workflows",
       "status": "PASS",
-      "evidence": "Exact PR #79 head 19a4c7376bfa775b42c109ab3444683b3f0f1615: 17 triggered workflows succeeded; StudyHub Library Flow 44479377186 was SKIPPED by path condition and is not counted as a pass. Backend Shared Extension Contract 44479377130 passed 96 tests; Frontend Build 44479377187 passed 192 source/module + 5 offline Library tests, TypeScript and production build; Release Browser 44479377175 and PostgreSQL Backup Restore 44479377074 passed."
+      "evidence": "PASS on exact PR #79 head a5d17da6478333803966f263669db44d156d9c82: 17 triggered workflows succeeded, including Backend Shared Extension 44686577859, Frontend Build 44686577881, Release Browser 44686577870 and Backup Restore 44686577998. StudyHub Library Flow 44686577858 was SKIPPED by path condition and is not counted as passing."
     },
     {
       "id": "existing_database_migration",
       "status": "PASS",
-      "evidence": "PASS on exact code head 19a4c7376bfa775b42c109ab3444683b3f0f1615, PostgreSQL Backup Restore Rehearsal 44479377074: a representative prior-revision database upgraded while preserving existing document/material rows; current schema and Shop tables/payment-review fields were verified."
+      "evidence": "PASS on exact code head a5d17da6478333803966f263669db44d156d9c82, PostgreSQL Backup Restore 44686577998: representative prior-revision database upgraded while preserving document/material rows and verified schema/Shop/streak relationships."
     },
     {
       "id": "clean_full_regression",
       "status": "PASS",
-      "evidence": "PASS on exact code head 19a4c7376bfa775b42c109ab3444683b3f0f1615: Release Browser 44479377175 completed all stages; full disposable PostgreSQL QA 102 passed, 0 failed; responsive, Shop buyer/seller/admin, B2B, Study Hub offline lifecycle and generated-artifact replay all passed."
+      "evidence": "PASS on exact code head a5d17da6478333803966f263669db44d156d9c82: Release Browser 44686577870 completed all stages; full disposable PostgreSQL QA 102 passed, 0 failed (3,557 warnings); responsive, Shop, B2B, Study Hub offline and generated-artifact/podcast journeys passed."
     },
     {
       "id": "b2b_monetization_integrity",
       "status": "IN_PROGRESS",
-      "evidence": "Automated browser-to-ledger regression PASS on exact code head 19a4c7376bfa775b42c109ab3444683b3f0f1615 in Release Browser 44479377175, including offscreen suppression, continuous visibility timing, idempotent retry, rapid-click debounce and report reconciliation. Independent server-side proof of the client-observed 50%-visible/1.5-second dwell condition remains unresolved; do not claim tamper-proof viewability or CPA billing."
+      "evidence": "Automated browser-to-ledger regression PASS on exact code head a5d17da6478333803966f263669db44d156d9c82 in Release Browser 44686577870. Client-observed 50%-visible/1.5-second dwell behavior has not been independently verified; do not claim tamper-proof viewability or CPA billing."
     },
     {
       "id": "shop_marketplace",
       "status": "IN_PROGRESS",
-      "evidence": "Automated exact-head browser journeys PASS on code head 19a4c7376bfa775b42c109ab3444683b3f0f1615 in Release Browser 44479377175: buyer browse/detail/save/report/in-app chat, seller listing/pause/sold, and admin moderation/payment review all passed. Classifieds rules remain unchanged. Paystack sandbox and R2 object/header operations remain NOT_TESTED pending safe staging evidence."
+      "evidence": "Automated exact-head browser journeys PASS on code head a5d17da6478333803966f263669db44d156d9c82 in Release Browser 44686577870: buyer browse/detail/save/report/direct contact, seller listing/pause/sold and admin moderation/payment-review journeys passed. Live Paystack/R2 provider operations and human UX sign-off remain NOT_TESTED."
     },
     {
       "id": "payment_recovery_idempotency",
       "status": "PASS",
-      "evidence": "PASS on exact code head 19a4c7376bfa775b42c109ab3444683b3f0f1615: Release Browser 44479377175 passed 102 PostgreSQL tests, including signed charge webhook rejection/retry/deduplication, subscription/refund dispatch and the refund quote/request contract. Ambassador transfer dispatch is separately mocked and does not verify transfer state transitions."
+      "evidence": "PASS on exact code head a5d17da6478333803966f263669db44d156d9c82: Release Browser 44686577870 passed the 102-case PostgreSQL QA suite, including existing signed charge webhook rejection/retry/deduplication contracts."
     },
     {
       "id": "ambassador_transfer_integrity",
@@ -128,7 +128,7 @@
     {
       "id": "documentation_audit",
       "status": "IN_PROGRESS",
-      "evidence": "Updated architecture, next-step, actual-test, notes, release manifest and release ledger to exact code head 19a4c7376bfa775b42c109ab3444683b3f0f1615 and exact-head CI evidence. Broader documentation audit remains open."
+      "evidence": "Updated architecture plan, next-step tracker, actual-test record, learning notes and release ledger to exact code head a5d17da6478333803966f263669db44d156d9c82. The broader documentation audit remains IN_PROGRESS for remaining provider, retrieval, observability and release gates."
     },
     {
       "id": "vps_or_render_deployment",
@@ -138,7 +138,7 @@
     {
       "id": "browser_study_hub_offline_content_artifacts",
       "status": "PASS",
-      "evidence": "PASS on exact code head 7d12cbfebbc2bf48f501cb25ad2f3d979aae4631: Release Browser 44475284585 verified 12 canonical material GETs, private ownership, zero generation POSTs during offline replay, podcast script/descriptor/audio Blob caching, offline replay/reload for Summary, Flashcards, Practice Questions and Mind Map, and configured storage limits."
+      "evidence": "PASS on exact code head a5d17da6478333803966f263669db44d156d9c82: Release Browser 44686577870 verified canonical generated-material offline replay, podcast descriptor/audio Blob reopening and zero generation POSTs during offline replay."
     },
     {
       "id": "admin_study_time_visibility",

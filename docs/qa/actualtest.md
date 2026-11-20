@@ -637,3 +637,22 @@ Exact-head CI on `19a4c7376bfa775b42c109ab3444683b3f0f1615`:
 - Workflow inventory: 17 triggered workflows succeeded; StudyHub Library Flow [44479377186](https://github.com/apexstudying-cmd/prepza/actions/runs/44479377186) was SKIPPED by path condition.
 
 Disposition: mocked route/webhook delegation test PASS; actual transfer recipient creation, transfer API call, verification, retry/deduplication and success/failure/reversal state transitions remain NOT_TESTED. No provider credentials were used and no live transfer occurred.
+
+
+## 2026-11-20 — administrative audit-log route extraction and exact-head regression (PR #79)
+
+The existing GET `/admin/audit-logs` handler moved from `app.py` into `admin_audit_routes.py`. `route_registry.py` forwards the existing database, `AuditLog` and `User` models plus the same `require_admin` guard. The registry call remains at the original point after `log_admin_action` and before `register_control_feature_routes`. The route keeps its GET method and endpoint name, 30-day default and 1–365-day clamp, actor/action/target filters, newest-first ordering, 50-row pagination, actor email, JSON-or-string details parsing and response shape.
+
+The new Flask/SQLite contract covers the exact route map and authorization outcomes (anonymous 401; ordinary and suspended admin 403; persisted admin allowed), query filters, descending order, page boundaries and serialized details. The route-registry contract verifies explicit dependency forwarding and original registration order. The backend workflow compiles the new route module and executes the new tests on PR and main-push paths.
+
+An initial test run on intermediate commit `8edc15c` failed because the test fixture gave two entries equal timestamps and expected deterministic tie ordering. That was a fixture defect, not a production route failure. The fixture now uses distinct timestamps; the production `ORDER BY created_at DESC` behavior was preserved without adding an unrequested tie-breaker.
+
+**Exact application-code/PR head:** [a5d17da6478333803966f263669db44d156d9c82](https://github.com/apexstudying-cmd/prepza/commit/a5d17da6478333803966f263669db44d156d9c82)
+
+- Backend Shared Extension Contract [44686577859](https://github.com/apexstudying-cmd/prepza/actions/runs/44686577859): PASS — **100 passed, 6 warnings**; new route and registry contracts included.
+- Frontend Build [44686577881](https://github.com/apexstudying-cmd/prepza/actions/runs/44686577881): PASS — **192 source/module + 5 offline Library tests**; TypeScript, production Vite build, launch-wiring and architecture audits passed.
+- Release Browser/Cross-System Regression [44686577870](https://github.com/apexstudying-cmd/prepza/actions/runs/44686577870): PASS — **102 PostgreSQL QA tests, 0 failures, 3,557 warnings**; production image, disposable PostgreSQL/Redis, Alembic and controlled migration ledger, phone/tablet responsive checks, Shop buyer/seller/admin browser journeys, B2B browser-to-ledger, Study Hub offline lifecycle and generated-material/podcast offline replay passed. Responsive screenshot artifact: [14606388788](https://github.com/apexstudying-cmd/prepza/actions/runs/44686577870/artifacts/14606388788).
+- PostgreSQL Backup Restore Rehearsal [44686577998](https://github.com/apexstudying-cmd/prepza/actions/runs/44686577998): PASS — both existing-database upgrade/data preservation and custom-format backup/restore jobs passed.
+- Workflow inventory: **17 triggered workflows succeeded;** StudyHub Library Flow [44686577858](https://github.com/apexstudying-cmd/prepza/actions/runs/44686577858) was SKIPPED by path condition and is not counted as a pass.
+
+No UI, navigation, API payload, authorization rule, database schema, Shop business rule, payment behavior, provider call, production data or deployment changed. The new route boundary is PASS. The broader architecture refactor remains incomplete; ambassador transfers and external providers remain NOT_TESTED, and release remains BLOCKED.
