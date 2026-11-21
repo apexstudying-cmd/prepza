@@ -14,6 +14,7 @@ AMBASSADOR_ROUTES = ROOT / "ambassador_routes.py"
 DOCUMENT_READER_ROUTES = ROOT / "document_reader_routes.py"
 STUDENT_SUBSCRIPTION_ROUTES = ROOT / "student_subscription_routes.py"
 STUDENT_PAYMENT_HISTORY_ROUTES = ROOT / "student_payment_history_routes.py"
+PAYSTACK_CALLBACK_ROUTES = ROOT / "paystack_callback_routes.py"
 MANIFEST = FRONTEND / "public" / "manifest.json"
 
 errors = []
@@ -31,6 +32,7 @@ require_file(AMBASSADOR_ROUTES, "Ambassador route module")
 require_file(DOCUMENT_READER_ROUTES, "Document reader route module")
 require_file(STUDENT_SUBSCRIPTION_ROUTES, "Student subscription route module")
 require_file(STUDENT_PAYMENT_HISTORY_ROUTES, "Student payment history route module")
+require_file(PAYSTACK_CALLBACK_ROUTES, "Paystack browser callback route module")
 require_file(FRONTEND / "src" / "StudyActivityScreen.tsx", "StudyActivityScreen")
 require_file(FRONTEND / "src" / "share" / "StudyShareSheet.tsx", "StudyShareSheet")
 require_file(FRONTEND / "public" / "manifest.json", "PWA manifest")
@@ -59,6 +61,7 @@ if BACKEND.exists():
         ("register_document_reader_routes(", "document reader route registration"),
         ("register_student_subscription_routes(", "student subscription route registration"),
         ("register_student_payment_history_route(app, Payment)", "student payment history route registration"),
+        ("register_paystack_callback_route(", "Paystack browser callback route registration"),
         ("register_foundation_routes(app, db)", "foundation route registry call"),
     ]:
         if needle not in backend_text:
@@ -77,6 +80,13 @@ if AMBASSADOR_ROUTES.exists():
     ]:
         if needle not in ambassador_route_text:
             errors.append(f"ambassador_routes.py missing {label}: {needle}")
+
+if PAYSTACK_CALLBACK_ROUTES.exists():
+    callback_route_text = PAYSTACK_CALLBACK_ROUTES.read_text(encoding="utf-8")
+    if '@app.route("/payment/paystack/callback")' not in callback_route_text:
+        errors.append("paystack_callback_routes.py missing browser callback endpoint")
+    if "from app import" in callback_route_text or "import app" in callback_route_text:
+        errors.append("paystack_callback_routes.py must not import the Flask entry module")
 
 if STUDENT_PAYMENT_HISTORY_ROUTES.exists():
     student_payment_history_text = STUDENT_PAYMENT_HISTORY_ROUTES.read_text(encoding="utf-8")
@@ -150,6 +160,7 @@ if ROUTE_REGISTRY.exists():
         ("def register_student_payment_history_route(", "student payment history route registrar"),
         ("from student_subscription_routes import register_student_subscription_routes as register", "student subscription route module binding"),
         ("from student_payment_history_routes import register_student_payment_history_route as register", "student payment history route module binding"),
+        ("from paystack_callback_routes import register_paystack_callback_route as register", "Paystack callback route module binding"),
         ("from document_reader_routes import register_document_reader_routes as register", "document reader route module binding"),
         ("from ambassador_routes import register_ambassador_routes as register", "ambassador route module binding"),
         ("register_usage_billing(app, db)", "usage billing registration"),
