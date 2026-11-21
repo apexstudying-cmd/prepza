@@ -256,3 +256,11 @@ def register_admin_audit_routes(app: Any, db: Any, AuditLog: Any, User: Any, req
     from admin_audit_routes import register_admin_audit_routes as register
 
     register(app, db, AuditLog, User, require_admin)
+
+
+
+def register_paystack_callback_route(app: Any, sync_paystack_payment_status: Any) -> None:
+    """Register the user-facing Paystack browser-return route."""
+    from paystack_callback_routes import register_paystack_callback_route as register
+
+    register(app, sync_paystack_payment_status)
