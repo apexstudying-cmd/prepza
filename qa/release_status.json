@@ -1,7 +1,7 @@
 {
   "version": 1,
   "last_verified_date": "2026-11-21",
-  "last_verified_commit": "d7d1b3225cb1fe1357fb5f63efda6c37bf0b52d8",
+  "last_verified_commit": "e768ced975c62ba8d2aea7deeeabddf66cfa0386",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -83,7 +83,7 @@
     {
       "id": "ci_release_workflows",
       "status": "PASS",
-      "evidence": "PASS on exact PR #79 head d7d1b3225cb1fe1357fb5f63efda6c37bf0b52d8: 17 triggered workflows succeeded, including Backend Shared Extension 44874469119 (100 tests), Frontend Build 44874469107 (192 source/module + 5 offline Library tests, TypeScript and production build), Release Browser 44874469205 (111 PostgreSQL QA tests, 0 failures), and Backup Restore 44874469196. StudyHub Library Flow 44874469268 was SKIPPED by path condition and is not counted as passing."
+      "evidence": "PASS on exact PR #79 head e768ced975c62ba8d2aea7deeeabddf66cfa0386: 17 triggered workflows succeeded, including Backend Shared Extension 44890448239, Frontend Build 44890448103, Release Browser 44890448099, and PostgreSQL Backup Restore 44890448130. StudyHub Library Flow 44890448198 was SKIPPED by its path condition and is not counted as passing."
     },
     {
       "id": "existing_database_migration",
@@ -93,7 +93,7 @@
     {
       "id": "clean_full_regression",
       "status": "PASS",
-      "evidence": "PASS on exact PR #79 code/test head d7d1b3225cb1fe1357fb5f63efda6c37bf0b52d8: Release Browser 44874469205 completed all stages; 111 disposable PostgreSQL QA tests passed, 0 failed (3,557 warnings), with responsive, Shop, B2B, offline and generated-artifact journeys green."
+      "evidence": "PASS on exact PR #79 head e768ced975c62ba8d2aea7deeeabddf66cfa0386: Release Browser and Cross-System Regression 44890448099 completed successfully; responsive, Shop, B2B, Study Hub, generated-material and cross-system release checks passed."
     },
     {
       "id": "b2b_monetization_integrity",
@@ -108,7 +108,7 @@
     {
       "id": "payment_recovery_idempotency",
       "status": "PASS",
-      "evidence": "PASS on exact PR #79 code/test head d7d1b3225cb1fe1357fb5f63efda6c37bf0b52d8: Release Browser 44874469205 passed 111 PostgreSQL QA tests, 0 failures, including signed Paystack webhook invalid-signature rejection, transient authoritative-verification retry, duplicate entitlement replay, lifecycle dispatch and browser callback reference/trxref/error-redirect characterization. Provider calls are mocked; this is not live Paystack certification."
+      "evidence": "PASS on exact PR #79 code/test head d7d1b3225cb1fe1357fb5f63efda6c37bf0b52d8: Release Browser 44874469205 passed 111 PostgreSQL QA tests, 0 failures, including signed Paystack webhook invalid-signature rejection, transient authoritative-verification retry, duplicate entitlement replay, lifecycle dispatch and browser callback reference/trxref/error-redirect characterization. Provider calls are mocked; this is not live Paystack certification. Browser callback extraction is also present and green on exact PR #79 head e768ced975c62ba8d2aea7deeeabddf66cfa0386: Backend Shared Extension 44890448239, Frontend Build 44890448103, Release Browser 44890448099, and PostgreSQL Backup Restore 44890448130 all passed. The extracted browser-return route preserves reference/trxref selection and redirect behavior; webhook stays inline."
     },
     {
       "id": "ambassador_transfer_integrity",
@@ -128,7 +128,7 @@
     {
       "id": "documentation_audit",
       "status": "IN_PROGRESS",
-      "evidence": "Architecture, release, QA and Shop evidence documents reconciled to exact code/test head d7d1b3225cb1fe1357fb5f63efda6c37bf0b52d8. Broader provider, retrieval/citation, external monitoring, B2B viewability and human Home/PWA review remain open."
+      "evidence": "Architecture and QA evidence synchronized to exact PR #79 head e768ced975c62ba8d2aea7deeeabddf66cfa0386: Paystack browser callback extraction, registry contract and exact-head CI results are recorded in docs/NEXT_STEPS.md and docs/qa/actualtest.md. Broader provider, retrieval/citation, external monitoring, B2B viewability and human Home/PWA review remain open."
     },
     {
       "id": "vps_or_render_deployment",
@@ -167,8 +167,8 @@
     }
   ],
   "next_actions": [
-    "Architecture next: characterize the shared Paystack callback/webhook before moving it. Protect HMAC signature rejection, authoritative transaction verification, temporary verification failure/retry, duplicate delivery/idempotency, charge/subscription/refund dispatch and unknown-event acknowledgement. Preserve route registration order and student_subscription_billing.py lifecycle ownership.",
-    "Ambassador-transfer blocker: app.py calls _apply_paystack_transfer_result; admin_reconciled_ambassadors.py references initiate_paystack_transfer and sync_paystack_transfer_status; no definitions were found in the current source tree. Search Git history for the intended contract, add mocked characterization and do not invent money-state transitions or initiate live payouts.",
+    "Paystack browser callback extraction is complete on exact PR #79 head e768ced975c62ba8d2aea7deeeabddf66cfa0386 and passed focused/backend, frontend build, full release-browser and backup/restore workflows. Keep the shared webhook in app.py until the missing ambassador transfer helpers and their failure/reversal/idempotency money-state semantics are recovered or explicitly specified.",
+    "Ambassador-transfer blocker: app.py calls _apply_paystack_transfer_result; admin_reconciled_ambassadors.py references initiate_paystack_transfer and sync_paystack_transfer_status; no definitions were found in the current source tree or the inspected introduction history. The route call boundary is characterized with mocks only. Do not invent money-state transitions or initiate a payout.",
     "After callback characterization, continue document/generation and base-chat route/service boundaries with exact API, state, authorization, CSRF and response contracts.",
     "Shop browser journeys pass, but Paystack sandbox checkout/webhooks and R2 object/header operations remain NOT_TESTED. Use only explicitly configured safe staging credentials; no live payments, seller payout, paid service or production data.",
     "Staging access needed: apply migrations/20261029_document_page_text.sql and migrations/20261029_request_observability.sql through controlled backup/restore, then verify schema and rollback/restore evidence.",
@@ -180,5 +180,5 @@
     "Keep release BLOCKED; do not deploy or alter production data until all release-scoped gates are closed and deployment is explicitly authorized."
   ],
   "current_main_commit": "7922fa0d27fb275382e9fa4f46bfe4f242acdcf3",
-  "verification_note": "Updated 2026-11-20. Main is 7922fa0d27fb275382e9fa4f46bfe4f242acdcf3; PR #79 application-code/test head a48aefc81fa9f3f58d1d0ba9e7a3dbd04285c00e. The latest main change was test-only and its Library helper import ownership correction is present equivalently on PR #79. Backend Shared Extension Contract 44688623735 passed 100 tests (6 warnings); Frontend Build 44688623559 passed 192 source/module + 5 offline Library tests, TypeScript, production Vite build and architecture/launch-wiring audits; Release Browser 44688623523 passed responsive phone/tablet, Shop buyer/seller/admin, B2B browser-to-ledger, 102 PostgreSQL QA tests (0 failures), Study Hub offline lifecycle, 12 generated-material replays and podcast audio Blob replay; PostgreSQL Backup Restore 44688623724 passed existing-database upgrade/data preservation and PostgreSQL 17 custom-format restore. Seventeen triggered workflows succeeded; StudyHub Library Flow 44688623679 was skipped by path condition. No production source, UI, API, authorization, payment behavior, provider, production data or deployment changed in the Library test correction. Ambassador transfer implementation and money-state transitions, safe external-provider verification, retrieval/citation review, independent B2B viewability, external monitoring, human Home/PWA sign-off and deployment authorization remain open. Release remains BLOCKED; no live provider, payment, payout, production data, deployment, paid service or billable GPU work was performed."
+  "verification_note": "Updated 2026-11-21. PR #79 exact application-code/test head e768ced975c62ba8d2aea7deeeabddf66cfa0386: Backend Shared Extension Contract 44890448239 passed Python compilation and backend boundary/compatibility tests; Frontend Build 44890448103 passed TypeScript, production frontend build, source/module and launch-wiring checks; Release Browser and Cross-System Regression 44890448099 passed; PostgreSQL Backup Restore Rehearsal 44890448130 passed existing-database upgrade/data preservation and disposable custom-format backup/restore. Seventeen triggered workflows succeeded; StudyHub Library Flow 44890448198 was skipped by its path condition and is not counted as passing. The Paystack browser callback is extracted into paystack_callback_routes.py and registered through route_registry.py with explicit, late-bound payment-status synchronization. The shared webhook remains inline; ambassador transfer helper definitions and money-state semantics remain NOT_TESTED. Live provider verification, retrieval/citation review, independent B2B viewability, external monitoring, human Home/PWA sign-off and deployment authorization remain open. Release remains BLOCKED; no live payment, payout, production data, deployment, paid service or billable GPU work was performed."
 }
