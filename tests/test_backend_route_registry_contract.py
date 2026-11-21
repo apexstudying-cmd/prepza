@@ -13,6 +13,7 @@ from route_registry import (
     register_student_subscription_routes,
     register_student_payment_history_route,
     register_admin_audit_routes,
+    register_paystack_callback_route,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -354,3 +355,38 @@ def test_admin_audit_route_registry_forwards_explicit_dependencies(monkeypatch) 
     register_admin_audit_routes(app, db, AuditLog, User, require_admin)
 
     assert calls["args"] == (app, db, AuditLog, User, require_admin)
+
+
+
+def test_paystack_callback_route_is_owned_by_feature_module_and_preserves_redirect_contract(monkeypatch) -> None:
+    app = Flask("prepza-paystack-callback-route-contract")
+    sync_payment_status = lambda reference: None
+    calls = {}
+    module = ModuleType("paystack_callback_routes")
+
+    def register(target_app, sync_paystack_payment_status):
+        calls["args"] = (target_app, sync_paystack_payment_status)
+        @target_app.get("/payment/paystack/callback")
+        def paystack_callback():
+            from flask import redirect, request
+            reference = request.args.get("reference") or request.args.get("trxref")
+            status = "error"
+            if reference:
+                payment = sync_paystack_payment_status(reference)
+                status = payment.status if payment else "error"
+            return redirect(f"/?payment_status={status}")
+
+    module.register_paystack_callback_route = register
+    monkeypatch.setitem(sys.modules, "paystack_callback_routes", module)
+
+    register_paystack_callback_route(app, sync_payment_status)
+
+    assert calls["args"] == (app, sync_payment_status)
+    routes = {
+        rule.endpoint: (rule.rule, frozenset(rule.methods - {"HEAD", "OPTIONS"}))
+        for rule in app.url_map.iter_rules()
+        if rule.endpoint != "static"
+    }
+    assert routes == {
+        "paystack_callback": ("/payment/paystack/callback", frozenset({"GET"})),
+    }
