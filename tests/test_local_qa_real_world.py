@@ -1076,6 +1076,47 @@ def test_paystack_checkout_uses_base_plan_price_and_provider_success_is_idempote
     assert orders == ["fulfilled"]
 
 
+def test_paystack_browser_callback_prefers_reference_then_trxref_and_fails_closed(world, monkeypatch):
+    """Characterize the existing browser return contract before route extraction."""
+    from types import SimpleNamespace
+    import app as app_module
+
+    calls = []
+
+    def fake_sync(reference):
+        calls.append(reference)
+        if reference == "qa-callback-provider-error":
+            raise RuntimeError("simulated provider verification failure")
+        return SimpleNamespace(status="success")
+
+    monkeypatch.setattr(app_module, "sync_paystack_payment_status", fake_sync)
+    client = app_module.app.test_client()
+
+    preferred = client.get(
+        "/payment/paystack/callback?reference=qa-callback-reference&trxref=qa-ignored-trxref"
+    )
+    assert preferred.status_code == 302
+    assert preferred.headers["Location"].endswith("?payment_status=success")
+    assert calls == ["qa-callback-reference"]
+
+    fallback = client.get("/payment/paystack/callback?trxref=qa-callback-trxref")
+    assert fallback.status_code == 302
+    assert fallback.headers["Location"].endswith("?payment_status=success")
+    assert calls == ["qa-callback-reference", "qa-callback-trxref"]
+
+    missing_reference = client.get("/payment/paystack/callback")
+    assert missing_reference.status_code == 302
+    assert missing_reference.headers["Location"].endswith("?payment_status=error")
+    assert calls == ["qa-callback-reference", "qa-callback-trxref"]
+
+    provider_error = client.get(
+        "/payment/paystack/callback?reference=qa-callback-provider-error"
+    )
+    assert provider_error.status_code == 302
+    assert provider_error.headers["Location"].endswith("?payment_status=error")
+    assert calls[-1] == "qa-callback-provider-error"
+
+
 def test_paystack_webhook_rejects_bad_signature_retries_then_deduplicates_entitlement(world, monkeypatch):
     """Exercise signed webhook delivery, transient verification failure, retry and duplicate replay."""
     import app as app_module
