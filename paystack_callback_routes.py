@@ -25,6 +25,6 @@ def register_paystack_callback_route(
                 payment = sync_paystack_payment_status(reference)
                 status = payment.status if payment else "error"
             except Exception as exc:
-                app.logger.warning("Paystack callback sync error: %s", exc)
+                print("Paystack callback sync error:", str(exc))
 
         return redirect(f"/?payment_status={status}")
