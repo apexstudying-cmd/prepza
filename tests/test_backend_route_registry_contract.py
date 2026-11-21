@@ -390,3 +390,19 @@ def test_paystack_callback_route_is_owned_by_feature_module_and_preserves_redire
     assert routes == {
         "paystack_callback": ("/payment/paystack/callback", frozenset({"GET"})),
     }
+
+
+
+def test_legacy_mindmap_alias_resolves_the_canonical_generation_feature() -> None:
+    """The legacy /mindmap alias must resolve the same canonical material type."""
+    route_start = APP_SOURCE.index(
+        '@app.route("/documents/<int:document_id>/mindmap", methods=["POST"])'
+    )
+    route_end = APP_SOURCE.index(
+        '@app.route("/documents/<int:document_id>/tutor")',
+        route_start,
+    )
+    route_source = APP_SOURCE[route_start:route_end]
+
+    assert '_resolve_material_generation("mind_map", content, user_id, parameters)' in route_source
+    assert '_resolve_material_generation(mind_map, content, user_id, parameters)' not in route_source
