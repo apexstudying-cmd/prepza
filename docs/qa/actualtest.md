@@ -685,3 +685,17 @@ Exact code/test head `d7d1b3225cb1fe1357fb5f63efda6c37bf0b52d8`:
 - Screenshot artifact: [14694698935](https://github.com/apexstudying-cmd/prepza/actions/runs/44874469205/artifacts/14694698935).
 
 The browser callback remains in `app.py`; this is characterization, not extraction. The shared Paystack webhook remains inline because transfer helper definitions and failure/reversal money-state semantics are still unresolved. Provider tests remain mocked; no live Paystack request, payout, production data or deployment was used. Release remains BLOCKED.
+
+
+## 2026-11-21 — Paystack browser callback extraction and exact-head verification
+
+The previously characterized GET `/payment/paystack/callback` has now been moved from `app.py` into `paystack_callback_routes.py`, registered through `route_registry.py` at the original registration point. The registrar receives the existing payment-status synchronizer explicitly; the app passes a late-bound wrapper so existing request-time test injection remains intact. The route path, GET method, endpoint name, `reference`-before-`trxref` selection, missing-reference behavior, provider exception handling, status forwarding and SPA redirect are preserved. The webhook remains inline and was not changed. No live payment, payout, production data or deployment was performed.
+
+Exact PR #79 head `e768ced975c62ba8d2aea7deeeabddf66cfa0386`:
+- Backend Shared Extension Contract [44890448239](https://github.com/apexstudying-cmd/prepza/actions/runs/44890448239): PASS — Python compilation and backend boundary/compatibility tests.
+- Frontend Build [44890448103](https://github.com/apexstudying-cmd/prepza/actions/runs/44890448103): PASS — TypeScript and production frontend build plus source/module and launch-wiring checks.
+- Release Browser and Cross-System Regression [44890448099](https://github.com/apexstudying-cmd/prepza/actions/runs/44890448099): PASS — full release browser and cross-system suite.
+- PostgreSQL Backup Restore Rehearsal [44890448130](https://github.com/apexstudying-cmd/prepza/actions/runs/44890448130): PASS — existing-database upgrade/data preservation and disposable custom-format backup/restore.
+- Workflow inventory: 17 triggered workflows succeeded. StudyHub Library Flow [44890448198](https://github.com/apexstudying-cmd/prepza/actions/runs/44890448198) was SKIPPED by its path condition and is not counted as passing.
+
+Next architecture work is not another payment-state rewrite. Keep the shared webhook in `app.py` until the absent `initiate_paystack_transfer`, `sync_paystack_transfer_status` and `_apply_paystack_transfer_result` implementations and their failure/reversal/idempotency semantics are recovered or specified. Do not invent money-state transitions or initiate payouts. Then continue with the remaining document/generation and base-chat boundaries using focused behavior contracts before extraction. Release remains BLOCKED; PR #79 remains draft and unmerged.
