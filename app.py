@@ -3730,7 +3730,7 @@ def mindmap_document(document_id):
         return jsonify({"error": "Document is still processing - try again shortly"}), 400
     parameters = _ai_generation_parameters_from_request()
     if request.headers.get("X-Prepza-Resolve-Generation") == "1":
-        result = _resolve_material_generation(mind_map, content, user_id, parameters)
+        result = _resolve_material_generation("mind_map", content, user_id, parameters)
         return jsonify({"material_id": result["material_id"], "reused": result["reused"], "mindmap": result["payload"]}), 200
     job_id = _start_async_material_generation(
         document_content_id=content.id, user_id=user_id, feature="mind_map", parameters=parameters
