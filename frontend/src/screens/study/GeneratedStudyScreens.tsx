@@ -4,8 +4,12 @@ import { api, ApiError } from '../../lib/appApi'
 import { N, useTheme } from '../../theme/theme'
 import { Ic } from '../../ui/icons'
 import Pill from '../../ui/Pill'
+import { FlashcardsGenerationScreen, SummaryGenerationScreen } from '../../generation/GenerationScreens'
+import { PracticeQuestionsGenerationScreen, MindMapGenerationScreen } from '../../generation/StudyGenerationScreensClean'
 
 type StudyMaterialScreenTarget = 'document-study'
+type GeneratedMaterialRoute = 'document-study'
+type GeneratedMaterialScreenProps = { setScreen: (screen: GeneratedMaterialRoute) => void; activeDocumentId: number | null }
 
 type CompletionResponse = { xp_awarded: number; newly_unlocked_achievements: string[] }
 type GeneratedMaterialResponse = { material_id: number; reused: boolean; flashcards?: any; quiz?: any }
@@ -20,6 +24,14 @@ type StudyMaterialScreensProps = {
   generationRequest: <T = any>(path: string, options?: RequestInit, onProgress?: (progress: GenerationProgress) => void, currentUserId?: number) => Promise<T>
   replaySelectedGeneratedMaterialOffline: (documentId: string | number, feature: string) => Promise<any | null>
   getLatestGeneratedMaterialForPath: (path: string) => Promise<any | null>
+}
+
+export function SummaryStudyScreen({ setScreen, activeDocumentId }: GeneratedMaterialScreenProps) {
+  return <div style={{ colorScheme: 'var(--prepza-generation-color-scheme, light)', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><SummaryGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
+}
+
+export function MindMapStudyScreen({ setScreen, activeDocumentId }: GeneratedMaterialScreenProps) {
+  return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><MindMapGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
 }
 
 // ─── FLASHCARDS ───────────────────────────────────────────────────────────────

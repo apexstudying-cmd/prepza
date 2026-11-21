@@ -1,47 +1,30 @@
 from pathlib import Path
-import re
 
 ROOT = Path(__file__).resolve().parents[1]
-APP = ROOT / 'frontend/src/App.tsx'
-
-
-def home_section(text: str) -> tuple[str, str, str]:
-    match = re.search(r"(?ms)^function HomeScreen\b.*?(?=^function |^const |^export default |\Z)", text)
-    if not match:
-        raise SystemExit('Home architecture patch: HomeScreen section not found')
-    return text[:match.start()], match.group(0), text[match.end():]
+HOME = ROOT / 'frontend' / 'src' / 'screens' / 'home' / 'HomeScreen.tsx'
 
 
 def main() -> None:
-    text = APP.read_text(encoding='utf-8')
-    before, home, after = home_section(text)
-
-    home = home.replace(
-        "{ icon: Ic.book('w-6 h-6'), label: 'My Study', action: () => setScreen('study-materials') },\n              { icon: Ic.flash('w-6 h-6'), label: 'Ada'",
-        "{ icon: Ic.book('w-6 h-6'), label: 'My Study', action: () => setScreen('study-materials') },\n              { icon: Ic.explore('w-6 h-6'), label: 'Library', action: () => setScreen('library') },\n              { icon: Ic.flash('w-6 h-6'), label: 'Ada'",
-        1,
+    source = HOME.read_text(encoding='utf-8')
+    start = source.index('AI Study Tools')
+    actions_start = source.index('{[', start)
+    actions_end = source.index('].map((t, i) => (', actions_start)
+    actions = source[actions_start:actions_end]
+    expected = (
+        "label: 'Upload'",
+        "label: 'My Study'",
+        "label: 'Library'",
+        "label: 'Morio'",
+        "label: 'Shop'",
     )
-
-    # The old Home shortcut is a span, not a button. Target it exactly so the
-    # transformation cannot consume the Continue Study card/button.
-    home = re.sub(
-        r"\n\s*<span[^>]*onClick=\{\(\) => setScreen\('library'\)\}[^>]*>My Library →</span>",
-        '',
-        home,
-        count=1,
-    )
-
-    if 'My Library' in home:
-        raise SystemExit('Home architecture patch: duplicate My Library entry remains')
-    if "label: 'Library'" not in home or "setScreen('library')" not in home:
-        raise SystemExit('Home architecture patch: Library quick action was not installed')
-    if "label: 'My Study'" not in home or "setScreen('study-materials')" not in home:
-        raise SystemExit('Home architecture patch: My Study quick action missing')
-    if "setActiveDocumentId(featuredDoc.id); setScreen('document-study')" not in home:
-        raise SystemExit('Home architecture patch: Continue Study navigation contract missing')
-
-    APP.write_text(before + home + after, encoding='utf-8')
-    print('Home architecture applied and verified.')
+    positions = [actions.index(label) if label in actions else -1 for label in expected]
+    if any(position < 0 for position in positions) or positions != sorted(positions):
+        raise SystemExit('Home architecture: expected five ordered Quick Actions are missing')
+    if 'My Library →' in source:
+        raise SystemExit('Home architecture: duplicate My Library shortcut remains')
+    if "setActiveDocumentId(featuredDoc.id); setScreen('document-study')" not in source:
+        raise SystemExit('Home architecture: Continue Study navigation contract missing')
+    print('Home architecture module verified; no source mutation required.')
 
 
 if __name__ == '__main__':

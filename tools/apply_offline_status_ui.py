@@ -1,45 +1,59 @@
 from pathlib import Path
-import re
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / 'frontend' / 'src' / 'App.tsx'
-IMPORT = "import OfflineStatusBanner from './offline/OfflineStatusBanner'\n"
-text = APP.read_text(encoding='utf-8')
-
-if '<OfflineStatusBanner />' in text:
-    print('Offline status UI already present; skipping root-shape transformer.')
-    raise SystemExit(0)
-
-if IMPORT not in text:
-    anchor = next((line for line in text.splitlines(True) if line.startswith("import {") and "joinRealtimeChat" in line and "from './crypto/chatRealtime'" in line), "")
-    if not anchor:
-        raise SystemExit('Offline status UI: realtime chat import anchor missing')
-    text = text.replace(anchor, anchor + IMPORT, 1)
-
-start = text.find('export default function App')
-if start < 0:
-    start = text.find('function App')
-if start < 0:
-    raise SystemExit('Offline status UI: App function not found')
-
-root_container_pattern = re.compile(
-    r"<div style=\{\{\s*width:\s*'100%'\s*,\s*height:\s*'100dvh'",
-    re.MULTILINE,
-)
-root_container = root_container_pattern.search(text, start)
-if not root_container:
-    raise SystemExit('Offline status UI: App root container anchor not found; expected a full-height app root.')
-return_pos = root_container.start()
+APP_SHELL = ROOT / 'frontend' / 'src' / 'navigation' / 'AppShell.tsx'
 
 
-banner = '      <OfflineStatusBanner />\n'
-root_child_anchor = "      {/* Content */}"
-child_pos = text.find(root_child_anchor, return_pos)
-if child_pos < 0:
-    raise SystemExit('Offline status UI: App root content anchor not found')
+def transform(text: str) -> str:
+    if '<OfflineStatusBanner />' in text:
+        return text
 
-if '<OfflineStatusBanner />' not in text[return_pos:]:
-    text = text[:child_pos] + banner + text[child_pos:]
+    is_app_shell = 'export default function AppShell' in text
+    if is_app_shell:
+        import_line = "import OfflineStatusBanner from '../offline/OfflineStatusBanner'\n"
+        anchor = "import CallExperience from '../crypto/CallExperience'\n"
+        root_child_anchor = "        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>"
 
-APP.write_text(text, encoding='utf-8')
-print('Offline connection/sync status UI applied and verified.')
+        banner = '        <OfflineStatusBanner />\n'
+    else:
+        import_line = "import OfflineStatusBanner from './offline/OfflineStatusBanner'\n"
+        anchor = "import CallExperience from './crypto/CallExperience'\n"
+        root_child_anchor = "      {/* Content */}"
+        banner = '      <OfflineStatusBanner />\n'
+
+    if import_line not in text:
+        if anchor not in text:
+            raise SystemExit('Offline status UI: app-shell call overlay import anchor missing')
+        text = text.replace(anchor, anchor + import_line, 1)
+
+    start_marker = 'export default function AppShell' if is_app_shell else 'export default function App'
+    start = text.find(start_marker)
+    if start < 0:
+        raise SystemExit('Offline status UI: app-shell component not found')
+
+    root_container_anchor = "<div style={{ width: '100%', height: '100dvh'"
+    root_container = text.find(root_container_anchor, start)
+    if root_container < 0:
+        raise SystemExit('Offline status UI: app-shell root container anchor missing')
+
+    child_pos = text.find(root_child_anchor, root_container)
+    if child_pos < 0:
+        raise SystemExit('Offline status UI: app-shell root content anchor missing')
+
+    return text[:child_pos] + banner + text[child_pos:]
+
+
+def main() -> None:
+    target = APP_SHELL if APP_SHELL.exists() else APP
+    text = target.read_text(encoding='utf-8')
+    updated = transform(text)
+    if updated == text:
+        print('Offline connection/sync status UI already present; no changes needed.')
+        return
+    target.write_text(updated, encoding='utf-8')
+    print(f'Offline connection/sync status UI applied to {target.relative_to(ROOT)}.')
+
+
+if __name__ == '__main__':
+    main()

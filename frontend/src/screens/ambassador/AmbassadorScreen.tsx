@@ -73,6 +73,8 @@ export default function AmbassadorScreen({ setScreen }: { setScreen: (s: 'profil
   const [copied, setCopied] = useState(false)
   const [showSheet, setShowSheet] = useState(false)
   const [payoutPhone, setPayoutPhone] = useState('')
+  const [recipientFirstName, setRecipientFirstName] = useState('')
+  const [recipientLastName, setRecipientLastName] = useState('')
   const [payoutError, setPayoutError] = useState('')
   const [submittingPayout, setSubmittingPayout] = useState(false)
 
@@ -135,13 +137,17 @@ export default function AmbassadorScreen({ setScreen }: { setScreen: (s: 'profil
       setPayoutError('Enter a valid phone number (e.g. +254712345678).')
       return
     }
+    if (!recipientFirstName.trim() || !recipientLastName.trim()) {
+      setPayoutError('Enter the recipient first and last name used for the M-Pesa payout.')
+      return
+    }
     setSubmittingPayout(true)
     setPayoutError('')
     try {
       await api('/ambassador/payouts/request', {
         method: 'POST',
         headers: { 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify({ payout_destination: payoutPhone.trim() }),
+        body: JSON.stringify({ payout_destination: payoutPhone.trim(), recipient_first_name: recipientFirstName.trim(), recipient_last_name: recipientLastName.trim() }),
       })
       setShowSheet(false)
       loadAll()
@@ -371,6 +377,10 @@ export default function AmbassadorScreen({ setScreen }: { setScreen: (s: 'profil
             <div style={{ width: 40, height: 4, background: '#E5E7EB', borderRadius: 99, margin: '0 auto 20px' }} />
             <div style={{ fontWeight: 800, fontSize: 16, color: AMB_COLORS.navy, marginBottom: 4 }}>Request payout</div>
             <div style={{ fontSize: 12, color: AMB_COLORS.gray, marginBottom: 18 }}>Available balance: {fmtKes(dashboard.earnings.available_kes)}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+              <input value={recipientFirstName} onChange={e => setRecipientFirstName(e.target.value)} placeholder='First name' style={{ width: '100%', boxSizing: 'border-box', background: AMB_COLORS.bg, border: '1px solid #E5E7EB', borderRadius: 12, padding: '13px 12px', fontSize: 13, color: AMB_COLORS.navy }} />
+              <input value={recipientLastName} onChange={e => setRecipientLastName(e.target.value)} placeholder='Last name' style={{ width: '100%', boxSizing: 'border-box', background: AMB_COLORS.bg, border: '1px solid #E5E7EB', borderRadius: 12, padding: '13px 12px', fontSize: 13, color: AMB_COLORS.navy }} />
+            </div>
             <div style={{ fontSize: 11, fontWeight: 700, color: T.textMuted, marginBottom: 6 }}>M-Pesa number</div>
             <input value={payoutPhone} onChange={e => setPayoutPhone(e.target.value)} placeholder="+254712345678" style={{ width: '100%', boxSizing: 'border-box', background: AMB_COLORS.bg, border: '1px solid #E5E7EB', borderRadius: 12, padding: '13px 14px', fontSize: 13, color: AMB_COLORS.navy, marginBottom: 8 }} />
             {!!payoutError && <div style={{ fontSize: 11, color: AMB_COLORS.red, marginBottom: 10 }}>{payoutError}</div>}

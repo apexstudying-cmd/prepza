@@ -3,11 +3,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / "frontend" / "src" / "App.tsx"
 PLAYER = ROOT / "frontend" / "src" / "screens" / "podcast" / "PodcastPlayerScreen.tsx"
+SHELL = ROOT / "frontend" / "src" / "navigation" / "AppShell.tsx"
 
 
 def test_podcast_player_is_feature_owned_and_app_route_is_preserved():
     app = APP.read_text(encoding="utf-8")
     player = PLAYER.read_text(encoding="utf-8")
+    shell = SHELL.read_text(encoding="utf-8")
 
     assert "import PodcastPlayerScreen from './screens/podcast/PodcastPlayerScreen'" in app
     assert "function PodcastPlayerScreen(" not in app
@@ -15,7 +17,8 @@ def test_podcast_player_is_feature_owned_and_app_route_is_preserved():
     assert "// ─── PODCAST PLAYER" not in app
     assert "export default function PodcastPlayerScreen(" in player
     assert "case 'podcast-player':" in app
-    assert "'podcast-player'" in app[app.index("const noNav"):app.index("const darkHomeIndicator")]
+    no_nav = shell[shell.index("const noNav"):shell.index("export default function AppShell")]
+    assert "'podcast-player'" in no_nav
 
 
 def test_player_keeps_audio_lifecycle_and_study_time_contracts():

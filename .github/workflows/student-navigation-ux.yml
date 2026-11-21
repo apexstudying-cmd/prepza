@@ -77,6 +77,8 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           s = Path('app.py').read_text()
+          reader_routes_path = Path('document_reader_routes.py')
+          reader_source = reader_routes_path.read_text() if reader_routes_path.exists() else s
           assert s.count('def _published_ready_material_for_viewer(') == 1, 'published replay helper must exist exactly once'
           assert s.count('def _published_material_response(') == 1, 'published replay response helper must exist exactly once'
           assert s.count('def _ai_generation_parameters_from_request():') == 1, 'AI parameter helper must exist exactly once'
@@ -104,10 +106,10 @@ jobs:
           assert 'document.user_id == user_id' in detail_segment, 'document detail must condition signed URL on ownership'
 
           page_marker = '@app.route("/documents/<int:document_id>/reading/page/<int:page_num>")'
-          page_start = s.find(page_marker)
+          page_start = reader_source.find(page_marker)
           assert page_start >= 0, 'native reader page route missing'
-          page_end = s.find('@app.route(', page_start + len(page_marker))
-          page_segment = s[page_start:page_end if page_end >= 0 else len(s)]
+          page_end = reader_source.find('@app.route(', page_start + len(page_marker))
+          page_segment = reader_source[page_start:page_end if page_end >= 0 else len(reader_source)]
           assert '_get_studyable_document(user_id, document_id)' in page_segment, 'reader page must enforce study access'
           assert 'bucket="documents"' in page_segment, 'reader page must load from private documents bucket'
           assert 'mimetype="image/png"' in page_segment, 'reader page must return rendered image, not source file'
@@ -152,7 +154,9 @@ jobs:
           PY
 
       - name: Compile backend
-        run: python3 -m py_compile app.py document_pipeline.py scripts/apply_navigation_screen_cleanup.py scripts/apply_document_study_progress.py scripts/apply_document_reader.py scripts/apply_document_reader_v2.py scripts/apply_student_study_access.py scripts/apply_published_material_entry.py scripts/apply_published_material_replay.py scripts/apply_study_flow_cleanup.py scripts/apply_ai_route_decorator_fix.py
+        run: |
+          python3 -m py_compile app.py document_pipeline.py scripts/apply_navigation_screen_cleanup.py scripts/apply_document_study_progress.py scripts/apply_document_reader.py scripts/apply_document_reader_v2.py scripts/apply_student_study_access.py scripts/apply_published_material_entry.py scripts/apply_published_material_replay.py scripts/apply_study_flow_cleanup.py scripts/apply_ai_route_decorator_fix.py
+          if [ -f document_reader_routes.py ]; then python3 -m py_compile document_reader_routes.py; fi
 
       - name: Commit generated frontend and backend change
         run: |
@@ -163,5 +167,6 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add frontend/src/App.tsx frontend/src/screens/study/DocumentReaderScreen.tsx app.py migrations/add_document_reading_progress.sql scripts/apply_student_navigation_ux_v4.py scripts/apply_student_navigation_ux_v5.py scripts/apply_navigation_screen_cleanup.py scripts/apply_document_study_progress.py scripts/apply_document_reader.py scripts/apply_student_study_access.py scripts/apply_published_material_entry.py scripts/apply_document_reader_v2.py scripts/apply_published_material_replay.py scripts/apply_study_flow_cleanup.py scripts/apply_ai_route_decorator_fix.py .github/workflows/student-navigation-ux.yml
+          if [ -f document_reader_routes.py ]; then git add document_reader_routes.py route_registry.py; fi
           git commit -m 'feat: complete student study navigation'
           git push origin HEAD:ux/student-navigation-study-flow

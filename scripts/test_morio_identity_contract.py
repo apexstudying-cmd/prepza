@@ -41,12 +41,12 @@ def test_group_mention_and_visible_copy_use_morio():
 
 
 def test_home_study_screens_and_composer_use_morio():
-    app = source("frontend/src/App.tsx")
+    home = source("frontend/src/screens/home/HomeScreen.tsx")
     study_hub = source("frontend/src/screens/study/DocumentStudyHubScreen.tsx")
     chat = source("frontend/src/crypto/WhatsAppChatExperience.tsx")
     assert "Study with Morio" in study_hub
     assert "Use Morio while this document is your study context." in study_hub
-    assert ">Morio</div>" in app
+    assert "label: 'Morio'" in home
     assert "}>@Morio</button>" in chat
     assert "}>@Ada</button>" not in chat
 
@@ -67,10 +67,7 @@ def test_home_and_prebuild_patch_keep_morio_label():
 
 
 def test_home_quick_actions_are_the_approved_five_in_order():
-    app = source("frontend/src/App.tsx")
-    start = app.index("function HomeScreen(")
-    end = app.find("\nfunction ", start + 1)
-    home = app[start:end if end >= 0 else None]
+    home = source("frontend/src/screens/home/HomeScreen.tsx")
     marker = home.index("AI Study Tools")
     actions_start = home.index("{[", marker)
     actions_end = home.index("].map((t, i) => (", actions_start)
@@ -97,6 +94,7 @@ def test_splash_screen_uses_the_canonical_192px_icon():
         for path in admin_dir.glob("*.tsx")
     ) if admin_dir.exists() else 0
     splash = source("frontend/src/screens/onboarding/SplashScreen.tsx")
+    home = source("frontend/src/screens/home/HomeScreen.tsx")
     assert "from './screens/onboarding/SplashScreen'" in app
     assert "function SplashScreen" not in app
     assert '<img src="/icon-192.png" alt="Prepza" width={192} height={192}' in splash
@@ -107,13 +105,16 @@ def test_splash_screen_uses_the_canonical_192px_icon():
     profile_screen = source("frontend/src/screens/onboarding/CompleteProfileScreen.tsx")
     login_screen = source("frontend/src/screens/auth/LoginScreen.tsx")
     auth_screens = source("frontend/src/screens/auth/AuthScreens.tsx")
+    upload_flow = source("frontend/src/screens/upload/UploadFlowScreens.tsx")
     assert (
         app.count('src="/icon-192.png"')
+        + home.count('src="/icon-192.png"')
         + admin_brand_marks
         + splash.count('src="/icon-192.png"')
         + profile_screen.count('src="/icon-192.png"')
         + login_screen.count('src="/icon-192.png"')
         + auth_screens.count('src="/icon-192.png"')
+        + upload_flow.count('src="/icon-192.png"')
         >= 9
     )
 

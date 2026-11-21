@@ -2,12 +2,7 @@ import { useState } from 'react'
 import { N, useTheme } from '../theme/theme'
 import AdminSection from './AdminSection'
 
-export const PAYMENT_STATUS_META: Record<string, { icon: string; color: string; label: string }> = {
-  success: { icon: '✅', color: '#4CC97B', label: 'Success' },
-  pending: { icon: '⏳', color: '#D97706', label: 'Pending' },
-  failed: { icon: '❌', color: '#C94C4C', label: 'Failed' },
-  refunded: { icon: '↩️', color: '#6B7280', label: 'Refunded' },
-}
+export { PAYMENT_STATUS_META } from '../lib/paymentStatus'
 
 const adminNavGroups = [
   { key:'dashboard', label:'Dashboard', icon:'dashboard', items:[{key:'dashboard',label:'Overview'}] },

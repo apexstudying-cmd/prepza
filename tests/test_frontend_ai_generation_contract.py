@@ -56,7 +56,10 @@ def test_active_frontend_generation_contract_matches_backend():
     assert "path.match" in source
     assert "mind-map" in source
     assert "mind_map" in source
-    assert "setRaw(res.mind_map)" in source
+    assert "function mapRoot(payload: any)" in source
+    assert "payload?.mind_map" in source
+    assert "const root = mapRoot(payload)" in source
+    assert "setMap(root)" in source
     assert "res.mindmap" not in source
 
 
@@ -120,12 +123,11 @@ def test_podcast_replay_cache_wait_uses_playwright_keyword_argument():
     assert "timeout=15000" in helper
 
 def test_primary_bottom_navigation_exposes_accessible_names_and_current_location():
-    source = Path("frontend/src/App.tsx").read_text(encoding="utf-8")
-    start = source.index("function BottomNav(")
-    end = source.index("// ─── LOADING SYSTEM", start)
-    nav = source[start:end]
+    nav = Path("frontend/src/navigation/BottomNav.tsx").read_text(encoding="utf-8")
+    assert "export default function BottomNav(" in nav
 
-    assert "{ key: 'create-modal' as Screen, icon: Ic.plus, label: 'Create', hit: false }" in nav
+    for label in ("Home", "Explore", "Create", "Chats", "Profile"):
+        assert f"label: '{label}'" in nav
     assert "aria-label={tab.label}" in nav
     assert "aria-current={tab.hit ? 'page' : undefined}" in nav
     assert "minWidth: 44" in nav
