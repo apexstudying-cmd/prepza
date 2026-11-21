@@ -50,6 +50,7 @@ from route_registry import (
     register_student_subscription_routes,
     register_student_payment_history_route,
     register_admin_audit_routes,
+    register_paystack_callback_route,
 )
 from observability_models import RequestObservabilityEvent
 from security_models import AuditLog, PushSubscription, UserKey
@@ -4903,27 +4904,12 @@ def pay_for_content(content_id):
         "error": "Individual content purchases are no longer available. Choose a Prepza subscription."
     }), 410
 
-@app.route("/payment/paystack/callback")
-def paystack_callback():
-    """
-    Browser redirect target after the user finishes on Paystack's hosted
-    checkout page. Unlike the old Pesapal callback (which rendered a
-    standalone HTML page outside the app), this redirects back INTO the
-    SPA with a query param, so PaymentSuccessScreen/PaymentFailureScreen
-    become reachable. This is a best-effort, user-is-waiting sync - the
-    webhook below is the authoritative source of truth and will also
-    resolve the payment even if the user closes the tab here.
-    """
-    reference = request.args.get("reference") or request.args.get("trxref")
-    status = "error"
-    if reference:
-        try:
-            payment = sync_paystack_payment_status(reference)
-            status = payment.status if payment else "error"
-        except Exception as e:
-            print("Paystack callback sync error:", str(e))
-
-    return redirect(f"/?payment_status={status}")
+register_paystack_callback_route(
+    app,
+    # Resolve the helper at request time, preserving test injection and the
+    # existing app-level payment synchronization boundary.
+    lambda reference: sync_paystack_payment_status(reference),
+)
 
 
 @app.route("/payment/paystack/webhook", methods=["POST"])
