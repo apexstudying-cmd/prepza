@@ -671,3 +671,17 @@ Exact application-code/test head `a48aefc81fa9f3f58d1d0ba9e7a3dbd04285c00e`:
 - Workflow inventory: 17 triggered workflows succeeded; StudyHub Library Flow [44688623679](https://github.com/apexstudying-cmd/prepza/actions/runs/44688623679) was SKIPPED by path condition and is not counted as a pass.
 
 Disposition: Library module-ownership assertion PASS; frontend TypeScript/production build PASS; backend contract PASS; full responsive, Shop, B2B, PostgreSQL, Study Hub and artifact regression PASS. StudyHub Library Flow was SKIPPED by its path condition. Existing Shop provider operations (Paystack sandbox and R2 object/header verification) remain NOT_TESTED; Shop remains IN_PROGRESS and release remains BLOCKED.
+
+## 21 November 2026 — Paystack browser callback characterization and exact-head regression (PR #79)
+
+The existing browser return route is now characterized before any extraction. `test_paystack_browser_callback_prefers_reference_then_trxref_and_fails_closed` verifies `reference` precedence, `trxref` fallback, the existing SPA success redirect, missing-reference error redirect, and provider-sync exception handling. `qa/release_manifest.json` includes the test anchor and focused command. Production code was not changed.
+
+Exact code/test head `d7d1b3225cb1fe1357fb5f63efda6c37bf0b52d8`:
+- Frontend Build [44874469107](https://github.com/apexstudying-cmd/prepza/actions/runs/44874469107): PASS — 192 source/module tests + 5 offline Library tests, TypeScript, production build and architecture/launch-wiring audits.
+- Backend Shared Extension Contract [44874469119](https://github.com/apexstudying-cmd/prepza/actions/runs/44874469119): PASS — 100 tests (6 warnings).
+- Release Browser [44874469205](https://github.com/apexstudying-cmd/prepza/actions/runs/44874469205): PASS — 111 PostgreSQL QA tests, 0 failures (3,557 warnings); production image, disposable PostgreSQL/Redis and migrations, phone/tablet responsive checks, Shop buyer/seller/admin, B2B browser-to-ledger, Study Hub offline lifecycle, generated-material replay and podcast audio Blob replay passed.
+- PostgreSQL Backup Restore [44874469196](https://github.com/apexstudying-cmd/prepza/actions/runs/44874469196): PASS — existing-database upgrade/data preservation and PostgreSQL 17 custom-format backup/restore.
+- 17 triggered workflows succeeded; StudyHub Library Flow [44874469268](https://github.com/apexstudying-cmd/prepza/actions/runs/44874469268) was SKIPPED by path condition.
+- Screenshot artifact: [14694698935](https://github.com/apexstudying-cmd/prepza/actions/runs/44874469205/artifacts/14694698935).
+
+The browser callback remains in `app.py`; this is characterization, not extraction. The shared Paystack webhook remains inline because transfer helper definitions and failure/reversal money-state semantics are still unresolved. Provider tests remain mocked; no live Paystack request, payout, production data or deployment was used. Release remains BLOCKED.
