@@ -343,6 +343,7 @@
           "kind": "student_payment_tests",
           "path": "tests/test_local_qa_real_world.py",
           "anchors": [
+            "def test_paystack_browser_callback_prefers_reference_then_trxref_and_fails_closed",
             "def test_paystack_webhook_rejects_bad_signature_retries_then_deduplicates_entitlement",
             "def test_b2b_paystack_campaign_checkout_uses_mock_provider_and_separates_campaign_value",
             "def test_b2b_campus_report_shows_aggregate_only_at_ten_reached_accounts"
@@ -364,9 +365,10 @@
         }
       ],
       "required_test_commands": [
-        "python -m pytest tests/test_local_qa_real_world.py -k \"paystack_webhook_rejects_bad_signature_retries_then_deduplicates_entitlement or b2b_paystack_campaign_checkout_uses_mock_provider_and_separates_campaign_value\" -q"
+        "python -m pytest tests/test_local_qa_real_world.py -k \"paystack_webhook_rejects_bad_signature_retries_then_deduplicates_entitlement or b2b_paystack_campaign_checkout_uses_mock_provider_and_separates_campaign_value\" -q",
+        "python -m pytest tests/test_local_qa_real_world.py -k \"paystack_browser_callback_prefers_reference_then_trxref_and_fails_closed\" -q"
       ],
-      "notes": "PASS in release browser run 40502457332 on runtime commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015: full disposable PostgreSQL QA (92 passed) exercised invalid signatures, transient retry, duplicate student entitlement webhook, duplicate B2B refund replay and distinct same-amount refund events. This is mocked-provider application evidence, not live Paystack sandbox evidence."
+      "notes": "PASS in release browser run 40502457332 on runtime commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015: full disposable PostgreSQL QA (92 passed) exercised invalid signatures, transient retry, duplicate student entitlement webhook, duplicate B2B refund replay and distinct same-amount refund events. This is mocked-provider application evidence, not live Paystack sandbox evidence. Browser callback characterization now protects reference-over-trxref precedence, trxref fallback, missing-reference error redirect, provider-sync exception handling, and the existing SPA payment_status redirect. This remains mocked application evidence, not live Paystack verification."
     },
     {
       "id": "external_provider_boundaries",
