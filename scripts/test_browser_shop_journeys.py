@@ -215,40 +215,41 @@ def main() -> int:
                     if response.request.method == "GET" and "/chats/" in response.url
                     else None,
                 )
-                stale_chat_csrf = {"overrides": 0}
-
-                def inject_stale_chat_csrf(route):
-                    if route.request.method == "GET" and stale_chat_csrf["overrides"] == 0:
-                        response = route.fetch()
-                        payload = response.json()
-                        if isinstance(payload, dict) and payload.get("csrf_token"):
-                            payload["csrf_token"] = "qa-stale-chat-csrf-token"
-                            stale_chat_csrf["overrides"] += 1
-                            route.fulfill(response=response, json=payload)
-                            return
-                        route.fulfill(response=response)
-                        return
-                    route.continue_()
-
-                # Shop has already loaded its own session token. Make only the
-                # first ChatDetail /me response stale so the browser journey
-                # proves the chat composer refreshes CSRF and retries once.
-                buyer_page.route("**/me", inject_stale_chat_csrf)
+                # Shop has already loaded its own session token. Wrap the page's
+                # fetch after Shop is ready so the first ChatDetail /me payload
+                # is stale even when the service worker handles the request.
+                buyer_page.evaluate("""() => {
+                    const originalFetch = window.fetch.bind(window)
+                    window.__prepzaTestStaleCsrfOverrides = 0
+                    window.fetch = async (input, init) => {
+                      const raw = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+                      const response = await originalFetch(input, init)
+                      let pathname = ""
+                      try { pathname = new URL(raw, window.location.origin).pathname } catch {}
+                      if (pathname === "/me" && window.__prepzaTestStaleCsrfOverrides === 0) {
+                        const payload = await response.clone().json().catch(() => null)
+                        if (payload && typeof payload.csrf_token === "string" && payload.csrf_token) {
+                          payload.csrf_token = "qa-stale-chat-csrf-token"
+                          window.__prepzaTestStaleCsrfOverrides = 1
+                          const headers = new Headers(response.headers)
+                          headers.delete("content-length")
+                          headers.delete("content-encoding")
+                          return new Response(JSON.stringify(payload), {
+                            status: response.status,
+                            statusText: response.statusText,
+                            headers,
+                          })
+                        }
+                      }
+                      return response
+                    }
+                }""")
                 with buyer_page.expect_response(
-                    lambda response: response.request.method == "GET"
-                    and response.url.rstrip("/").endswith("/me"),
+                    lambda response: response.request.method == "POST"
+                    and response.url.rstrip("/").endswith("/chats"),
                     timeout=15000,
-                ) as chat_me_response:
-                    with buyer_page.expect_response(
-                        lambda response: response.request.method == "POST"
-                        and response.url.rstrip("/").endswith("/chats"),
-                        timeout=15000,
-                    ) as create_chat_response:
-                        buyer_page.get_by_role("button", name="Message in Prepza").click(timeout=10000)
-                stale_me = chat_me_response.value.json()
-                if stale_chat_csrf["overrides"] != 1 or stale_me.get("csrf_token") != "qa-stale-chat-csrf-token":
-                    raise AssertionError("ChatDetail did not receive the intended stale-CSRF test fixture")
-                buyer_page.unroute("**/me", inject_stale_chat_csrf)
+                ) as create_chat_response:
+                    buyer_page.get_by_role("button", name="Message in Prepza").click(timeout=10000)
                 created_chat = create_chat_response.value
                 if not created_chat.ok:
                     raise AssertionError(
@@ -287,6 +288,14 @@ def main() -> int:
                 )
                 composer = buyer_page.get_by_placeholder("Message", exact=True)
                 composer.wait_for(state="visible", timeout=10000)
+                stale_csrf_override_count = buyer_page.evaluate(
+                    "() => window.__prepzaTestStaleCsrfOverrides || 0"
+                )
+                if stale_csrf_override_count != 1:
+                    raise AssertionError(
+                        "ChatDetail did not consume the intended stale-CSRF test fixture: "
+                        f"overrides={stale_csrf_override_count!r}"
+                    )
                 composer.fill("QA in-app seller message")
                 send_button = buyer_page.get_by_role("button", name="Send", exact=True)
                 send_button.wait_for(state="visible", timeout=5000)
