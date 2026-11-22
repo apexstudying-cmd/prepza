@@ -287,11 +287,11 @@ def main() -> int:
                 composer = buyer_page.get_by_placeholder("Message", exact=True)
                 composer.wait_for(state="visible", timeout=10000)
                 stale_csrf_override_count = buyer_page.evaluate(
-                    "() => window.__prepzaTestStaleCsrfOverrides || 0"
+                    "() => window.__prepzaTestStaleChatPostOverrides ?? null"
                 )
-                if stale_csrf_override_count != 1:
+                if stale_csrf_override_count != 0:
                     raise AssertionError(
-                        "ChatDetail did not consume the intended stale-CSRF test fixture: "
+                        "ChatDetail stale-CSRF fixture was not initialized before sending: "
                         f"overrides={stale_csrf_override_count!r}"
                     )
                 composer.fill("QA in-app seller message")
