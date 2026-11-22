@@ -289,7 +289,7 @@ export default function ChatDetailScreen({ setScreen, conversationId, setActiveP
     try {
       return await sendWithToken(token)
     } catch (error) {
-      if (!(error instanceof ApiError) || error.status !== 403) throw error
+      if (!(error instanceof ApiError) || error.status !== 403 || !/csrf/i.test(error.message)) throw error
       const freshToken = await getChatCsrfToken(true)
       return sendWithToken(freshToken)
     }

@@ -170,6 +170,33 @@ def main() -> int:
 
                 # Buyer: browse, inspect, save, report and contact the seller.
                 buyer_context = browser.new_context(viewport={"width": 390, "height": 844})
+                # Install before app modules load so their global fetch reference
+                # retains this test-only request wrapper.
+                buyer_context.add_init_script("""(() => {
+                    const originalFetch = window.fetch.bind(window)
+                    window.__prepzaTestStaleChatPostOverrides = 0
+                    window.__prepzaTestStaleChatConversationId = null
+                    window.fetch = async (input, init) => {
+                      const raw = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+                      let pathname = ""
+                      try { pathname = new URL(raw, window.location.origin).pathname } catch {}
+                      const method = String(init?.method || (input instanceof Request ? input.method : "GET")).toUpperCase()
+                      const conversationId = window.__prepzaTestStaleChatConversationId
+                      if (
+                        conversationId != null
+                        && pathname === `/chats/${conversationId}/messages`
+                        && method === "POST"
+                        && window.__prepzaTestStaleChatPostOverrides === 0
+                      ) {
+                        const sourceHeaders = init?.headers || (input instanceof Request ? input.headers : undefined)
+                        const headers = new Headers(sourceHeaders)
+                        headers.set("X-CSRF-Token", "qa-stale-chat-csrf-token")
+                        window.__prepzaTestStaleChatPostOverrides = 1
+                        return originalFetch(input, { ...(init || {}), headers })
+                      }
+                      return originalFetch(input, init)
+                    }
+                })()""")
                 buyer_page = buyer_context.new_page()
                 login(buyer_page, buyer)
                 open_shop(buyer_page)
@@ -270,30 +297,11 @@ def main() -> int:
                 composer.fill("QA in-app seller message")
                 send_button = buyer_page.get_by_role("button", name="Send", exact=True)
                 send_button.wait_for(state="visible", timeout=5000)
-                # Force one stale CSRF header at the browser boundary. The
-                # production helper must refresh /me and retry exactly once.
-                buyer_page.evaluate("""conversationId => {
-                    const originalFetch = window.fetch.bind(window)
-                    window.__prepzaTestStaleChatPostOverrides = 0
-                    window.fetch = async (input, init) => {
-                      const raw = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
-                      let pathname = ""
-                      try { pathname = new URL(raw, window.location.origin).pathname } catch {}
-                      const method = String(init?.method || (input instanceof Request ? input.method : "GET")).toUpperCase()
-                      if (
-                        pathname === `/chats/${conversationId}/messages`
-                        && method === "POST"
-                        && window.__prepzaTestStaleChatPostOverrides === 0
-                      ) {
-                        const sourceHeaders = init?.headers || (input instanceof Request ? input.headers : undefined)
-                        const headers = new Headers(sourceHeaders)
-                        headers.set("X-CSRF-Token", "qa-stale-chat-csrf-token")
-                        window.__prepzaTestStaleChatPostOverrides = 1
-                        return originalFetch(input, { ...(init || {}), headers })
-                      }
-                      return originalFetch(input, init)
-                    }
-                }""", conversation_id)
+                # Arm the context-installed wrapper for this direct conversation.
+                buyer_page.evaluate(
+                    "(conversationId) => { window.__prepzaTestStaleChatConversationId = conversationId }",
+                    conversation_id,
+                )
                 message_attempt_statuses = []
 
                 def record_message_attempt(response):
