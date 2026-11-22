@@ -235,7 +235,7 @@ export default function ChatDetailScreen({ setScreen, conversationId, setActiveP
   }, [meId, headerIsGroup, callParticipants])
 
   useEffect(() => {
-    api<{ id: number; csrf_token: string }>('/me').then(me => { setCsrfToken(me.csrf_token); setMeId(me.id) }).catch(() => {})
+    api<{ id: number; csrf_token: string }>('/me', { cache: 'no-store' }).then(me => { setCsrfToken(me.csrf_token); setMeId(me.id) }).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -267,13 +267,33 @@ export default function ChatDetailScreen({ setScreen, conversationId, setActiveP
     void api(`/chats/${conversationId}/read`, { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } }).catch(() => {})
   }, [conversationId, csrfToken])
 
-  const getChatCsrfToken = async () => {
-    if (csrfToken) return csrfToken
-    const me = await api<{ id: number; csrf_token: string }>('/me')
+  const getChatCsrfToken = async (forceRefresh = false) => {
+    if (csrfToken && !forceRefresh) return csrfToken
+    const me = await api<{ id: number; csrf_token: string }>('/me', { cache: 'no-store' })
     if (!me.csrf_token) throw new Error('Could not establish a CSRF token for this session.')
     setCsrfToken(me.csrf_token)
     setMeId(me.id)
     return me.csrf_token
+  }
+
+  // A session can rotate while a chat screen is mounted. Recover once from a
+  // CSRF-only 403 using a no-store /me response; never retry authorization,
+  // membership, validation, or other failures and never weaken the server guard.
+  async function postChatMutation<T = unknown>(path: string, body?: string): Promise<T> {
+    const sendWithToken = (token: string) => api<T>(path, {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': token },
+      ...(body === undefined ? {} : { body }),
+    })
+    const token = await getChatCsrfToken()
+    try {
+      return await sendWithToken(token)
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status !== 403) throw error
+      const freshToken = await getChatCsrfToken(true)
+      if (freshToken === token) throw error
+      return sendWithToken(freshToken)
+    }
   }
 
 
@@ -327,8 +347,7 @@ export default function ChatDetailScreen({ setScreen, conversationId, setActiveP
     setSending(true); setError(null); sendTypingRealtime(conversationId, false)
     const envelope: ChatEnvelope = { v: 1, type: 'text', text, ...(replyingTo ? { reply_to: replyingTo.id } : {}) }
     try {
-      const token = await getChatCsrfToken()
-      await api(`/chats/${conversationId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ body: JSON.stringify(envelope), kind: 'text' }) })
+      await postChatMutation(`/chats/${conversationId}/messages`, JSON.stringify({ body: JSON.stringify(envelope), kind: 'text' }))
       setInput(''); setChatDraft(conversationId, ''); setReplyingTo(null)
       const result = await api<{ messages: ChatMessageData[] }>(`/chats/${conversationId}/messages`)
       setMsgs(result.messages || []); CHAT_DETAIL_CACHE[conversationId] && (CHAT_DETAIL_CACHE[conversationId].msgs = result.messages || [])
@@ -341,8 +360,7 @@ export default function ChatDetailScreen({ setScreen, conversationId, setActiveP
     setReactionPicker(null); setSending(true); setError(null)
     const envelope: ChatEnvelope = { v: 1, type: 'reaction', target_id: message.id, emoji, action: current ? 'remove' : 'add' }
     try {
-      const token = await getChatCsrfToken()
-      await api(`/chats/${conversationId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ body: JSON.stringify(envelope), kind: 'reaction' }) })
+      await postChatMutation(`/chats/${conversationId}/messages`, JSON.stringify({ body: JSON.stringify(envelope), kind: 'reaction' }))
       const result = await api<{ messages: ChatMessageData[] }>(`/chats/${conversationId}/messages`)
       setMsgs(result.messages || [])
     } catch (e) { setError(e instanceof ApiError ? e.message : 'Could not update reaction.') } finally { setSending(false) }
@@ -407,14 +425,13 @@ export default function ChatDetailScreen({ setScreen, conversationId, setActiveP
     if (!ext || !allowedChatAttachment.has(ext) || file.size > maxChatAttachmentSizeBytes) { setAttachError('Unsupported file or file exceeds the 20 MB limit.'); return }
     setUploadingAttachment(true); setAttachError(null); setShowAttach(false)
     try {
-      const token = await getChatCsrfToken()
-      const init = await api<{ attachment_id: number; upload_url: string }>(`/chats/${conversationId}/attachments`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ original_filename: file.name, file_size_bytes: file.size }) })
+      const init = await postChatMutation<{ attachment_id: number; upload_url: string }>(`/chats/${conversationId}/attachments`, JSON.stringify({ original_filename: file.name, file_size_bytes: file.size }))
       const uploadHeaders: HeadersInit = {}
       if (file.type) uploadHeaders['Content-Type'] = file.type
       const upload = await fetch(init.upload_url, { method: 'PUT', headers: uploadHeaders, body: file })
       if (!upload.ok) throw new Error('Upload to storage failed.')
-      await api(`/chats/${conversationId}/attachments/${init.attachment_id}/uploaded`, { method: 'POST', headers: { 'X-CSRF-Token': token } })
-      await api(`/chats/${conversationId}/messages`, { method: 'POST', headers: { 'X-CSRF-Token': token }, body: JSON.stringify({ attachment_id: init.attachment_id, kind: 'text' }) })
+      await postChatMutation(`/chats/${conversationId}/attachments/${init.attachment_id}/uploaded`)
+      await postChatMutation(`/chats/${conversationId}/messages`, JSON.stringify({ attachment_id: init.attachment_id, kind: 'text' }))
       const result = await api<{ messages: ChatMessageData[] }>(`/chats/${conversationId}/messages`)
       setMsgs(result.messages || [])
     } catch (e) { setAttachError(e instanceof ApiError ? e.message : 'Could not send attachment.') } finally { setUploadingAttachment(false) }

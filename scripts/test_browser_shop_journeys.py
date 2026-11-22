@@ -215,12 +215,40 @@ def main() -> int:
                     if response.request.method == "GET" and "/chats/" in response.url
                     else None,
                 )
+                stale_chat_csrf = {"overrides": 0}
+
+                def inject_stale_chat_csrf(route):
+                    if route.request.method == "GET" and stale_chat_csrf["overrides"] == 0:
+                        response = route.fetch()
+                        payload = response.json()
+                        if isinstance(payload, dict) and payload.get("csrf_token"):
+                            payload["csrf_token"] = "qa-stale-chat-csrf-token"
+                            stale_chat_csrf["overrides"] += 1
+                            route.fulfill(response=response, json=payload)
+                            return
+                        route.fulfill(response=response)
+                        return
+                    route.continue_()
+
+                # Shop has already loaded its own session token. Make only the
+                # first ChatDetail /me response stale so the browser journey
+                # proves the chat composer refreshes CSRF and retries once.
+                buyer_page.route("**/me", inject_stale_chat_csrf)
                 with buyer_page.expect_response(
-                    lambda response: response.request.method == "POST"
-                    and response.url.rstrip("/").endswith("/chats"),
+                    lambda response: response.request.method == "GET"
+                    and response.url.rstrip("/").endswith("/me"),
                     timeout=15000,
-                ) as create_chat_response:
-                    buyer_page.get_by_role("button", name="Message in Prepza").click(timeout=10000)
+                ) as chat_me_response:
+                    with buyer_page.expect_response(
+                        lambda response: response.request.method == "POST"
+                        and response.url.rstrip("/").endswith("/chats"),
+                        timeout=15000,
+                    ) as create_chat_response:
+                        buyer_page.get_by_role("button", name="Message in Prepza").click(timeout=10000)
+                stale_me = chat_me_response.value.json()
+                if stale_chat_csrf["overrides"] != 1 or stale_me.get("csrf_token") != "qa-stale-chat-csrf-token":
+                    raise AssertionError("ChatDetail did not receive the intended stale-CSRF test fixture")
+                buyer_page.unroute("**/me", inject_stale_chat_csrf)
                 created_chat = create_chat_response.value
                 if not created_chat.ok:
                     raise AssertionError(
@@ -262,11 +290,22 @@ def main() -> int:
                 composer.fill("QA in-app seller message")
                 send_button = buyer_page.get_by_role("button", name="Send", exact=True)
                 send_button.wait_for(state="visible", timeout=5000)
+                message_attempt_statuses = []
+
+                def record_message_attempt(response):
+                    if (
+                        response.request.method == "POST"
+                        and response.url.rstrip("/").endswith(f"/chats/{conversation_id}/messages")
+                    ):
+                        message_attempt_statuses.append(response.status)
+
+                buyer_page.on("response", record_message_attempt)
                 with buyer_page.expect_response(
                     lambda response: response.request.method == "POST"
                     and response.url.rstrip("/").endswith(
                         f"/chats/{conversation_id}/messages"
-                    ),
+                    )
+                    and response.status in (200, 201),
                     timeout=15000,
                 ) as send_message_response:
                     send_button.click(timeout=10000)
@@ -275,6 +314,11 @@ def main() -> int:
                     raise AssertionError(
                         f"Shop in-app message failed: {sent_message.status} "
                         f"{sent_message.text()}"
+                    )
+                if message_attempt_statuses != [403, sent_message.status]:
+                    raise AssertionError(
+                        "Chat message did not recover from exactly one stale-CSRF rejection: "
+                        f"statuses={message_attempt_statuses!r}"
                     )
                 buyer_page.get_by_text(
                     "QA in-app seller message", exact=False
