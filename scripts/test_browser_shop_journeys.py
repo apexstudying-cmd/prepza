@@ -215,35 +215,6 @@ def main() -> int:
                     if response.request.method == "GET" and "/chats/" in response.url
                     else None,
                 )
-                # Shop has already loaded its own session token. Wrap the page's
-                # fetch after Shop is ready so the first ChatDetail /me payload
-                # is stale even when the service worker handles the request.
-                buyer_page.evaluate("""() => {
-                    const originalFetch = window.fetch.bind(window)
-                    window.__prepzaTestStaleCsrfOverrides = 0
-                    window.fetch = async (input, init) => {
-                      const raw = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
-                      const response = await originalFetch(input, init)
-                      let pathname = ""
-                      try { pathname = new URL(raw, window.location.origin).pathname } catch {}
-                      if (pathname === "/me" && window.__prepzaTestStaleCsrfOverrides === 0) {
-                        const payload = await response.clone().json().catch(() => null)
-                        if (payload && typeof payload.csrf_token === "string" && payload.csrf_token) {
-                          payload.csrf_token = "qa-stale-chat-csrf-token"
-                          window.__prepzaTestStaleCsrfOverrides = 1
-                          const headers = new Headers(response.headers)
-                          headers.delete("content-length")
-                          headers.delete("content-encoding")
-                          return new Response(JSON.stringify(payload), {
-                            status: response.status,
-                            statusText: response.statusText,
-                            headers,
-                          })
-                        }
-                      }
-                      return response
-                    }
-                }""")
                 with buyer_page.expect_response(
                     lambda response: response.request.method == "POST"
                     and response.url.rstrip("/").endswith("/chats"),
@@ -299,6 +270,30 @@ def main() -> int:
                 composer.fill("QA in-app seller message")
                 send_button = buyer_page.get_by_role("button", name="Send", exact=True)
                 send_button.wait_for(state="visible", timeout=5000)
+                # Force one stale CSRF header at the browser boundary. The
+                # production helper must refresh /me and retry exactly once.
+                buyer_page.evaluate("""conversationId => {
+                    const originalFetch = window.fetch.bind(window)
+                    window.__prepzaTestStaleChatPostOverrides = 0
+                    window.fetch = async (input, init) => {
+                      const raw = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+                      let pathname = ""
+                      try { pathname = new URL(raw, window.location.origin).pathname } catch {}
+                      const method = String(init?.method || (input instanceof Request ? input.method : "GET")).toUpperCase()
+                      if (
+                        pathname === `/chats/${conversationId}/messages`
+                        && method === "POST"
+                        && window.__prepzaTestStaleChatPostOverrides === 0
+                      ) {
+                        const sourceHeaders = init?.headers || (input instanceof Request ? input.headers : undefined)
+                        const headers = new Headers(sourceHeaders)
+                        headers.set("X-CSRF-Token", "qa-stale-chat-csrf-token")
+                        window.__prepzaTestStaleChatPostOverrides = 1
+                        return originalFetch(input, { ...(init || {}), headers })
+                      }
+                      return originalFetch(input, init)
+                    }
+                }""", conversation_id)
                 message_attempt_statuses = []
 
                 def record_message_attempt(response):
@@ -323,6 +318,14 @@ def main() -> int:
                     raise AssertionError(
                         f"Shop in-app message failed: {sent_message.status} "
                         f"{sent_message.text()}"
+                    )
+                stale_header_overrides = buyer_page.evaluate(
+                    "() => window.__prepzaTestStaleChatPostOverrides || 0"
+                )
+                if stale_header_overrides != 1:
+                    raise AssertionError(
+                        "Shop chat did not exercise the stale-CSRF request fixture: "
+                        f"overrides={stale_header_overrides!r}"
                     )
                 if message_attempt_statuses != [403, sent_message.status]:
                     raise AssertionError(

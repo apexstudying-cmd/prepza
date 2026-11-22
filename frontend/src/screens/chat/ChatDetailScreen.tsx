@@ -291,7 +291,6 @@ export default function ChatDetailScreen({ setScreen, conversationId, setActiveP
     } catch (error) {
       if (!(error instanceof ApiError) || error.status !== 403) throw error
       const freshToken = await getChatCsrfToken(true)
-      if (freshToken === token) throw error
       return sendWithToken(freshToken)
     }
   }
