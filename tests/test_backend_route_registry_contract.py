@@ -13,6 +13,7 @@ from route_registry import (
     register_student_subscription_routes,
     register_student_payment_history_route,
     register_admin_audit_routes,
+    register_e2ee_key_backup_routes,
     register_paystack_callback_route,
 )
 
@@ -92,6 +93,7 @@ def test_app_delegates_all_later_route_registrations_to_registry_in_order() -> N
         "register_public_shell_route(",
         "register_academic_catalog_route(",
         "register_notification_feature_routes(",
+        "register_e2ee_key_backup_routes(app, db, UserKey, require_csrf)",
         "register_opportunity_feature_routes(",
         "register_chat_feature_routes(",
         "register_admin_audit_routes(app, db, AuditLog, User, require_admin)",
@@ -107,6 +109,7 @@ def test_app_delegates_all_later_route_registrations_to_registry_in_order() -> N
         "register_public_shell_route",
         "register_academic_catalog_route",
         "register_notification_feature_routes",
+        "register_e2ee_key_backup_routes",
         "register_opportunity_feature_routes",
         "register_chat_feature_routes",
         "register_admin_audit_routes",
@@ -406,3 +409,35 @@ def test_legacy_mindmap_alias_resolves_the_canonical_generation_feature() -> Non
 
     assert '_resolve_material_generation("mind_map", content, user_id, parameters)' in route_source
     assert '_resolve_material_generation(mind_map, content, user_id, parameters)' not in route_source
+
+
+
+def test_e2ee_key_backup_routes_are_module_owned_at_the_original_registration_point() -> None:
+    assert "register_e2ee_key_backup_routes(app, db, UserKey, require_csrf)" in APP_SOURCE
+    assert "def upload_key_backup(" not in APP_SOURCE
+    assert "def get_key_backup(" not in APP_SOURCE
+    assert "USER_KEY_BACKUP_BLOB_MAX_LEN" not in APP_SOURCE
+    assert "from e2ee_key_backup_routes import register_e2ee_key_backup_routes as register" in REGISTRY_SOURCE
+
+    registration = APP_SOURCE.index("register_e2ee_key_backup_routes(app, db, UserKey, require_csrf)")
+    next_library_route = APP_SOURCE.index('@app.route("/library/my-purchases")')
+    assert registration < next_library_route
+
+
+def test_e2ee_key_backup_route_registry_forwards_explicit_dependencies(monkeypatch) -> None:
+    app = Flask("prepza-e2ee-key-backup-registry-contract")
+    db = object()
+    UserKey = object()
+    require_csrf = object()
+    calls = {}
+    module = ModuleType("e2ee_key_backup_routes")
+
+    def register(target_app, target_db, target_user_key, target_require_csrf):
+        calls["args"] = (target_app, target_db, target_user_key, target_require_csrf)
+
+    module.register_e2ee_key_backup_routes = register
+    monkeypatch.setitem(sys.modules, "e2ee_key_backup_routes", module)
+
+    register_e2ee_key_backup_routes(app, db, UserKey, require_csrf)
+
+    assert calls["args"] == (app, db, UserKey, require_csrf)

@@ -114,6 +114,13 @@ def register_chat_feature_routes(
         app.logger.exception("Chat runtime registration failed: %s", exc)
 
 
+def register_e2ee_key_backup_routes(app: Any, db: Any, UserKey: Any, require_csrf: Any) -> None:
+    """Register the account-scoped encrypted E2EE key-backup endpoints."""
+    from e2ee_key_backup_routes import register_e2ee_key_backup_routes as register
+
+    register(app, db, UserKey, require_csrf)
+
+
 def register_control_feature_routes(
     app: Any, db: Any, SystemSetting: Any, User: Any, Document: Any,
     DocumentContent: Any, GeneratedMaterial: Any, log_admin_action: Any, limiter: Any,

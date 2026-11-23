@@ -125,10 +125,27 @@
             "prepza-e2ee",
             "IDENTITY_KEY_REPLACEMENT_REQUIRED"
           ]
+        },
+        {
+          "kind": "backend_route",
+          "path": "e2ee_key_backup_routes.py",
+          "anchors": [
+            "/keys/backup",
+            "register_e2ee_key_backup_routes"
+          ]
+        },
+        {
+          "kind": "test",
+          "path": "tests/test_e2ee_key_backup_routes_contract.py",
+          "anchors": [
+            "test_key_backup_route_preserves_session_scope_and_csrf",
+            "test_key_backup_route_preserves_validation_and_payload_contract"
+          ]
         }
       ],
       "required_test_commands": [
-        "python -m pytest scripts/test_e2ee_identity_runtime.py -q"
+        "python -m pytest scripts/test_e2ee_identity_runtime.py -q",
+        "python -m pytest tests/test_e2ee_key_backup_routes_contract.py -q"
       ],
       "notes": "Browser identity lifecycle coverage passed in the recorded E2EE identity run on dd5418a; the current runtime commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015 also passed E2EE Security Regression run 40502457061. Multi-device protocol beyond the tested fresh-device conflict remains outside the frozen launch scope."
     },
