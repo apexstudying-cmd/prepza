@@ -114,6 +114,28 @@ def register_chat_feature_routes(
         app.logger.exception("Chat runtime registration failed: %s", exc)
 
 
+def register_chat_read_routes(
+    app: Any,
+    *,
+    Message: Any,
+    chat_page_size: int,
+    get_chat_or_404: Any,
+    serialize_conversation_detail: Any,
+    serialize_chat_message: Any,
+) -> None:
+    """Register the existing base-chat detail and message-history read routes."""
+    from chat_read_routes import register_chat_read_routes as register
+
+    register(
+        app,
+        Message=Message,
+        chat_page_size=chat_page_size,
+        get_chat_or_404=get_chat_or_404,
+        serialize_conversation_detail=serialize_conversation_detail,
+        serialize_chat_message=serialize_chat_message,
+    )
+
+
 def register_e2ee_key_backup_routes(app: Any, db: Any, UserKey: Any, require_csrf: Any) -> None:
     """Register the account-scoped encrypted E2EE key-backup endpoints."""
     from e2ee_key_backup_routes import register_e2ee_key_backup_routes as register
