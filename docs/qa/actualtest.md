@@ -737,3 +737,21 @@ The new Flask/SQLite runtime contract verifies the exact route map, anonymous GE
 - Responsive screenshot artifact: [14795455524](https://github.com/apexstudying-cmd/prepza/actions/runs/45123976603/artifacts/14795455524).
 
 The extraction changes no UI, navigation, public API, database schema, E2EE cryptographic protocol, Shop rule, payment flow, provider operation or production data. `app.py` is now 5,715 lines (45 inline route decorators); `frontend/src/App.tsx` remains 2,066 lines. The architecture refactor remains incomplete. The next backend review is the remaining document/generation and base-chat route/service dependency map. Release remains BLOCKED; live provider staging, missing ambassador transfer semantics, retrieval/citation accuracy, independent B2B viewability, external monitoring, human Home/PWA sign-off and deployment authorization remain open.
+
+
+## 24 November 2026 — base-chat read-route extraction and exact-head CI status (PR #79)
+
+The existing GET `/chats/<int:conversation_id>` and GET `/chats/<int:conversation_id>/messages` handlers were moved into `chat_read_routes.py`. `route_registry.py` forwards the existing `Message` model, `CHAT_PAGE_SIZE`, `_get_chat_or_404` membership guard and two existing serializers. The registrar is called immediately after `create_chat`, preserving the original route-registration position. Endpoint names, paths, GET methods, session authentication, membership-scoped 404 behavior, detail/message payloads, optional `before_id`, descending `(created_at, id)` ordering, page limit and chronological response order remain unchanged. No chat write, attachment, realtime, E2EE, frontend, UI, navigation or schema code changed.
+
+Four focused Flask tests cover route/method identity, anonymous 401, membership guard, serialized detail, message order and page limit, query filtering, explicit dependency forwarding and registration position. The backend workflow compiles the module and runs this test file on pull requests and main pushes.
+
+**Exact application-code/test head:** [9afc1eee078042c765d3ea48eb25ec78173830df](https://github.com/apexstudying-cmd/prepza/commit/9afc1eee078042c765d3ea48eb25ec78173830df)
+
+- Backend Shared Extension Contract [45338511183](https://github.com/apexstudying-cmd/prepza/actions/runs/45338511183): **PASS — 110 tests, 13 warnings**, including module compilation and the four new Flask contracts.
+- Frontend Build [45338511029](https://github.com/apexstudying-cmd/prepza/actions/runs/45338511029): **PASS — 192 source/module tests + 5 offline Library tests**, TypeScript, production Vite build, screen/offline/calling/PWA and launch-wiring audits.
+- E2EE Chat Validation [45338510869](https://github.com/apexstudying-cmd/prepza/actions/runs/45338510869): **PASS** — E2EE/realtime/chat contracts and frontend build.
+- E2EE Security Regression [45338510763](https://github.com/apexstudying-cmd/prepza/actions/runs/45338510763): **PASS**.
+- PostgreSQL Backup Restore Rehearsal [45338510877](https://github.com/apexstudying-cmd/prepza/actions/runs/45338510877): **PASS** — populated prior-revision database upgrade preserved document/material records; PostgreSQL 17 custom-format backup restored and passed schema/data/Alembic and application smoke checks.
+- Workflow inventory at documentation time: **16 triggered workflows succeeded, one path-conditioned StudyHub Library Flow was SKIPPED, and Release Browser [45338511095](https://github.com/apexstudying-cmd/prepza/actions/runs/45338511095) was IN_PROGRESS**. The full browser/cross-system gate is not marked PASS on this head until that run completes.
+
+The previous exact code head `a7ef491` passed 111 PostgreSQL QA tests, responsive phone/tablet checks, Shop buyer/seller/admin, B2B browser-to-ledger and offline/generated-artifact journeys. That evidence is not silently transferred to `9afc1eee` while its Release Browser run is still running. The release ledger remains BLOCKED; live provider checks, retrieval/citation review, independent B2B viewability, external monitoring, human Home/PWA sign-off and deployment authorization remain open.

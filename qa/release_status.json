@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "last_verified_date": "2026-11-23",
-  "last_verified_commit": "a7ef49122a69da11aec0db1ad42acbb3dd9f0785",
+  "last_verified_date": "2026-11-24",
+  "last_verified_commit": "9afc1eee078042c765d3ea48eb25ec78173830df",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -18,7 +18,7 @@
     {
       "id": "authorization_ownership",
       "status": "PASS",
-      "evidence": "PASS on exact head 2627b21020b2841fc9ab8974ac6fca0581ad624b: Release Browser 44995164976 passed Shop buyer/seller/admin journeys and 111 PostgreSQL QA tests; Backend Shared Extension 44995164973 passed the admin audit-route 401/403/allow contract."
+      "evidence": "The existing authorization/ownership contract remains PASS. On exact PR #79 code/test head 9afc1eee078042c765d3ea48eb25ec78173830df, four new Flask chat-read contracts additionally prove anonymous 401, membership-scoped conversation lookup/404, and existing detail/message serializers; Backend Shared Extension run 45338511183 passed 110 tests (13 warnings)."
     },
     {
       "id": "economics_entitlements",
@@ -77,13 +77,13 @@
     },
     {
       "id": "cross_system_journeys",
-      "status": "PASS",
-      "evidence": "PASS on exact head 2627b21020b2841fc9ab8974ac6fca0581ad624b: Release Browser 44995164976 passed Shop buyer/seller/admin, B2B browser-to-ledger, 111 PostgreSQL QA tests, responsive phone/tablet, Study Hub offline lifecycle and generated-material/podcast replay."
+      "status": "IN_PROGRESS",
+      "evidence": "The previous exact code head a7ef491 passed 111 PostgreSQL QA tests, Shop buyer/seller/admin, B2B browser-to-ledger, responsive phone/tablet and offline/generated-artifact journeys. The new exact code/test head 9afc1eee has the full Release Browser run 45338511095 IN_PROGRESS; do not carry the previous full-regression PASS forward until the current run completes."
     },
     {
       "id": "ci_release_workflows",
-      "status": "PASS",
-      "evidence": "PASS on exact PR #79 head a7ef49122a69da11aec0db1ad42acbb3dd9f0785: 17 triggered workflows succeeded; StudyHub Library Flow 45123976623 was SKIPPED by its path condition and is not counted as passing. Frontend Build 45123976511, Backend Shared Extension 45123976442, E2EE Chat Validation 45123976473, Release Browser 45123976603 and PostgreSQL Backup Restore 45123976525 passed."
+      "status": "IN_PROGRESS",
+      "evidence": "On exact PR #79 code/test head 9afc1eee078042c765d3ea48eb25ec78173830df, 16 triggered workflows have completed successfully; StudyHub Library Flow 45338510981 was SKIPPED by path condition; Release Browser/Cross-System Regression 45338511095 is still IN_PROGRESS and is not counted as PASS. Backend Shared Extension 45338511183 passed 110 tests (13 warnings); Frontend Build 45338511029 passed 192 source/module + 5 offline Library tests, TypeScript and production build; E2EE Chat 45338510869, E2EE Security 45338510763 and PostgreSQL Backup Restore 45338510877 passed."
     },
     {
       "id": "existing_database_migration",
@@ -92,8 +92,8 @@
     },
     {
       "id": "clean_full_regression",
-      "status": "PASS",
-      "evidence": "PASS on exact PR #79 code/test head a7ef49122a69da11aec0db1ad42acbb3dd9f0785: Release Browser and Cross-System Regression 45123976603 passed 111 PostgreSQL QA tests (0 failures, 3,557 warnings), phone/tablet responsive checks, Shop buyer/seller/admin journeys, B2B browser-to-ledger, Study Hub offline lifecycle, generated-material and podcast audio Blob replay. PostgreSQL Backup Restore 45123976525 also passed existing-database upgrade/data preservation and PostgreSQL 17 custom-format restore on the same SHA."
+      "status": "IN_PROGRESS",
+      "evidence": "The previous exact code head a7ef491 passed Release Browser 45123976603 (111 PostgreSQL QA tests, 0 failures) and PostgreSQL Backup Restore 45123976525. On current exact code/test head 9afc1eee, PostgreSQL Backup Restore 45338510877 PASS; Release Browser/Cross-System Regression 45338511095 remains IN_PROGRESS, so current-head full regression is not yet PASS."
     },
     {
       "id": "b2b_monetization_integrity",
@@ -128,7 +128,7 @@
     {
       "id": "documentation_audit",
       "status": "IN_PROGRESS",
-      "evidence": "The current architecture/QA snapshot, release manifest and release ledger are reconciled to exact application-code/test head a7ef49122a69da11aec0db1ad42acbb3dd9f0785 and current main 7922fa0d27fb275382e9fa4f46bfe4f242acdcf3. The new E2EE key-backup route/test trace is recorded. Broader historical-doc review and remaining product/provider evidence are still open; do not infer launch readiness."
+      "evidence": "Architecture and QA documents are synchronized to exact application-code/test head 9afc1eee078042c765d3ea48eb25ec78173830df and main 7922fa0d27fb275382e9fa4f46bfe4f242acdcf3. This record explicitly keeps the current-head Release Browser/Cross-System Regression IN_PROGRESS; provider, retrieval/citation, monitoring, B2B viewability, human Home/PWA and deployment gates remain open."
     },
     {
       "id": "vps_or_render_deployment",
@@ -167,8 +167,8 @@
     }
   ],
   "next_actions": [
-    "E2EE /keys/backup POST/GET extraction is verified on exact PR #79 code/test head a7ef49122a69da11aec0db1ad42acbb3dd9f0785: original registration point, endpoint names, session ownership, CSRF, validation and response contracts preserved; Backend Shared Extension passed 106 tests, E2EE Chat Validation passed 16, and all 17 triggered workflows passed with one path-conditioned skip.",
-    "Continue backend architecture work by mapping remaining document/generation and base-chat route/service dependencies before extracting anything. Add focused behavior contracts first and preserve API, authorization, CSRF, ownership, state, event order and response shapes.",
+    "Base-chat GET /chats/<id> and GET /chats/<id>/messages are module-owned by chat_read_routes.py, registered after create_chat at the original position. Exact code/test head 9afc1eee preserves session auth, membership 404, serializers, before_id, descending DB ordering, 50-message limit and chronological response order; four focused Flask contracts are included in Backend Shared Extension 45338511183 (110 passed, 13 warnings). Release Browser 45338511095 is still IN_PROGRESS; do not mark current-head full regression PASS until it finishes.",
+    "Next architecture slice: map remaining document/generation route and service dependencies, then add focused server-side permission, index-invalidation and citation contracts before extracting a cohesive boundary. Preserve existing API, authorization, CSRF, ownership, state, event ordering and response shapes.",
     "Ambassador-transfer blocker: app.py calls _apply_paystack_transfer_result; admin_reconciled_ambassadors.py references initiate_paystack_transfer and sync_paystack_transfer_status; definitions and money-state semantics remain absent. Do not invent transitions or initiate a payout.",
     "Shop browser journeys pass, but Paystack sandbox checkout/webhooks and R2 object/header operations remain NOT_TESTED. Use only explicitly configured safe staging credentials; no live payments, seller payout, paid service or production data.",
     "Staging access needed: apply migrations/20261029_document_page_text.sql and migrations/20261029_request_observability.sql through controlled backup/restore, then verify schema and rollback/restore evidence.",
@@ -180,5 +180,5 @@
     "Keep release BLOCKED; do not deploy or alter production data until all release-scoped gates are closed and deployment is explicitly authorized."
   ],
   "current_main_commit": "7922fa0d27fb275382e9fa4f46bfe4f242acdcf3",
-  "verification_note": "Updated 2026-11-23. Exact PR #79 application-code/test head a7ef49122a69da11aec0db1ad42acbb3dd9f0785: Backend Shared Extension 45123976442 passed 106 tests (13 warnings); E2EE Chat Validation 45123976473 passed 16 tests (7 warnings) and built the frontend; E2EE Security Regression 45123976542 passed; Frontend Build 45123976511 passed 192 source/module + 5 offline Library tests, TypeScript, production Vite build and screen/offline/calling/PWA/launch-wiring audits; Release Browser/Cross-System Regression 45123976603 passed 111 PostgreSQL QA tests (0 failures, 3,557 warnings), responsive phone/tablet, Shop buyer/seller/admin, B2B browser-to-ledger, Study Hub offline lifecycle, generated-material replay and podcast audio Blob replay; PostgreSQL Backup Restore 45123976525 passed existing-database upgrade/data preservation and PostgreSQL 17 custom-format restore. Seventeen triggered workflows succeeded; StudyHub Library Flow 45123976623 was skipped by its path condition and is not counted as passing. The /keys/backup POST/GET handlers were moved into e2ee_key_backup_routes.py and registered through route_registry.py at their original position; the Flask/SQLite tests preserve session scope, CSRF, endpoint/method, validation, persistence and response contracts. app.py is 5,715 lines with 45 inline route decorators; frontend/src/App.tsx remains 2,066 lines. No UI, API behavior, database schema, E2EE protocol, provider, live payment, production data or deployment changed. Remaining ambassador transfer semantics, provider staging, retrieval/citation, independent B2B viewability, external monitoring, human Home/PWA sign-off and deployment authorization remain open. Release remains BLOCKED."
+  "verification_note": "Updated 2026-11-24. Exact PR #79 application-code/test head 9afc1eee078042c765d3ea48eb25ec78173830df: Backend Shared Extension 45338511183 passed 110 tests (13 warnings), including Python compilation and four new chat-read route contracts; Frontend Build 45338511029 passed 192 source/module + 5 offline Library tests, TypeScript, production Vite build and screen/offline/calling/PWA/launch-wiring audits; E2EE Chat Validation 45338510869 and E2EE Security Regression 45338510763 passed; PostgreSQL Backup Restore 45338510877 passed existing-database upgrade/data preservation and PostgreSQL 17 custom-format restore. Sixteen triggered workflows succeeded; StudyHub Library Flow 45338510981 was SKIPPED by path condition; Release Browser/Cross-System Regression 45338511095 remained IN_PROGRESS at documentation time. The two existing base-chat GET handlers moved into chat_read_routes.py and are registered after create_chat at their original position; route names, methods, auth, membership, serializers, before_id, query ordering, 50-message limit and response order are covered by four Flask tests. app.py is 5,704 lines with 45 @app.route and 22 method-specific decorators (67 total); frontend/src/App.tsx remains 2,066 lines. No UI, navigation, styling, database schema, message-write, realtime, E2EE, payment, provider, production data or deployment behavior changed. Previous-head Shop/B2B/browser evidence is not treated as current-head PASS while Release Browser remains in progress. Release remains BLOCKED."
 }
