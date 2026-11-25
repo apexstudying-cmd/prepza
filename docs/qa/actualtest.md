@@ -1,3 +1,9 @@
+## 2026-11-25 — exact-head release regression completed
+
+PR #79 head `25ed940ce10794e3a08a7bc0a83600fce04802dc` now has a completed exact-head GitHub Actions inventory: 18 workflow runs, 17 `success` and one path-conditioned `SKIPPED` (`StudyHub Library Flow`, [45339168749](https://github.com/apexstudying-cmd/prepza/actions/runs/45339168749)). The previously pending Release Browser/Cross-System Regression [45339168790](https://github.com/apexstudying-cmd/prepza/actions/runs/45339168790) completed successfully. Frontend Build [45339168848](https://github.com/apexstudying-cmd/prepza/actions/runs/45339168848), Backend Shared Extension [45339168679](https://github.com/apexstudying-cmd/prepza/actions/runs/45339168679), E2EE Chat [45339168492](https://github.com/apexstudying-cmd/prepza/actions/runs/45339168492), E2EE Security [45339168602](https://github.com/apexstudying-cmd/prepza/actions/runs/45339168602), and PostgreSQL Backup Restore [45339168546](https://github.com/apexstudying-cmd/prepza/actions/runs/45339168546) also succeeded. The exact-head browser/cross-system gate is now PASS; earlier `9afc1eee` IN_PROGRESS records are superseded.
+
+Main is one commit ahead by ancestry, but its only changed file (`tests/test_library_screen_module_contract.py`) has the same blob SHA on main and PR #79, so the correction is already present in PR content. No production source, UI, business rule, provider or deployment operation changed in this evidence reconciliation. Architecture remains IN_PROGRESS and release remains BLOCKED by the outstanding gates.
+
 # Prepza — Actual QA Test Record
 
 ## Post-merge verification — 2026-10-31 (Social follow screen extraction)
