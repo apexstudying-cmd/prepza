@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "last_verified_date": "2026-11-25",
-  "last_verified_commit": "25ed940ce10794e3a08a7bc0a83600fce04802dc",
+  "last_verified_date": "2026-11-26",
+  "last_verified_commit": "04b668ec274a26ed96f21b2f566c587b64f35bc1",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -78,12 +78,12 @@
     {
       "id": "cross_system_journeys",
       "status": "PASS",
-      "evidence": "PASS on exact PR #79 head 25ed940ce10794e3a08a7bc0a83600fce04802dc (2026-11-25): 18 associated GitHub Actions runs are terminal; 17 succeeded and StudyHub Library Flow 45339168749 was skipped by path condition. Release Browser/Cross-System Regression 45339168790 completed successfully. Frontend Build 45339168848, Backend Shared Extension 45339168679, E2EE Chat 45339168492, E2EE Security 45339168602 and PostgreSQL Backup Restore 45339168546 also succeeded."
+      "evidence": "PASS on exact PR #79 head 04b668ec274a26ed96f21b2f566c587b64f35bc1 (2026-11-26): 18 associated workflow runs are terminal; 17 succeeded and StudyHub Library Flow 45767179911 was skipped by its path condition. Release Browser/Cross-System Regression 45767179679 completed successfully. Frontend Build 45767179836, Backend Shared Extension 45767179685, E2EE Chat 45767179680, E2EE Security 45767179939, AI generation architecture 45767179749, B2B contract validation 45767179718 and PostgreSQL Backup Restore 45767179765 also succeeded. The skipped workflow is not counted as a pass."
     },
     {
       "id": "ci_release_workflows",
       "status": "PASS",
-      "evidence": "PASS on exact PR #79 head 25ed940ce10794e3a08a7bc0a83600fce04802dc (2026-11-25): 18 associated GitHub Actions runs are terminal; 17 succeeded and StudyHub Library Flow 45339168749 was skipped by path condition. Release Browser/Cross-System Regression 45339168790 completed successfully. Frontend Build 45339168848, Backend Shared Extension 45339168679, E2EE Chat 45339168492, E2EE Security 45339168602 and PostgreSQL Backup Restore 45339168546 also succeeded."
+      "evidence": "PASS on exact PR #79 head 04b668ec274a26ed96f21b2f566c587b64f35bc1 (2026-11-26): 18 associated workflow runs are terminal; 17 succeeded and StudyHub Library Flow 45767179911 was skipped by its path condition. Release Browser/Cross-System Regression 45767179679 completed successfully. Frontend Build 45767179836, Backend Shared Extension 45767179685, E2EE Chat 45767179680, E2EE Security 45767179939, AI generation architecture 45767179749, B2B contract validation 45767179718 and PostgreSQL Backup Restore 45767179765 also succeeded. The skipped workflow is not counted as a pass."
     },
     {
       "id": "existing_database_migration",
@@ -93,7 +93,7 @@
     {
       "id": "clean_full_regression",
       "status": "PASS",
-      "evidence": "PASS on exact PR #79 head 25ed940ce10794e3a08a7bc0a83600fce04802dc (2026-11-25): 18 associated GitHub Actions runs are terminal; 17 succeeded and StudyHub Library Flow 45339168749 was skipped by path condition. Release Browser/Cross-System Regression 45339168790 completed successfully. Frontend Build 45339168848, Backend Shared Extension 45339168679, E2EE Chat 45339168492, E2EE Security 45339168602 and PostgreSQL Backup Restore 45339168546 also succeeded."
+      "evidence": "PASS on exact PR #79 head 04b668ec274a26ed96f21b2f566c587b64f35bc1 (2026-11-26): 18 associated workflow runs are terminal; 17 succeeded and StudyHub Library Flow 45767179911 was skipped by its path condition. Release Browser/Cross-System Regression 45767179679 completed successfully. Frontend Build 45767179836, Backend Shared Extension 45767179685, E2EE Chat 45767179680, E2EE Security 45767179939, AI generation architecture 45767179749, B2B contract validation 45767179718 and PostgreSQL Backup Restore 45767179765 also succeeded. The skipped workflow is not counted as a pass."
     },
     {
       "id": "b2b_monetization_integrity",
