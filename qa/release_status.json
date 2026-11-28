@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "last_verified_date": "2026-11-26",
-  "last_verified_commit": "04b668ec274a26ed96f21b2f566c587b64f35bc1",
+  "last_verified_date": "2026-11-27",
+  "last_verified_commit": "7e4d61effb33c0fe8ab40b8d17c4f811c265e638",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
@@ -78,12 +78,12 @@
     {
       "id": "cross_system_journeys",
       "status": "PASS",
-      "evidence": "PASS on exact PR #79 head 04b668ec274a26ed96f21b2f566c587b64f35bc1 (2026-11-26): 18 associated workflow runs are terminal; 17 succeeded and StudyHub Library Flow 45767179911 was skipped by its path condition. Release Browser/Cross-System Regression 45767179679 completed successfully. Frontend Build 45767179836, Backend Shared Extension 45767179685, E2EE Chat 45767179680, E2EE Security 45767179939, AI generation architecture 45767179749, B2B contract validation 45767179718 and PostgreSQL Backup Restore 45767179765 also succeeded. The skipped workflow is not counted as a pass."
+      "evidence": "Exact PR #79 head 7e4d61effb33c0fe8ab40b8d17c4f811c265e638 (2026-11-27): 18 associated workflow runs are terminal; 17 succeeded and StudyHub Library Flow 45954167514 was skipped by its path condition (not counted as PASS). Release Browser/Cross-System Regression 45954167402, Frontend Build 45954167453, Backend Shared Extension 45954167716, E2EE Chat 45954167361, E2EE Security 45954167343, PostgreSQL Backup Restore 45954167559, AI generation 45954167358, B2B contract 45954167377, Admin Route 45954167344, Student Contract 45954167579, Student Frontend 45954167524, Academic Catalog 45954167544, Study Hub Runtime 45954167407, Study navigation 45954167373, AI economics 45954167383, Prepza Control API 45954167469 and Kokoro 45954167541 all completed successfully."
     },
     {
       "id": "ci_release_workflows",
       "status": "PASS",
-      "evidence": "PASS on exact PR #79 head 04b668ec274a26ed96f21b2f566c587b64f35bc1 (2026-11-26): 18 associated workflow runs are terminal; 17 succeeded and StudyHub Library Flow 45767179911 was skipped by its path condition. Release Browser/Cross-System Regression 45767179679 completed successfully. Frontend Build 45767179836, Backend Shared Extension 45767179685, E2EE Chat 45767179680, E2EE Security 45767179939, AI generation architecture 45767179749, B2B contract validation 45767179718 and PostgreSQL Backup Restore 45767179765 also succeeded. The skipped workflow is not counted as a pass."
+      "evidence": "Exact PR #79 head 7e4d61effb33c0fe8ab40b8d17c4f811c265e638 (2026-11-27): 18 associated workflow runs are terminal; 17 succeeded and StudyHub Library Flow 45954167514 was skipped by its path condition (not counted as PASS). Release Browser/Cross-System Regression 45954167402, Frontend Build 45954167453, Backend Shared Extension 45954167716, E2EE Chat 45954167361, E2EE Security 45954167343, PostgreSQL Backup Restore 45954167559, AI generation 45954167358, B2B contract 45954167377, Admin Route 45954167344, Student Contract 45954167579, Student Frontend 45954167524, Academic Catalog 45954167544, Study Hub Runtime 45954167407, Study navigation 45954167373, AI economics 45954167383, Prepza Control API 45954167469 and Kokoro 45954167541 all completed successfully."
     },
     {
       "id": "existing_database_migration",
@@ -93,7 +93,7 @@
     {
       "id": "clean_full_regression",
       "status": "PASS",
-      "evidence": "PASS on exact PR #79 head 04b668ec274a26ed96f21b2f566c587b64f35bc1 (2026-11-26): 18 associated workflow runs are terminal; 17 succeeded and StudyHub Library Flow 45767179911 was skipped by its path condition. Release Browser/Cross-System Regression 45767179679 completed successfully. Frontend Build 45767179836, Backend Shared Extension 45767179685, E2EE Chat 45767179680, E2EE Security 45767179939, AI generation architecture 45767179749, B2B contract validation 45767179718 and PostgreSQL Backup Restore 45767179765 also succeeded. The skipped workflow is not counted as a pass."
+      "evidence": "Exact PR #79 head 7e4d61effb33c0fe8ab40b8d17c4f811c265e638 (2026-11-27): 18 associated workflow runs are terminal; 17 succeeded and StudyHub Library Flow 45954167514 was skipped by its path condition (not counted as PASS). Release Browser/Cross-System Regression 45954167402, Frontend Build 45954167453, Backend Shared Extension 45954167716, E2EE Chat 45954167361, E2EE Security 45954167343, PostgreSQL Backup Restore 45954167559, AI generation 45954167358, B2B contract 45954167377, Admin Route 45954167344, Student Contract 45954167579, Student Frontend 45954167524, Academic Catalog 45954167544, Study Hub Runtime 45954167407, Study navigation 45954167373, AI economics 45954167383, Prepza Control API 45954167469 and Kokoro 45954167541 all completed successfully."
     },
     {
       "id": "b2b_monetization_integrity",
