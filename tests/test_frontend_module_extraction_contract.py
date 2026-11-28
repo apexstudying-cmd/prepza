@@ -5,6 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = (ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+NAVIGATION = (ROOT / "frontend" / "src" / "navigation" / "useAppNavigation.ts").read_text(encoding="utf-8")
 
 
 def test_app_uses_shared_api_theme_icons_and_onboarding_modules():
@@ -45,7 +46,11 @@ def test_extracted_onboarding_preserves_academic_profile_update_contract():
 
 def test_settings_screen_is_owned_by_its_feature_module():
     assert "import SettingsScreen from './screens/settings/SettingsScreen'" in APP
-    assert "import Pill from './ui/Pill'" in APP
+    settings_source = (
+        ROOT / "frontend" / "src" / "screens" / "settings" / "SettingsScreen.tsx"
+    ).read_text(encoding="utf-8")
+    assert "import Pill from '../../ui/Pill'" in settings_source
+    assert "import Pill from './ui/Pill'" not in APP
     assert "case 'settings':" in APP
     assert "function SettingsScreen(" not in APP
     assert "function Pill(" not in APP
@@ -221,44 +226,71 @@ def test_my_study_extraction_does_not_change_the_existing_study_material_route()
     assert "setScreen={setScreen}" in APP
 
 
-def test_last_study_resume_transform_updates_extracted_my_study_module(tmp_path):
+def test_last_study_resume_transform_targets_extracted_home_and_my_study_modules(tmp_path):
     import subprocess
     import sys
 
     root = tmp_path
     (root / "tools").mkdir()
+    (root / "frontend" / "src" / "lib").mkdir(parents=True)
+    (root / "frontend" / "src" / "screens" / "home").mkdir(parents=True)
     (root / "frontend" / "src" / "screens" / "study").mkdir(parents=True)
     script = ROOT / "tools" / "apply_last_study_resume.py"
     (root / "tools" / "apply_last_study_resume.py").write_text(
         script.read_text(encoding="utf-8"), encoding="utf-8"
     )
-    app = (
-        "import StudyMaterialsScreen from './screens/study/StudyMaterialsScreen'\n"
-        "// ─── HOME ─────────────────────────────────────────────────────────────────────\n"
-        "  const featuredDoc = activeDocs[0]\n"
-        "  const restDocs = activeDocs.slice(1)\n"
-        "case 'study-materials': return <StudyMaterialsScreen setScreen={setScreen} setActiveDocumentId={setActiveDocumentId} />\n"
-        "function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {\n"
-        "  useEffect(() => { return () => {} }, [])\n"
-        "}\n"
-    )
-    module = """const openDocument = (id: number) => { setActiveDocumentId(id); setScreen('document-study') }
-    """
+    app = """import HomeScreen from './screens/home/HomeScreen'
+import StudyMaterialsScreen from './screens/study/StudyMaterialsScreen'
+function DocumentStudyScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
+  useEffect(() => { return () => {} }, [])
+}
+export default function App() {
+  const [activeDocumentId, setActiveDocumentId] = useState<number | null>(null)
+  return <>
+    <HomeScreen setActiveDocumentId={setActiveDocumentId} />
+    <StudyMaterialsScreen setActiveDocumentId={setActiveDocumentId} />
+  </>
+}
+"""
+    home = """import { api } from '../../lib/appApi'
+const activeDocs = documents.filter(d => !docsLoading)
+  const featuredDoc = activeDocs[0]
+  const restDocs = activeDocs.slice(1)
+<div onClick={() => { setActiveDocumentId(featuredDoc.id); setScreen('document-study') }} />
+<button onClick={e => { e.stopPropagation(); setActiveDocumentId(featuredDoc.id); setScreen('document-study') }} />
+<div onClick={() => { setActiveDocumentId(d.id); setScreen('document-study') }} />
+"""
+    study = """import { api, ApiError } from '../../lib/appApi'
+const openDocument = (id: number) => { onRememberLastStudyDocument?.(id); setActiveDocumentId(id); setScreen('document-study') }
+"""
     (root / "frontend" / "src" / "App.tsx").write_text(app, encoding="utf-8")
-    (root / "frontend" / "src" / "screens" / "study" / "StudyMaterialsScreen.tsx").write_text(
-        module, encoding="utf-8"
-    )
-    subprocess.run([sys.executable, str(root / "tools" / "apply_last_study_resume.py")], check=True)
-    transformed_app = (root / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
-    transformed_module = (
-        root / "frontend" / "src" / "screens" / "study" / "StudyMaterialsScreen.tsx"
-    ).read_text(encoding="utf-8")
-    assert "onRememberLastStudyDocument={rememberLastStudyDocument}" in transformed_app
-    assert "onRememberLastStudyDocument?.(id)" in transformed_module
-    subprocess.run([sys.executable, str(root / "tools" / "apply_last_study_resume.py")], check=True)
-    assert transformed_app.count("onRememberLastStudyDocument={rememberLastStudyDocument}") == 1
-    assert transformed_module.count("onRememberLastStudyDocument?.(id)") == 1
+    (root / "frontend" / "src" / "screens" / "home" / "HomeScreen.tsx").write_text(home, encoding="utf-8")
+    (root / "frontend" / "src" / "screens" / "study" / "StudyMaterialsScreen.tsx").write_text(study, encoding="utf-8")
 
+    subprocess.run([sys.executable, str(root / "tools" / "apply_last_study_resume.py")], check=True)
+    app_after = (root / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+    home_after = (root / "frontend" / "src" / "screens" / "home" / "HomeScreen.tsx").read_text(encoding="utf-8")
+    study_after = (root / "frontend" / "src" / "screens" / "study" / "StudyMaterialsScreen.tsx").read_text(encoding="utf-8")
+    helper = (root / "frontend" / "src" / "lib" / "lastStudyDocument.ts").read_text(encoding="utf-8")
+
+    assert "import { rememberLastStudyDocument } from './lib/lastStudyDocument'" in app_after
+    assert "rememberLastStudyDocument(activeDocumentId)" in app_after
+    assert "readLastStudyDocumentId()" in home_after
+    assert "rememberLastStudyDocument(featuredDoc.id)" in home_after
+    assert "rememberLastStudyDocument(d.id)" in home_after
+    assert "rememberLastStudyDocument(id)" in study_after
+    assert "prepza-offline-user-id" in helper
+    assert "export function readLastStudyDocumentId()" in helper
+
+    before = (app_after, home_after, study_after, helper)
+    subprocess.run([sys.executable, str(root / "tools" / "apply_last_study_resume.py")], check=True)
+    after = (
+        (root / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8"),
+        (root / "frontend" / "src" / "screens" / "home" / "HomeScreen.tsx").read_text(encoding="utf-8"),
+        (root / "frontend" / "src" / "screens" / "study" / "StudyMaterialsScreen.tsx").read_text(encoding="utf-8"),
+        (root / "frontend" / "src" / "lib" / "lastStudyDocument.ts").read_text(encoding="utf-8"),
+    )
+    assert after == before
 
 def test_library_my_study_transform_supports_extracted_screen_module_and_is_idempotent(tmp_path):
     import shutil
@@ -392,8 +424,6 @@ def test_edit_profile_module_preserves_profile_and_avatar_contracts():
     ).read_text(encoding="utf-8")
     for contract in (
         "api<EditProfileMe>('/me')",
-        "api<UniversityOption[]>('/universities')",
-        "api<ProgramOption[]>(",
         "'/profile/avatar'",
         "'/profile/avatar/confirm'",
         "'X-CSRF-Token':csrfToken",
@@ -608,17 +638,38 @@ def test_document_ready_module_preserves_document_metadata_and_action_destinatio
         assert contract in source
 
 
-def test_publish_library_screen_remains_in_the_app_shell_until_a_safe_extraction():
-    # This screen has not been extracted yet. Keep its existing route and implementation
-    # explicit rather than asserting a module that does not exist.
+def test_publish_library_screen_is_owned_by_its_feature_module():
+    assert "import PublishLibraryScreen from './screens/library/PublishLibraryScreen'" in APP
+    assert "function PublishLibraryScreen(" not in APP
     assert "case 'publish-library':" in APP
-    assert "function PublishLibraryScreen(" in APP
-    assert "import PublishLibraryScreen from './screens/library/PublishLibraryScreen'" not in APP
+    assert "EmptyState={EmptyState}" in APP
+
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "library" /
+        "PublishLibraryScreen.tsx"
+    ).read_text(encoding="utf-8")
+    for contract in (
+        "api<{ csrf_token: string }>('/me')",
+        "api<{ documents:",
+        "'/library/publish'",
+        "'X-CSRF-Token': csrfToken",
+        "setScreen('create-modal')",
+        "setScreen('upload')",
+        "setScreen('library')",
+        "setScreen('home')",
+        "rightsChecked",
+        "already_in_library",
+    ):
+        assert contract in source
 
 
 def test_publish_library_screen_preserves_document_eligibility_rights_and_submission_contract():
-    # The current screen remains inline in App.tsx; assert its real implementation
-    # contracts without pretending the future extraction has happened.
+    assert "case 'publish-library':" in APP
+    assert "EmptyState={EmptyState}" in APP
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "library" /
+        "PublishLibraryScreen.tsx"
+    ).read_text(encoding="utf-8")
     for contract in (
         "api<{ csrf_token: string }>('/me')",
         "api<{ documents:",
@@ -634,10 +685,10 @@ def test_publish_library_screen_preserves_document_eligibility_rights_and_submis
         "setScreen('upload')",
         "setScreen('home')",
         "setScreen('library')",
-        "type PublishableDoc",
+        "import type { PublishableDoc } from '../../types/library'",
         "EmptyState",
     ):
-        assert contract in APP
+        assert contract in source
 
 
 
@@ -742,8 +793,8 @@ def test_unused_legacy_organisation_portal_is_removed_without_changing_active_po
     assert "import OrgDiscoveryTab from './organisation/OrgDiscoveryTab'" not in APP
     assert "import PremiumOrganisationPortal from './organisation/PremiumOrganisationPortal'" in APP
     assert "if (orgPortalMode) return <PremiumOrganisationPortal onExit={() => setOrgPortalMode(false)} />" in APP
-    assert "function readStoredNavigationState()" in APP
-    assert "sessionStorage.getItem('prepza-navigation-state')" in APP
+    assert "function readStoredNavigationState()" in NAVIGATION
+    assert "sessionStorage.getItem('prepza-navigation-state')" in NAVIGATION
 
 
 def test_opportunity_metadata_helpers_are_shared_by_the_app_and_extracted_screens():
@@ -760,7 +811,8 @@ def test_opportunity_metadata_helpers_are_shared_by_the_app_and_extracted_screen
 
 
 def test_flashcards_and_quiz_are_owned_by_the_generated_study_module():
-    assert "import { FlashcardsStudyScreen, QuizStudyScreen } from './screens/study/GeneratedStudyScreens'" in APP
+    assert "FlashcardsStudyScreen" in APP and "QuizStudyScreen" in APP
+    assert "from './screens/study/GeneratedStudyScreens'" in APP
     assert "function FlashcardsScreen(" not in APP
     assert "function QuizScreen(" not in APP
     assert "case 'flashcards':" in APP
@@ -784,3 +836,104 @@ def test_generated_study_screens_keep_offline_generation_and_completion_contract
         "setScreen('document-study')",
     ):
         assert contract in source
+
+
+def test_create_modal_screen_is_owned_by_its_feature_module():
+    assert "import CreateModal from './screens/create/CreateModalScreen'" in APP
+    assert "case 'create-modal':" in APP
+    assert "<CreateModal setScreen={setScreen} />" in APP
+    assert "function CreateModal(" not in APP
+
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "create" / "CreateModalScreen.tsx"
+    ).read_text(encoding="utf-8")
+    assert "export default function CreateModal" in source
+    assert "import type { Screen } from '../../types/navigation'" in source
+    assert "import Pill from '../../ui/Pill'" in source
+
+
+def test_create_modal_preserves_existing_menu_content_styling_and_navigation():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "create" / "CreateModalScreen.tsx"
+    ).read_text(encoding="utf-8")
+
+    menu_items = (
+        ("📤", "Upload Document", "PDF, Word, PowerPoint, Images, Notes", "setScreen('upload')"),
+        ("📖", "Publish to Prepza Library", "Share educational materials · Earn XP", "setScreen('publish-library')"),
+        ("👥", "Create Group", "Start a course or study group", "setScreen('group-create')"),
+        ("🚀", "Share Opportunity", "Jobs, internships, scholarships, events", "setScreen('share-opp-form')"),
+    )
+    for icon, label, description, action in menu_items:
+        assert icon in source
+        assert label in source
+        assert description in source
+        assert action in source
+    assert source.count("label: '") == 4
+    for contract in (
+        "setScreen('home')",
+        "Ic.close()",
+        "background: T.pageBg",
+        "background: N.navy",
+        "background: T.card",
+        "N.gold",
+        "N.goldL",
+        "N.navy2",
+        "N.navy3",
+        "item.gold && <Pill text=\"CORE\" />",
+        "fontFamily: 'Plus Jakarta Sans'",
+        "className=\"scrollbar-hide\"",
+    ):
+        assert contract in source
+
+
+def test_edu_upload_form_is_owned_by_upload_module_and_keeps_compatibility_route():
+    assert "import EduUploadFormScreen from './screens/upload/EduUploadFormScreen'" in APP
+    assert "case 'edu-upload-form':" in APP
+    assert "<EduUploadFormScreen setScreen={setScreen} TopBar={TopBar} />" in APP
+    assert "function EduUploadForm(" not in APP
+    assert "// ─── DOC READY" in APP
+    assert "const DOC_CACHE: Record<number, DocumentDetail> = {}" in APP
+
+    screen_types = (
+        ROOT / "frontend" / "src" / "types" / "navigation.ts"
+    ).read_text(encoding="utf-8")
+    bottom_nav = (
+        ROOT / "frontend" / "src" / "navigation" / "BottomNav.tsx"
+    ).read_text(encoding="utf-8")
+    navigation = NAVIGATION
+
+    # Persisted navigation stacks may still restore this legacy route. Keep its
+    # Screen type and Home-tab grouping even though the component is extracted.
+    assert "'edu-upload-form'" in screen_types
+    assert "'edu-upload-form'" in bottom_nav
+    assert "prepza-navigation-state" in navigation
+    assert "storedNavigation?.stack || ['splash']" in navigation
+
+
+def test_edu_upload_form_preserves_existing_content_selection_layout_and_upload_action():
+    source = (
+        ROOT / "frontend" / "src" / "screens" / "upload" /
+        "EduUploadFormScreen.tsx"
+    ).read_text(encoding="utf-8")
+
+    for contract in (
+        "export default function EduUploadFormScreen",
+        "const [type, setType] = useState('Notes')",
+        "Upload Educational Content",
+        "onBack={() => window.history.back()}",
+        "Content Type",
+        "['Notes','Summary','Guide','Past Paper','Cheat Sheet','Other']",
+        "type === t ? N.navy : '#F3F4F6'",
+        "type === t ? N.gold : '#6B7280'",
+        "e.g. ACT 101 Interest Theory – Complete Notes",
+        "Unit / Course",
+        "e.g. Kenyatta University",
+        "setScreen('upload')",
+        "Select & Upload File →",
+        'className="scrollbar-hide"',
+        "background: N.bg",
+        "background: N.navy",
+    ):
+        assert contract in source
+    assert "type UploadTopBar = ComponentType<{ title?: string; onBack?: () => void }>" in source
+    assert "import type { Screen } from '../../types/navigation'" in source

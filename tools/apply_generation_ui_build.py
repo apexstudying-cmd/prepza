@@ -9,9 +9,7 @@ runpy.run_path(str(ROOT / 'tools' / 'apply_study_generation_polish.py'))
 APP = ROOT / 'frontend' / 'src' / 'App.tsx'
 GEN = ROOT / 'frontend' / 'src' / 'generation' / 'GenerationScreens.tsx'
 STUDY = ROOT / 'frontend' / 'src' / 'screens' / 'study' / 'GeneratedStudyScreens.tsx'
-IMPORT = "import { FlashcardsGenerationScreen, SummaryGenerationScreen } from './generation/GenerationScreens'\n"
-STUDY_IMPORT = "import { PracticeQuestionsGenerationScreen, MindMapGenerationScreen } from './generation/StudyGenerationScreensClean'\n"
-GENERATED_STUDY_IMPORT = "import { FlashcardsGenerationScreen } from '../../generation/GenerationScreens'\nimport { PracticeQuestionsGenerationScreen } from '../../generation/StudyGenerationScreensClean'\n"
+GENERATED_STUDY_IMPORT = "import { FlashcardsGenerationScreen, SummaryGenerationScreen } from '../../generation/GenerationScreens'\nimport { PracticeQuestionsGenerationScreen, MindMapGenerationScreen } from '../../generation/StudyGenerationScreensClean'\n"
 
 text = APP.read_text(encoding='utf-8')
 original_text = text
@@ -24,13 +22,6 @@ if GENERATED_STUDY_IMPORT not in study_text:
 # GenerationScreens.tsx is already the current source-of-truth implementation.
 # Do not rewrite it during every build; repeated text transforms were producing
 # transient TypeScript syntax corruption in CI.
-
-if IMPORT not in text:
-    first_import = text.find("\n", text.find("import "))
-    text = text[: first_import + 1] + IMPORT + text[first_import + 1 :]
-if STUDY_IMPORT not in text:
-    first_import = text.find("\n", text.find("import "))
-    text = text[: first_import + 1] + STUDY_IMPORT + text[first_import + 1 :]
 
 old_palette = """const C = {
   navy: '#0B1437',
@@ -76,12 +67,7 @@ function FlashcardsScreen({ setScreen, activeDocumentId }: { setScreen: (s: Stud
 }
 
 '''),
-    ('// ─── SUMMARY', 'function ExploreScreen(', '''// ─── SUMMARY
-function SummaryScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
-  return <div style={{ colorScheme: 'var(--prepza-generation-color-scheme, light)', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><SummaryGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
-}
 
-'''),
 ]
 
 for start_marker, end_marker, replacement in replacements:
@@ -114,10 +100,7 @@ study_text = study_text.replace(
     "return <PracticeQuestionsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />",
     "return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><PracticeQuestionsGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>"
 )
-text = text.replace(
-    "return <MindMapGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} />",
-    "return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><MindMapGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>"
-)
+# Summary and Mind Map route wrappers are committed in GeneratedStudyScreens.tsx.
 
 def replace_section(source: str, start_marker: str, replacement: str, aliases: tuple[str, ...] = ()):
     markers = (start_marker,) + aliases
@@ -144,13 +127,6 @@ function QuizScreen({ setScreen, activeDocumentId }: { setScreen: (s: StudyMater
 }
 
 ''')
-text = replace_section(text, '// ─── MIND MAP', '''// ─── MIND MAP
-function MindMapScreen({ setScreen, activeDocumentId }: { setScreen: (s: Screen) => void; activeDocumentId: number | null }) {
-  return <div style={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', background: 'var(--prepza-generation-page, #F8F9FC)' }}><MindMapGenerationScreen setScreen={setScreen} activeDocumentId={activeDocumentId} /></div>
-}
-
-''', aliases=('// ─── MINDMAP',))
-
 # Remove the actual document-study interstitial, not merely its label.
 # The study screen itself already fetches the document and renders a usable shell,
 # so navigation is immediate while the document request resolves.
@@ -175,6 +151,10 @@ if 'function ExploreScreen(' in original_text and 'function ExploreScreen(' not 
 
 # PodcastPlayerScreen is an extracted feature module. Preserve its implementation;
 # the legacy App.tsx generation transform must never overwrite it.
+
+for required in ('export function SummaryStudyScreen(', 'export function MindMapStudyScreen('):
+    if required not in study_text:
+        raise SystemExit(f'Generated study module boundary missing: {required}')
 
 APP.write_text(text, encoding='utf-8')
 if study_text != original_study_text:

@@ -32,3 +32,18 @@ def test_ambassador_screen_preserves_existing_api_and_navigation_contract():
     assert "export default function AmbassadorScreen(" in source
     assert "import { api } from '../../lib/appApi'" in source
     assert "import { useTheme } from '../../theme/theme'" in source
+
+
+def test_ambassador_payout_form_collects_required_paystack_recipient_names():
+    source = SCREEN.read_text(encoding="utf-8")
+    for contract in (
+        "const [recipientFirstName, setRecipientFirstName] = useState('')",
+        "const [recipientLastName, setRecipientLastName] = useState('')",
+        "if (!recipientFirstName.trim() || !recipientLastName.trim())",
+        "recipient_first_name: recipientFirstName.trim()",
+        "recipient_last_name: recipientLastName.trim()",
+        "placeholder='First name'",
+        "placeholder='Last name'",
+        "payout_destination: payoutPhone.trim()",
+    ):
+        assert contract in source

@@ -1,24 +1,24 @@
 {
   "version": 1,
-  "last_verified_date": "2026-11-14",
-  "last_verified_commit": "edcfad751e4f3774e297219ecbb4c22cc31ef854",
+  "last_verified_date": "2026-11-27",
+  "last_verified_commit": "7e4d61effb33c0fe8ab40b8d17c4f811c265e638",
   "release_status": "BLOCKED",
   "release_rule": "Freeze is blocked unless every release-scoped gate is PASS, intentionally NOT_RELEASED, or explicitly approved as an external-provider gate; no NOT_TESTED/IN_PROGRESS/FAIL/GRAY gate may remain.",
   "gates": [
     {
       "id": "database_alembic",
       "status": "PASS",
-      "evidence": "PASS on exact PR #79 candidate edcfad751e4f3774e297219ecbb4c22cc31ef854: Release Browser run 43566535290 built the production image, started disposable PostgreSQL 17/Redis, applied Alembic migrations and exercised the controlled SQL migration ledger."
+      "evidence": "PASS on exact PR #79 code/test head 2627b21020b2841fc9ab8974ac6fca0581ad624b: Release Browser 44995164976 built the production image, started disposable PostgreSQL/Redis, applied Alembic migrations and exercised the controlled SQL migration ledger."
     },
     {
       "id": "authentication_session_csrf",
       "status": "PASS",
-      "evidence": "74-case local QA plus focused runtime coverage"
+      "evidence": "PASS on exact head 2627b21020b2841fc9ab8974ac6fca0581ad624b: Release Browser 44995164976 passed Shop buyer in-app contact with one injected stale-CSRF 403 followed by one successful retry; the retry only handles CSRF-specific 403 responses. Backend Shared Extension 44995164973 passed 102 tests."
     },
     {
       "id": "authorization_ownership",
       "status": "PASS",
-      "evidence": "74-case local QA"
+      "evidence": "The existing authorization/ownership contract remains PASS. On exact PR #79 code/test head 9afc1eee078042c765d3ea48eb25ec78173830df, four new Flask chat-read contracts additionally prove anonymous 401, membership-scoped conversation lookup/404, and existing detail/message serializers; Backend Shared Extension run 45338511183 passed 110 tests (13 warnings)."
     },
     {
       "id": "economics_entitlements",
@@ -43,7 +43,7 @@
     {
       "id": "e2ee_identity_lifecycle",
       "status": "PASS",
-      "evidence": "Backend identity runtime 4/4 and browser identity lifecycle green on dd5418a; current fc407aaa E2EE Security Regression and Release QA Trace also pass."
+      "evidence": "PASS on exact PR #79 code/test head a7ef49122a69da11aec0db1ad42acbb3dd9f0785: Backend Shared Extension 45123976442 passed 106 tests (13 warnings), including real Flask/SQLite /keys/backup session-scope, CSRF, validation, upload/download and registry contracts. E2EE Chat Validation 45123976473 passed 16 tests; E2EE Security Regression 45123976542 passed. The existing identity-registration and cryptographic protocol remain unchanged."
     },
     {
       "id": "shared_streak",
@@ -63,57 +63,62 @@
     {
       "id": "browser_study_hub_offline_lifecycle",
       "status": "PASS",
-      "evidence": "scripts/test_browser_study_hub_offline.py executed on main: visible activity, hidden-tab pause, 5-minute inactivity, fresh interaction, podcast playback exception, browser back/re-entry, offline accumulation, offline reload persistence, and reconnect reconciliation all passed."
+      "evidence": "PASS on exact head 2627b21020b2841fc9ab8974ac6fca0581ad624b: Release Browser 44995164976 verified local-first document open, activity pause/resume, offline reload persistence, reconnect reconciliation and podcast visibility/activity accounting."
     },
     {
       "id": "mobile_responsive_visual",
       "status": "PASS",
-      "evidence": "PASS on exact candidate edcfad751e4f3774e297219ecbb4c22cc31ef854, Release Browser 43566535290: phone-small 360x800, phone-standard 390x844 and tablet-portrait 768x1024 passed. Screenshot artifact 14102507070 (17 images) was reviewed for Home/Shop phone, Shop tablet, buyer message, seller listing and admin moderation. The Admin Platform floating control now clears the five-item bottom navigation and its browser assertion passes."
+      "evidence": "PASS on exact head 2627b21020b2841fc9ab8974ac6fca0581ad624b: Release Browser 44995164976 passed phone-small 360x800, phone-standard 390x844 and tablet-portrait 768x1024. Screenshot artifact 14742778901."
     },
     {
       "id": "storage_backup_restore",
       "status": "PASS",
-      "evidence": "PASS on exact candidate edcfad751e4f3774e297219ecbb4c22cc31ef854: PostgreSQL Backup Restore Rehearsal run 43566535421 passed both existing-database upgrade/data preservation and PostgreSQL 17 custom-format backup/restore. The restored database matched Alembic state, public-table count and sentinel data; the application smoke-tested against restored data."
+      "evidence": "PASS on exact head 2627b21020b2841fc9ab8974ac6fca0581ad624b, PostgreSQL Backup Restore 44995164982: populated-database upgrade/data preservation and PostgreSQL 17 custom-format backup/restore both passed."
     },
     {
       "id": "cross_system_journeys",
       "status": "PASS",
-      "evidence": "PASS on exact candidate edcfad751e4f3774e297219ecbb4c22cc31ef854, Release Browser 43566535290: Shop buyer browse/detail/save/report/direct-contact and encrypted in-app message; seller My Listings/pause/sold/paid listing form; admin approve/reject/report/payment review; B2B browser-to-ledger; 99 disposable PostgreSQL QA tests; online/offline Study Hub and generated-artifact replay all passed. Disposable services were cleaned up."
+      "evidence": "Exact PR #79 head 7e4d61effb33c0fe8ab40b8d17c4f811c265e638 (2026-11-27): 18 associated workflow runs are terminal; 17 succeeded and StudyHub Library Flow 45954167514 was skipped by its path condition (not counted as PASS). Release Browser/Cross-System Regression 45954167402, Frontend Build 45954167453, Backend Shared Extension 45954167716, E2EE Chat 45954167361, E2EE Security 45954167343, PostgreSQL Backup Restore 45954167559, AI generation 45954167358, B2B contract 45954167377, Admin Route 45954167344, Student Contract 45954167579, Student Frontend 45954167524, Academic Catalog 45954167544, Study Hub Runtime 45954167407, Study navigation 45954167373, AI economics 45954167383, Prepza Control API 45954167469 and Kokoro 45954167541 all completed successfully."
     },
     {
       "id": "ci_release_workflows",
       "status": "PASS",
-      "evidence": "PASS on exact PR #79 candidate edcfad751e4f3774e297219ecbb4c22cc31ef854: all 17 triggered workflows succeeded — Release Browser 43566535290, PostgreSQL Backup Restore 43566535421, Frontend Build 43566535402, Study Hub Runtime 43566535284, AI Economics 43566535360, Kokoro 43566535416, Admin Route 43566535271, Prepza Control API 43566535408, Backend Academic Catalog 43566535266, B2B Contract 43566535336, E2EE Security 43566535409, AI Generation 43566535269, E2EE Chat 43566535333, Student Frontend 43566535280, Backend Shared Extension 43566535270, Study Navigation 43566535264 and Student Contract 43566535275. StudyHub Library Flow 43566535404 was SKIPPED by path condition and is not counted as passing."
+      "evidence": "Exact PR #79 head 7e4d61effb33c0fe8ab40b8d17c4f811c265e638 (2026-11-27): 18 associated workflow runs are terminal; 17 succeeded and StudyHub Library Flow 45954167514 was skipped by its path condition (not counted as PASS). Release Browser/Cross-System Regression 45954167402, Frontend Build 45954167453, Backend Shared Extension 45954167716, E2EE Chat 45954167361, E2EE Security 45954167343, PostgreSQL Backup Restore 45954167559, AI generation 45954167358, B2B contract 45954167377, Admin Route 45954167344, Student Contract 45954167579, Student Frontend 45954167524, Academic Catalog 45954167544, Study Hub Runtime 45954167407, Study navigation 45954167373, AI economics 45954167383, Prepza Control API 45954167469 and Kokoro 45954167541 all completed successfully."
     },
     {
       "id": "existing_database_migration",
       "status": "PASS",
-      "evidence": "PASS on exact candidate edcfad751e4f3774e297219ecbb4c22cc31ef854 in run 43566535421: a representative prior database at 20261005_chat_attach_source_doc was seeded with document/material data, upgraded to 20261030_shared_study_streak, and verified to preserve the document/material while adding nullable material FK, Shop payment-review schema and shared-streak tables. Disposable CI only."
+      "evidence": "PASS on exact head 2627b21020b2841fc9ab8974ac6fca0581ad624b, PostgreSQL Backup Restore 44995164982: representative prior-revision database upgraded from 20261005_chat_attach_source_doc to 20261030_shared_study_streak while preserving seeded document/material rows and verifying current schema relationships."
     },
     {
       "id": "clean_full_regression",
       "status": "PASS",
-      "evidence": "PASS on one exact SHA edcfad751e4f3774e297219ecbb4c22cc31ef854: Release Browser 43566535290 and PostgreSQL Backup Restore 43566535421 both checked out and asserted this exact SHA. Release Browser passed production image, Alembic/SQL ledger, phone/tablet, Shop buyer/seller/admin, B2B browser-to-ledger, 99 PostgreSQL QA tests, online/offline Study Hub and generated-artifact/podcast replay. No production system was touched."
+      "evidence": "Exact PR #79 head 7e4d61effb33c0fe8ab40b8d17c4f811c265e638 (2026-11-27): 18 associated workflow runs are terminal; 17 succeeded and StudyHub Library Flow 45954167514 was skipped by its path condition (not counted as PASS). Release Browser/Cross-System Regression 45954167402, Frontend Build 45954167453, Backend Shared Extension 45954167716, E2EE Chat 45954167361, E2EE Security 45954167343, PostgreSQL Backup Restore 45954167559, AI generation 45954167358, B2B contract 45954167377, Admin Route 45954167344, Student Contract 45954167579, Student Frontend 45954167524, Academic Catalog 45954167544, Study Hub Runtime 45954167407, Study navigation 45954167373, AI economics 45954167383, Prepza Control API 45954167469 and Kokoro 45954167541 all completed successfully."
     },
     {
       "id": "b2b_monetization_integrity",
       "status": "IN_PROGRESS",
-      "evidence": "IN_PROGRESS: exact candidate edcfad751e4f3774e297219ecbb4c22cc31ef854, Release Browser 43566535290 passed B2B browser-to-ledger checks for offscreen/offline no-billing, fresh visibility, lost-response UUID retry, rapid-click debounce, duplicate-click idempotency and report reconciliation. The backend still cannot independently prove the client's 50%-visible/1.5-second dwell condition; do not claim tamper-proof viewability or CPA/conversion billing."
+      "evidence": "Automated browser-to-ledger regression PASS on exact head 2627b21020b2841fc9ab8974ac6fca0581ad624b in Release Browser 44995164976: offscreen/offline no-charge, continuous-visibility qualification, lost-response UUID replay, duplicate-click protection and report reconciliation passed. Client-observed 50%-visible/1.5-second dwell remains not independently verified; do not claim tamper-proof viewability or CPA billing."
     },
     {
       "id": "shop_marketplace",
       "status": "IN_PROGRESS",
-      "evidence": "IN_PROGRESS: exact candidate edcfad751e4f3774e297219ecbb4c22cc31ef854, Release Browser 43566535290 passed buyer browse/detail/save/report/contact and encrypted in-app message, seller My Listings/pause/sold/KES 100 paid listing form, and admin approve/reject/report/payment review. Screenshot artifact 14102507070 was reviewed; Admin Platform control no longer overlaps the five-item navigation. The classifieds model is unchanged. Real Paystack sandbox checkout/webhooks and R2 object/header operations remain NOT_TESTED pending safe staging evidence."
+      "evidence": "Automated exact-head browser journeys PASS on 2627b21020b2841fc9ab8974ac6fca0581ad624b in Release Browser 44995164976: buyer browse/detail/save/report/direct contact and in-app stale-CSRF retry, seller listing/pause/sold and admin moderation/payment-review; phone/tablet checks passed. Live Paystack/R2 provider operations and human student UX sign-off remain NOT_TESTED."
     },
     {
       "id": "payment_recovery_idempotency",
       "status": "PASS",
-      "evidence": "GitHub Actions Release Browser and Cross-System Regression run 40502457332 on runtime commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015: full disposable PostgreSQL QA suite passed, including invalid Paystack signature rejection, temporary verification failure/retry, duplicate student webhook without duplicate entitlement extension, duplicate B2B refund replay, and two distinct same-amount refund events with replay deduplicated. The B2B browser-to-ledger step also passed with server-side rapid-click debounce and no extra advertiser debit. The overall release-browser workflow is still running its online/offline generated-artifact journey; this gate only records the recovery cases already completed."
+      "evidence": "PASS on exact head 2627b21020b2841fc9ab8974ac6fca0581ad624b: Release Browser 44995164976 passed 111 PostgreSQL QA tests, 0 failures, including signed webhook invalid-signature rejection, authoritative-verification retry, duplicate entitlement replay, lifecycle dispatch and browser callback reference/trxref/error handling. The browser callback is extracted into paystack_callback_routes.py with explicit late-bound sync; provider calls remain mocked and the webhook remains inline."
+    },
+    {
+      "id": "ambassador_transfer_integrity",
+      "status": "NOT_TESTED",
+      "evidence": "Mocked admin approve/sync and signed transfer-event delegation passed inside Release Browser 44479377175 (102 PostgreSQL QA tests). The production helpers initiate_paystack_transfer, sync_paystack_transfer_status and _apply_paystack_transfer_result are undefined in the current tree; history check at initial route commit 54108e732958c2907dab28b97082d9ba0717965c and parent a478144028dac084fd21d6fbdb047be29f7702f2 found no prior implementation. No provider transfer API, retry/idempotency behavior or failure/reversal money-state transition is tested. Do not infer transitions or initiate a payout."
     },
     {
       "id": "external_provider_verification",
       "status": "NOT_TESTED",
-      "evidence": "Runbook docs/qa/EXTERNAL_PROVIDER_VERIFICATION_2026-10-27.md documents safe procedures and existing mocks. No verified staging credentials or provider-side evidence has been recorded for Paystack sandbox checkout/webhooks, SES delivery, bounded real OpenAI generation, R2 operations, or configured audio/GPU provider. Do not use live payments or start billable GPU workloads without explicit approval."
+      "evidence": "NOT_TESTED: no verified staging credentials or provider-side evidence for Paystack sandbox checkout/transfers/webhooks, SES delivery, bounded real OpenAI generation, R2 operations, or configured audio/GPU provider. The ambassador transfer route seam is mocked in Release Browser 44479377175, but the production initiate/sync/apply helpers are absent and no transfer state transition or provider API call is verified."
     },
     {
       "id": "performance_400_users",
@@ -122,8 +127,8 @@
     },
     {
       "id": "documentation_audit",
-      "status": "IN_PROGRESS",
-      "evidence": "IN_PROGRESS: 14 November evidence sync records exact candidate edcfad751e4f3774e297219ecbb4c22cc31ef854, same-SHA migration/backup/restore and Release Browser results, Shop E2EE fixture setup and Admin Platform clearance. Broader audit remains open for staging/provider evidence, page-text/citation, external monitoring, B2B viewability and remaining architecture boundaries."
+      "status": "PASS",
+      "evidence": "PASS on exact PR #79 head 25ed940ce10794e3a08a7bc0a83600fce04802dc: Release Browser completed successfully and all associated workflow runs are terminal (17 success, one path-conditioned skip). QA and architecture records are reconciled to this head. Provider, retrieval/citation, monitoring, B2B viewability, human sign-off and deployment gates remain open."
     },
     {
       "id": "vps_or_render_deployment",
@@ -133,7 +138,7 @@
     {
       "id": "browser_study_hub_offline_content_artifacts",
       "status": "PASS",
-      "evidence": "PASS on exact candidate edcfad751e4f3774e297219ecbb4c22cc31ef854, Release Browser 43566535290: local-first PDF Blob, Study Hub visible/hidden/inactivity/podcast lifecycle, offline time/reconnect reconciliation, three-document/five-material cache, no offline generation POSTs, multiple-document replay and cached podcast audio Blob survived reload."
+      "evidence": "PASS on exact head 2627b21020b2841fc9ab8974ac6fca0581ad624b: Release Browser 44995164976 verified 12 canonical material GETs populated private local cache, Summary/Flashcards/Practice Questions/Mind Map replayed offline across three documents, podcast script/descriptor/audio Blob reopened offline, reload recovery and zero generation POSTs."
     },
     {
       "id": "admin_study_time_visibility",
@@ -162,17 +167,19 @@
     }
   ],
   "next_actions": [
-    "Architecture: continue the single draft PR #79. Map source-transform/runtime dependencies and add behavior-preservation contracts for active UploadScreen, UploadShareChoiceScreen and ProcessingScreen before extracting that connected flow. Then handle PublishLibrary and Subscription/Payment; preserve navigation, API, authorization and existing screen logic.",
-    "Architecture: after the remaining frontend boundaries, map and extract app.py document, Library, group, follow, notification, subscription/ambassador and base-chat route groups one tested boundary at a time. Do not extract unmounted legacy declarations merely to reduce line counts.",
-    "Home/PWA verification: rebuild the exact candidate locally, confirm splash/login/home brand marks use /icon-192.png, five Home Quick Actions remain Upload, My Study, Library, Morio and Shop, and inspect installed PWA/offline shell.",
+    "Exact PR #79 head 6f1ef09e15b1f0ae4bf059e70d86518c76be1f2a: all 17 triggered workflows succeeded; StudyHub Library Flow was SKIPPED by path condition. The base-chat read-route extraction and native document-reader routes are module-owned. Do not repeat those extractions. The remaining exact generated-material GET route in app.py depends on login/session, Document and GeneratedMaterial, _can_study_document, JSON decoding and private/shared scope-owner checks. Add runtime tests for owner-private, owner-shared, cohort-shared, foreign-private, removed document, wrong content and non-ready/empty payload before extracting that read endpoint. Generation POST routes remain coupled to quota, requested-material resolution, AI job recovery, usage accounting and asynchronous dispatch; map those services before moving them.",
+    "Next architecture slice: map remaining document/generation route and service dependencies, then add focused server-side permission, index-invalidation and citation contracts before extracting a cohesive boundary. Preserve existing API, authorization, CSRF, ownership, state, event ordering and response shapes.",
+    "Ambassador-transfer blocker: app.py calls _apply_paystack_transfer_result; admin_reconciled_ambassadors.py references initiate_paystack_transfer and sync_paystack_transfer_status; definitions and money-state semantics remain absent. Do not invent transitions or initiate a payout.",
+    "Shop browser journeys pass, but Paystack sandbox checkout/webhooks and R2 object/header operations remain NOT_TESTED. Use only explicitly configured safe staging credentials; no live payments, seller payout, paid service or production data.",
     "Staging access needed: apply migrations/20261029_document_page_text.sql and migrations/20261029_request_observability.sql through controlled backup/restore, then verify schema and rollback/restore evidence.",
     "Staging access needed: run the read-only document inventory first, then native-text-only page-text backfill. Scanned/mixed PDFs must remain skipped; no paid OCR.",
     "Course-material review needed: approve representative PDFs and expected source pages for human retrieval/citation review. Keep billable embeddings disabled until cost/quality approval.",
-    "Provider access needed: verify Paystack sandbox checkout/webhooks, SES delivery, bounded real OpenAI generation, R2 object operations/headers and configured audio/GPU provider health using safe staging credentials. No live payments or billable GPU without explicit approval.",
     "Monitoring access needed: verify Sentry notification delivery and browser/provider X-Request-ID propagation; do not claim outbound paging until delivery is observed.",
     "B2B review needed: document/approve the client-observed 50%-visible/1.5-second dwell limitation or implement independently verifiable server-side measurement before tamper-proof viewability/CPA claims.",
+    "Home/PWA sign-off: rebuild the exact candidate locally, confirm splash/login/home brand marks use /icon-192.png, five Home Quick Actions remain Upload, My Study, Library, Morio and Shop, and inspect installed PWA/offline shell.",
     "Keep release BLOCKED; do not deploy or alter production data until all release-scoped gates are closed and deployment is explicitly authorized."
   ],
-  "current_main_commit": "02fcdfb12ab065d6613b08bd82d031cc3bb109ea",
-  "verification_note": "Updated 2026-11-14. Main 02fcdfb12ab065d6613b08bd82d031cc3bb109ea is documentation-only; underlying runtime main is 72f08742832dbc8a4b09469fadb72eea06ddf6da. Single consolidated architecture PR #79 remains draft at candidate edcfad751e4f3774e297219ecbb4c22cc31ef854 (123 ahead, 2 behind). Frontend Build 43566535402 passed 170 source/transform contracts, 5 offline Library tests, audits, TypeScript, service-worker validation and production build. Release Browser 43566535290 and PostgreSQL Backup Restore 43566535421 both passed on the exact same candidate SHA. Release Browser passed phone/tablet, Shop buyer/seller/admin including an encrypted in-app message, B2B browser-to-ledger, 99 PostgreSQL QA tests, Study Hub offline lifecycle and generated-artifact/podcast Blob replay; artifact 14102507070 has 17 reviewed images. Backup/restore passed existing-database data preservation and PostgreSQL 17 custom restore. All 17 triggered PR workflows passed; StudyHub Library Flow 43566535404 was skipped by path condition. The Shop seller fixture now registers the peer E2EE key before contact, and the Admin Platform floating control was moved up 8px and passes the navigation-clearance assertion. Architecture remains incomplete: active Upload/UploadShareChoice/Processing, PublishLibrary and Subscription/Payment boundaries and backend route groups remain. Shop stays IN_PROGRESS because real Paystack/R2 provider checks are NOT_TESTED. B2B viewability, staging page-text/citation, external monitoring, Home/PWA, provider and deployment gates remain open. Release remains BLOCKED; no production data, live payment, deployment, new paid service or billable GPU operation was performed."
+  "current_main_commit": "7922fa0d27fb275382e9fa4f46bfe4f242acdcf3",
+  "verification_note": "Updated 2026-11-26. Previous application/document baseline 6f1ef09e15b1f0ae4bf059e70d86518c76be1f2a has 18 associated workflow runs terminal: 17 success, one path-conditioned StudyHub Library Flow skipped. The subsequent documentation reconciliation head f78de2232e948501df70c16aba18488b5f9913f9 has 20 check runs at inspection: 2 skipped by patch paths, 7 in progress and 11 queued; therefore latest-head CI is IN_PROGRESS, not PASS. Main remains 7922fa0d27fb275382e9fa4f46bfe4f242acdcf3. PR #79 is the sole open PR, draft and unmerged. Document/generation dependencies are mapped in docs/architecture/REPOSITORY_REFACTOR_PLAN.md. Provider staging, retrieval/index/citation review, external monitoring, independent B2B viewability, human Home/PWA sign-off and deployment authorization remain open. Overall release remains BLOCKED.",
+  "current_pr_head": "f78de2232e948501df70c16aba18488b5f9913f9"
 }

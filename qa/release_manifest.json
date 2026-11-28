@@ -25,10 +25,10 @@
         },
         {
           "kind": "backend_route",
-          "path": "app.py",
+          "path": "gamification_routes.py",
           "anchors": [
             "/study-time/sync",
-            "study_time_sync"
+            "def study_time_sync"
           ]
         },
         {
@@ -125,10 +125,27 @@
             "prepza-e2ee",
             "IDENTITY_KEY_REPLACEMENT_REQUIRED"
           ]
+        },
+        {
+          "kind": "backend_route",
+          "path": "e2ee_key_backup_routes.py",
+          "anchors": [
+            "/keys/backup",
+            "register_e2ee_key_backup_routes"
+          ]
+        },
+        {
+          "kind": "test",
+          "path": "tests/test_e2ee_key_backup_routes_contract.py",
+          "anchors": [
+            "test_key_backup_route_preserves_session_scope_and_csrf",
+            "test_key_backup_route_preserves_validation_and_payload_contract"
+          ]
         }
       ],
       "required_test_commands": [
-        "python -m pytest scripts/test_e2ee_identity_runtime.py -q"
+        "python -m pytest scripts/test_e2ee_identity_runtime.py -q",
+        "python -m pytest tests/test_e2ee_key_backup_routes_contract.py -q"
       ],
       "notes": "Browser identity lifecycle coverage passed in the recorded E2EE identity run on dd5418a; the current runtime commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015 also passed E2EE Security Regression run 40502457061. Multi-device protocol beyond the tested fresh-device conflict remains outside the frozen launch scope."
     },
@@ -343,6 +360,7 @@
           "kind": "student_payment_tests",
           "path": "tests/test_local_qa_real_world.py",
           "anchors": [
+            "def test_paystack_browser_callback_prefers_reference_then_trxref_and_fails_closed",
             "def test_paystack_webhook_rejects_bad_signature_retries_then_deduplicates_entitlement",
             "def test_b2b_paystack_campaign_checkout_uses_mock_provider_and_separates_campaign_value",
             "def test_b2b_campus_report_shows_aggregate_only_at_ten_reached_accounts"
@@ -364,9 +382,10 @@
         }
       ],
       "required_test_commands": [
-        "python -m pytest tests/test_local_qa_real_world.py -k \"paystack_webhook_rejects_bad_signature_retries_then_deduplicates_entitlement or b2b_paystack_campaign_checkout_uses_mock_provider_and_separates_campaign_value\" -q"
+        "python -m pytest tests/test_local_qa_real_world.py -k \"paystack_webhook_rejects_bad_signature_retries_then_deduplicates_entitlement or b2b_paystack_campaign_checkout_uses_mock_provider_and_separates_campaign_value\" -q",
+        "python -m pytest tests/test_local_qa_real_world.py -k \"paystack_browser_callback_prefers_reference_then_trxref_and_fails_closed\" -q"
       ],
-      "notes": "PASS in release browser run 40502457332 on runtime commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015: full disposable PostgreSQL QA (92 passed) exercised invalid signatures, transient retry, duplicate student entitlement webhook, duplicate B2B refund replay and distinct same-amount refund events. This is mocked-provider application evidence, not live Paystack sandbox evidence."
+      "notes": "PASS in release browser run 40502457332 on runtime commit e1d9ef42b533c9fb3fb14de2a4a3d66e30714015: full disposable PostgreSQL QA (92 passed) exercised invalid signatures, transient retry, duplicate student entitlement webhook, duplicate B2B refund replay and distinct same-amount refund events. This is mocked-provider application evidence, not live Paystack sandbox evidence. Browser callback characterization now protects reference-over-trxref precedence, trxref fallback, missing-reference error redirect, provider-sync exception handling, and the existing SPA payment_status redirect. This remains mocked application evidence, not live Paystack verification."
     },
     {
       "id": "external_provider_boundaries",
@@ -398,12 +417,20 @@
             "Current disposition:** NOT_TESTED",
             "Never silently fall back to production credentials."
           ]
+        },
+        {
+          "kind": "provider_tests",
+          "path": "tests/test_local_qa_real_world.py",
+          "anchors": [
+            "def test_ambassador_transfer_routes_delegate_to_mocked_provider_boundary"
+          ]
         }
       ],
       "required_test_commands": [
-        "python -m pytest tests/test_provider_boundary_mocks.py -q"
+        "python -m pytest tests/test_provider_boundary_mocks.py -q",
+        "python -m pytest tests/test_local_qa_real_world.py -k ambassador_transfer_routes_delegate_to_mocked_provider_boundary -q"
       ],
-      "notes": "Mocked provider boundary tests pass, but live/sandbox Paystack checkout/webhook, controlled SES delivery, bounded OpenAI generation, real R2 operations and configured audio/GPU provider health are NOT_TESTED pending safe staging credentials and provider-side evidence. Never start billable GPU inference without explicit approval."
+      "notes": "Mocked provider boundary tests pass, but live/sandbox Paystack checkout/webhook, controlled SES delivery, bounded OpenAI generation, real R2 operations and configured audio/GPU provider health are NOT_TESTED pending safe staging credentials and provider-side evidence. Never start billable GPU inference without explicit approval. Ambassador payout admin/webhook delegation is covered only with injected mocks in the disposable PostgreSQL QA suite; the production transfer helper definitions and money-state transitions remain NOT_TESTED and must not be inferred from this seam test."
     },
     {
       "id": "shop_marketplace",

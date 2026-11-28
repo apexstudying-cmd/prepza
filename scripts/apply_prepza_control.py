@@ -62,12 +62,33 @@ def patch_frontend():
     FRONTEND.write_text(text)
 
 
+def module_owned_control_ready():
+    app_text = APP.read_text(encoding="utf-8")
+    registry_text = (ROOT / "route_registry.py").read_text(encoding="utf-8")
+    settings_routes = (ROOT / "admin_reconciled_core_b.py").read_text(encoding="utf-8")
+    admin_controller = (ROOT / "frontend" / "src" / "admin" / "useAdminSectionController.ts").read_text(encoding="utf-8")
+    admin_section = (ROOT / "frontend" / "src" / "admin" / "AdminSection.tsx").read_text(encoding="utf-8")
+    control_api = (ROOT / "prepza_control.py").read_text(encoding="utf-8")
+    return all((
+        "register_control_feature_routes(app, db" in app_text,
+        "def register_control_feature_routes(" in registry_text,
+        "prepza_control_enabled" in settings_routes,
+        "setPrepzaControlEnabled" in admin_controller,
+        "Disable Control Access" in admin_section,
+        "PREPZA_CONTROL_TOKEN" in control_api,
+        "hmac.compare_digest" in control_api,
+    ))
+
+
 if __name__ == "__main__":
-    app_text = APP.read_text()
-    frontend_text = FRONTEND.read_text()
-    if "register_control_routes(" in app_text and "Disable Control Access" in frontend_text:
-        print("Prepza control API patch already applied; nothing to do.")
+    if module_owned_control_ready():
+        print("Prepza control API and admin kill switch are already integrated through the extracted route, settings, controller, and view modules.")
     else:
-        patch_app()
-        patch_frontend()
-        print("Prepza control API and admin kill switch applied.")
+        app_text = APP.read_text()
+        frontend_text = FRONTEND.read_text()
+        if "register_control_routes(" in app_text and "Disable Control Access" in frontend_text:
+            print("Prepza control API patch already applied; nothing to do.")
+        else:
+            patch_app()
+            patch_frontend()
+            print("Prepza control API and admin kill switch applied.")

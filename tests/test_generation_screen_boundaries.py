@@ -7,6 +7,7 @@ APP = (ROOT / "frontend/src/App.tsx").read_text(encoding="utf-8")
 SCREENS = (ROOT / "frontend/src/screens/study/GeneratedStudyScreens.tsx").read_text(encoding="utf-8")
 GENERATION = (ROOT / "frontend/src/generation/GenerationScreens.tsx").read_text(encoding="utf-8")
 STUDY_GENERATION = (ROOT / "frontend/src/generation/StudyGenerationScreensClean.tsx").read_text(encoding="utf-8")
+ACHIEVEMENTS = (ROOT / "frontend/src/screens/gamification/AchievementsScreen.tsx").read_text(encoding="utf-8")
 
 
 def test_active_summary_and_mind_map_routes_are_study_module_owned() -> None:
@@ -22,7 +23,7 @@ def test_active_summary_and_mind_map_routes_are_study_module_owned() -> None:
 def test_generated_material_route_wrappers_preserve_shell_layout_and_navigation() -> None:
     assert "export function SummaryStudyScreen(" in SCREENS
     assert "export function MindMapStudyScreen(" in SCREENS
-    assert "setScreen('share-sheet')" in GENERATION
+    assert "setScreen('share-sheet')" in ACHIEVEMENTS
     assert "setScreen('document-study')" in STUDY_GENERATION
     assert "var(--prepza-generation-color-scheme, light)" in SCREENS
     assert "var(--prepza-generation-page, #F8F9FC)" in SCREENS

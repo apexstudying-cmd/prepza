@@ -1,0 +1,12 @@
+export type Screen =
+  | 'splash' | 'login' | 'forgot-password' | 'signup' | 'check-email' | 'complete-profile' | 'reset-password' | 'verify-confirm'
+  | 'home' | 'explore' | 'create-modal' | 'chats' | 'profile' | 'shop'
+  | 'upload-share-choice'
+  | 'chat-detail' | 'upload' | 'processing' | 'doc-ready' | 'document-study'
+  | 'ai-tutor' | 'flashcards' | 'quiz' | 'podcast-player' | 'podcast-library' | 'summary'
+  | 'opportunities' | 'opportunity-detail' | 'share-opp-form' | 'edu-upload-form'
+  | 'settings' | 'student-profile' | 'share-sheet'
+  | 'notifications' | 'library' | 'mind-map' | 'new-chat' | 'chat-options' | 'edit-profile'
+  | 'subscription' | 'payment' | 'payment-success' | 'payment-failure' | 'payment-history'
+  | 'publish-library' | 'xp-progress' | 'study-streak' | 'achievements' | 'study-materials' | 'document-reader'
+  | 'followers' | 'following' | 'follow-requests' | 'group-detail' | 'group-create' | 'ambassador' | 'time-studied' | 'study-activity'

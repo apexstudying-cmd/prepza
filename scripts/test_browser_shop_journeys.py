@@ -123,6 +123,22 @@ with app.app_context():
     run_container_python(code)
 
 
+def wait_for_e2ee_identity(page, user_id: int) -> None:
+    page.wait_for_function(
+        """async userId => {
+          try {
+            const response = await fetch('/keys/' + userId, { credentials: 'include' })
+            if (!response.ok) return false
+            const payload = await response.json()
+            return typeof payload.public_key === 'string' && payload.public_key.length > 0
+          } catch {
+            return false
+          }
+        }""",
+        arg=user_id,
+        timeout=15000,
+    )
+
 def open_shop(page) -> None:
     page.get_by_role("navigation", name="Primary navigation").wait_for(
         state="visible", timeout=20000
@@ -143,8 +159,44 @@ def main() -> int:
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=True)
             try:
+                # The direct-chat fetch bridge encrypts messages with both
+                # participants' registered public keys. Bootstrap the seller's
+                # real browser identity before the buyer opens the conversation.
+                seller_context = browser.new_context(viewport={"width": 390, "height": 844})
+                seller_page = seller_context.new_page()
+                login(seller_page, seller)
+                wait_for_e2ee_identity(seller_page, seller["user_id"])
+                print("PASS: seller secure-chat identity is registered")
+
                 # Buyer: browse, inspect, save, report and contact the seller.
                 buyer_context = browser.new_context(viewport={"width": 390, "height": 844})
+                # Install before app modules load so their global fetch reference
+                # retains this test-only request wrapper.
+                buyer_context.add_init_script("""(() => {
+                    const originalFetch = window.fetch.bind(window)
+                    window.__prepzaTestStaleChatPostOverrides = 0
+                    window.__prepzaTestStaleChatConversationId = null
+                    window.fetch = async (input, init) => {
+                      const raw = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
+                      let pathname = ""
+                      try { pathname = new URL(raw, window.location.origin).pathname } catch {}
+                      const method = String(init?.method || (input instanceof Request ? input.method : "GET")).toUpperCase()
+                      const conversationId = window.__prepzaTestStaleChatConversationId
+                      if (
+                        conversationId != null
+                        && pathname === `/chats/${conversationId}/messages`
+                        && method === "POST"
+                        && window.__prepzaTestStaleChatPostOverrides === 0
+                      ) {
+                        const sourceHeaders = init?.headers || (input instanceof Request ? input.headers : undefined)
+                        const headers = new Headers(sourceHeaders)
+                        headers.set("X-CSRF-Token", "qa-stale-chat-csrf-token")
+                        window.__prepzaTestStaleChatPostOverrides = 1
+                        return originalFetch(input, { ...(init || {}), headers })
+                      }
+                      return originalFetch(input, init)
+                    }
+                })()""")
                 buyer_page = buyer_context.new_page()
                 login(buyer_page, buyer)
                 open_shop(buyer_page)
@@ -183,20 +235,126 @@ def main() -> int:
                     full_page=True,
                     animations="disabled",
                 )
-                buyer_page.get_by_role("button", name="Message in Prepza").click(timeout=10000)
-                buyer_page.wait_for_function(
-                    """() => document.body.innerText.includes('Message request created') ||
-                      Boolean(document.querySelector('textarea[placeholder*="message" i]')) ||
-                      Boolean(document.querySelector('input[placeholder*="message" i]'))""",
-                    timeout=15000,
+                chat_detail_reads = []
+                buyer_page.on(
+                    "response",
+                    lambda response: chat_detail_reads.append((response.url, response.status))
+                    if response.request.method == "GET" and "/chats/" in response.url
+                    else None,
                 )
-                print("PASS: buyer browsed details, saved, reported and contacted the seller")
+                with buyer_page.expect_response(
+                    lambda response: response.request.method == "POST"
+                    and response.url.rstrip("/").endswith("/chats"),
+                    timeout=15000,
+                ) as create_chat_response:
+                    buyer_page.get_by_role("button", name="Message in Prepza").click(timeout=10000)
+                created_chat = create_chat_response.value
+                if not created_chat.ok:
+                    raise AssertionError(
+                        f"Shop in-app contact failed to create a chat: "
+                        f"{created_chat.status} {created_chat.text()}"
+                    )
+                chat_payload = created_chat.json()
+                if chat_payload.get("status") != "accepted":
+                    raise AssertionError(
+                        "Shop contact did not open an accepted conversation; "
+                        f"received status={chat_payload.get('status')!r}"
+                    )
+                conversation_id = int(chat_payload["id"])
+                detail_status = None
+                for _ in range(40):
+                    detail_status = next(
+                        (
+                            status
+                            for url, status in chat_detail_reads
+                            if url.split("?")[0].rstrip("/").endswith(
+                                f"/chats/{conversation_id}"
+                            )
+                        ),
+                        None,
+                    )
+                    if detail_status is not None:
+                        break
+                    buyer_page.wait_for_timeout(250)
+                assert detail_status == 200, (
+                    "ChatDetail did not load the created conversation; "
+                    f"conversation_id={conversation_id}, responses={chat_detail_reads!r}"
+                )
+                print(f"PASS: ChatDetail loaded conversation {conversation_id}")
+                buyer_page.get_by_role("button", name="Chat options").wait_for(
+                    state="visible", timeout=15000
+                )
+                composer = buyer_page.get_by_placeholder("Message", exact=True)
+                composer.wait_for(state="visible", timeout=10000)
+                stale_csrf_override_count = buyer_page.evaluate(
+                    "() => window.__prepzaTestStaleChatPostOverrides ?? null"
+                )
+                if stale_csrf_override_count != 0:
+                    raise AssertionError(
+                        "ChatDetail stale-CSRF fixture was not initialized before sending: "
+                        f"overrides={stale_csrf_override_count!r}"
+                    )
+                composer.fill("QA in-app seller message")
+                send_button = buyer_page.get_by_role("button", name="Send", exact=True)
+                send_button.wait_for(state="visible", timeout=5000)
+                # Arm the context-installed wrapper for this direct conversation.
+                buyer_page.evaluate(
+                    "(conversationId) => { window.__prepzaTestStaleChatConversationId = conversationId }",
+                    conversation_id,
+                )
+                message_attempt_statuses = []
+
+                def record_message_attempt(response):
+                    if (
+                        response.request.method == "POST"
+                        and response.url.rstrip("/").endswith(f"/chats/{conversation_id}/messages")
+                    ):
+                        message_attempt_statuses.append(response.status)
+
+                buyer_page.on("response", record_message_attempt)
+                with buyer_page.expect_response(
+                    lambda response: response.request.method == "POST"
+                    and response.url.rstrip("/").endswith(
+                        f"/chats/{conversation_id}/messages"
+                    )
+                    and response.status in (200, 201),
+                    timeout=15000,
+                ) as send_message_response:
+                    send_button.click(timeout=10000)
+                sent_message = send_message_response.value
+                if sent_message.status not in (200, 201):
+                    raise AssertionError(
+                        f"Shop in-app message failed: {sent_message.status} "
+                        f"{sent_message.text()}"
+                    )
+                stale_header_overrides = buyer_page.evaluate(
+                    "() => window.__prepzaTestStaleChatPostOverrides || 0"
+                )
+                if stale_header_overrides != 1:
+                    raise AssertionError(
+                        "Shop chat did not exercise the stale-CSRF request fixture: "
+                        f"overrides={stale_header_overrides!r}"
+                    )
+                if message_attempt_statuses != [403, sent_message.status]:
+                    raise AssertionError(
+                        "Chat message did not recover from exactly one stale-CSRF rejection: "
+                        f"statuses={message_attempt_statuses!r}"
+                    )
+                buyer_page.get_by_text(
+                    "QA in-app seller message", exact=False
+                ).wait_for(timeout=10000)
+                if composer.input_value():
+                    raise AssertionError("Chat composer did not clear after sending the message")
+                buyer_page.screenshot(
+                    path=str(ARTIFACTS / "buyer-chat-message-sent.png"),
+                    full_page=True,
+                    animations="disabled",
+                )
+                print("PASS: buyer browsed details, saved, reported, opened ChatDetail and sent an in-app message")
                 buyer_context.close()
 
-                # Seller: inspect owned listings and exercise pause/sold controls.
-                seller_context = browser.new_context(viewport={"width": 390, "height": 844})
-                seller_page = seller_context.new_page()
-                login(seller_page, seller)
+                # Seller: reuse the already-authenticated context so the same
+                # device identity can receive and decrypt direct-chat messages.
                 open_shop(seller_page)
                 seller_page.get_by_role("button", name="My listings").click(timeout=5000)
                 seller_page.get_by_text(ACTIVE_TITLE, exact=True).wait_for(timeout=10000)
@@ -228,6 +386,17 @@ def main() -> int:
                 admin_page = admin_context.new_page()
                 login(admin_page, admin)
                 open_shop(admin_page)
+                admin_control = admin_page.get_by_role("button", name="Open Admin Platform")
+                admin_control.wait_for(state="visible", timeout=10000)
+                primary_nav = admin_page.get_by_role("navigation", name="Primary navigation")
+                control_box = admin_control.bounding_box()
+                nav_box = primary_nav.bounding_box()
+                assert control_box is not None and nav_box is not None
+                control_bottom = control_box["y"] + control_box["height"]
+                assert control_bottom <= nav_box["y"] - 8, (
+                    "Admin Platform floating control overlaps primary navigation: "
+                    f"control_bottom={control_bottom}, nav_top={nav_box['y']}"
+                )
                 admin_page.get_by_role("button", name="Moderation").click(timeout=5000)
                 admin_page.get_by_text(PENDING_APPROVE_TITLE, exact=True).wait_for(timeout=10000)
                 admin_page.screenshot(

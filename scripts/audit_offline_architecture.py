@@ -76,6 +76,7 @@ def main() -> None:
     study = read('frontend/src/offline/studyHubOffline.ts')
     activity = read('frontend/src/offline/studyHubActivityTracker.ts')
     backend_activity = read('app.py')
+    backend_study_routes = read('gamification_routes.py')
     bootstrap = read('frontend/src/offline/bootstrap.ts')
     queue = read('tools/apply_offline_sync_queue.py')
     hardening = read('tools/apply_offline_queue_hardening.py')
@@ -92,7 +93,8 @@ def main() -> None:
     require(study, ['prepza-study-assets-v1', 'openAssetDb', 'putStudyAsset', 'getOfflineStudyDocumentBlob', 'getOfflineStudyDocumentUrl', 'getOfflineStudyStorageUsage'], 'offline Study Hub package')
     require(generated, ['summarize', 'flashcards', 'quiz', 'mind-map', 'podcast-script', 'podcast-audio'], 'offline generated-material package')
     require(activity, ['setStudyHubActive', 'MAX_DAILY_SECONDS', 'FLUSH_INTERVAL_MS', 'INACTIVITY_WINDOW_MS', "fetch('/study-time/sync'"], 'Study Hub activity tracker')
-    require(backend_activity, ['@app.route("/study-time/sync", methods=["POST"])', 'def reconcile_study_time', 'with_for_update()', 'MAX_STUDY_TIME_SECONDS_PER_DAY'], 'server Study Hub reconciliation')
+    require(backend_study_routes, ['@app.route("/study-time/sync", methods=["POST"])', 'def study_time_sync'], 'server Study Hub route')
+    require(backend_activity, ['def reconcile_study_time', 'with_for_update()', 'MAX_STUDY_TIME_SECONDS_PER_DAY'], 'server Study Hub reconciliation')
     require(bootstrap, ['setStudyHubUserId', 'installStudyHubActivityTracker'], 'Study Hub bootstrap')
     require(queue, ['syncQueue', 'PREPZA_OFFLINE_QUEUE_MAX_ATTEMPTS', 'flushPrepzaOfflineQueue', 'createdAt', 'lastError'], 'offline queue foundation')
     require(hardening, ['dedupeKey', 'prepzaOfflineQueueDedupeKey', 'Never replay one account', 'Conflict reconciliation:', 'freshCsrf', 'prepza:offline-queue-syncing', 'prepza:offline-queue-synced'], 'offline queue hardening')
@@ -108,7 +110,7 @@ def main() -> None:
     # Legacy heartbeat retirement is verified by the runtime contract test;
     # do not duplicate that behavioral check against a build-time transformed app.py.
     require(bootstrap, ['prepza-offline-last-auth-user', "indexedDB.deleteDatabase('prepza-offline-chat-v1')", "caches.delete('prepza-generated-audio-v1')", 'isolateAccount'], 'offline account switch isolation')
-    assert 'today = _study_local_date()' in backend_activity, 'Study Hub sync date boundary must use Nairobi time'
+    assert 'today = _study_local_date()' in backend_study_routes, 'Study Hub sync date boundary must use Nairobi time'
     stress_queue_model()
     idempotent_sync_model()
     verify_daily_study_limit_contract()

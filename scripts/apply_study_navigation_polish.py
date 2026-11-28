@@ -2,6 +2,7 @@ from pathlib import Path
 import re
 
 APP = Path('frontend/src/App.tsx')
+NAVIGATION_MODULE = Path('frontend/src/navigation/useAppNavigation.ts')
 READER_MODULE = Path('frontend/src/screens/study/DocumentReaderScreen.tsx')
 
 
@@ -122,6 +123,34 @@ def harden_document_navigation(text: str) -> str:
 """
     if old_set_screen in text and new_set_screen not in text:
         text = text.replace(old_set_screen, new_set_screen, 1)
+
+    extracted_set_screen = """  const setScreen = (target: Screen) => {
+    if (target === screen) return
+    setScreenStack(stack => {
+      const ancestorIndex = stack.lastIndexOf(target)
+      return ancestorIndex >= 0 ? stack.slice(0, ancestorIndex + 1) : [...stack, target]
+    })
+    window.history.pushState({ prepzaNav: true }, '')
+  }
+"""
+    extracted_set_screen_hardened = """  const setScreen = (target: Screen) => {
+    if (target === screen) return
+    // Back-style buttons should reuse the existing history entry rather than
+    // pushing the same destination again. This prevents a visible remount of
+    // Document Study when returning from generation screens.
+    if (screenStack.length > 1 && screenStack[screenStack.length - 2] === target) {
+      window.history.back()
+      return
+    }
+    setScreenStack(stack => {
+      const ancestorIndex = stack.lastIndexOf(target)
+      return ancestorIndex >= 0 ? stack.slice(0, ancestorIndex + 1) : [...stack, target]
+    })
+    window.history.pushState({ prepzaNav: true }, '')
+  }
+"""
+    if extracted_set_screen in text and extracted_set_screen_hardened not in text:
+        text = text.replace(extracted_set_screen, extracted_set_screen_hardened, 1)
     return text
 
 
@@ -216,7 +245,7 @@ def harden_extracted_splash_startup(app_text: str) -> str:
         setScreen={setScreen}
         brandline={PREPZA_BRANDLINE}
         resumeOffline={() => {
-          const stored = readStoredNavigationState()
+          const stored = storedNavigation
           const resumeable: Screen[] = [
             'home', 'explore', 'chats', 'profile', 'library', 'document-study',
             'document-reader', 'ai-tutor', 'study-materials', 'podcast-player',
@@ -309,6 +338,13 @@ def main():
     if PATCH_MARKER not in text:
         text = text.rstrip() + "\n" + PATCH_MARKER + "\n"
     APP.write_text(text, encoding='utf-8')
+
+    if NAVIGATION_MODULE.exists():
+        navigation_text = NAVIGATION_MODULE.read_text(encoding='utf-8')
+        navigation_text = harden_document_navigation(navigation_text)
+        navigation_text = persist_navigation_across_restarts(navigation_text)
+        NAVIGATION_MODULE.write_text(navigation_text, encoding='utf-8')
+
     print('study navigation polish applied')
 
 if __name__ == '__main__':

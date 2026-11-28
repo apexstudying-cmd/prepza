@@ -110,11 +110,14 @@ def test_health_keeps_the_original_lazy_sqlalchemy_text_import():
 def test_public_shell_routes_are_registered_at_the_original_app_initialization_point():
     root = Path(__file__).resolve().parents[1]
     app_source = (root / "app.py").read_text(encoding="utf-8")
-    registrar = "register_public_shell_routes(app, db, limiter, lambda: _sweep_expired_opportunities_safe())"
+    registry_source = (root / "route_registry.py").read_text(encoding="utf-8")
+    registrar = "register_public_shell_route(app, db, limiter, lambda: _sweep_expired_opportunities_safe())"
     register_at = app_source.index(registrar)
 
+    assert "def register_public_shell_route(" in registry_source
+    assert "register_public_shell_routes(app, db, limiter, sweep_expired_opportunities)" in registry_source
     assert register_at > app_source.index("def track_last_active(")
-    assert register_at < app_source.index("register_academic_catalog_routes(app, University, Program)")
+    assert register_at < app_source.index("register_academic_catalog_route(app, University, Program)")
     for path in ('@app.route("/")', '@app.route("/sw.js")', '@app.route("/health")'):
         assert path not in app_source
     for name in ("def home(", "def service_worker(", "def health("):

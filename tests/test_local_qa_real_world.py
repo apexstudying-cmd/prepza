@@ -1076,6 +1076,47 @@ def test_paystack_checkout_uses_base_plan_price_and_provider_success_is_idempote
     assert orders == ["fulfilled"]
 
 
+def test_paystack_browser_callback_prefers_reference_then_trxref_and_fails_closed(world, monkeypatch):
+    """Characterize the existing browser return contract before route extraction."""
+    from types import SimpleNamespace
+    import app as app_module
+
+    calls = []
+
+    def fake_sync(reference):
+        calls.append(reference)
+        if reference == "qa-callback-provider-error":
+            raise RuntimeError("simulated provider verification failure")
+        return SimpleNamespace(status="success")
+
+    monkeypatch.setattr(app_module, "sync_paystack_payment_status", fake_sync)
+    client = app_module.app.test_client()
+
+    preferred = client.get(
+        "/payment/paystack/callback?reference=qa-callback-reference&trxref=qa-ignored-trxref"
+    )
+    assert preferred.status_code == 302
+    assert preferred.headers["Location"].endswith("?payment_status=success")
+    assert calls == ["qa-callback-reference"]
+
+    fallback = client.get("/payment/paystack/callback?trxref=qa-callback-trxref")
+    assert fallback.status_code == 302
+    assert fallback.headers["Location"].endswith("?payment_status=success")
+    assert calls == ["qa-callback-reference", "qa-callback-trxref"]
+
+    missing_reference = client.get("/payment/paystack/callback")
+    assert missing_reference.status_code == 302
+    assert missing_reference.headers["Location"].endswith("?payment_status=error")
+    assert calls == ["qa-callback-reference", "qa-callback-trxref"]
+
+    provider_error = client.get(
+        "/payment/paystack/callback?reference=qa-callback-provider-error"
+    )
+    assert provider_error.status_code == 302
+    assert provider_error.headers["Location"].endswith("?payment_status=error")
+    assert calls[-1] == "qa-callback-provider-error"
+
+
 def test_paystack_webhook_rejects_bad_signature_retries_then_deduplicates_entitlement(world, monkeypatch):
     """Exercise signed webhook delivery, transient verification failure, retry and duplicate replay."""
     import app as app_module
@@ -1210,6 +1251,69 @@ def test_paystack_webhook_rejects_bad_signature_retries_then_deduplicates_entitl
         {"pid": payment_id},
     ).scalars().all()
     assert order_statuses == ["fulfilled"]
+
+
+@pytest.mark.parametrize(
+    ("event", "callback_key"),
+    [
+        ("charge.success", "recurring_charge"),
+        ("subscription.create", "subscription_created"),
+        ("subscription.not_renew", "subscription_webhook"),
+        ("subscription.disable", "subscription_webhook"),
+        ("invoice.payment_failed", "subscription_webhook"),
+        ("refund.pending", "refund_webhook"),
+        ("refund.processed", "refund_webhook"),
+        ("refund.failed", "refund_webhook"),
+    ],
+)
+def test_paystack_webhook_dispatches_signed_lifecycle_events_without_changing_payload(
+    world, monkeypatch, event, callback_key
+):
+    """Lock the existing signed event-to-lifecycle dispatch contract before extraction."""
+    import app as app_module
+
+    secret = "ci-only-webhook-dispatch-secret"
+    monkeypatch.setattr(app_module, "PAYSTACK_SECRET_KEY", secret)
+    payload = {
+        "event": event,
+        "data": {
+            "reference": f"qa-dispatch-{event.replace('.', '-')}",
+            "subscription_code": "SUB_test_dispatch",
+            "customer": {"customer_code": "CUS_test_dispatch"},
+        },
+    }
+    received = []
+
+    def capture(*args):
+        received.append(args)
+
+    monkeypatch.setitem(
+        app_module._student_subscription_billing, callback_key, capture
+    )
+    if event == "charge.success":
+        monkeypatch.setattr(
+            app_module, "sync_paystack_payment_status", lambda reference: None
+        )
+
+    raw_body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    signature = hmac.new(
+        secret.encode("utf-8"), raw_body, hashlib.sha512
+    ).hexdigest()
+    response = app_module.app.test_client().post(
+        "/payment/paystack/webhook",
+        data=raw_body,
+        content_type="application/json",
+        headers={"X-Paystack-Signature": signature},
+    )
+
+    assert response.status_code == 200, response.get_data(as_text=True)
+    assert response.get_json() == {"status": "ok"}
+    assert len(received) == 1
+    if callback_key in ("recurring_charge", "subscription_created"):
+        assert received[0] == (db, payload)
+    else:
+        assert received[0] == (db, event, payload)
+
 
 def test_csrf_and_session_version_fail_closed(world):
     client = _client_for(world["student_a"].id)
@@ -2628,3 +2732,302 @@ def test_document_access_denies_direct_id_for_wrong_library_cohort(world):
         headers=_csrf(world["student_b"].id),
     )
     assert response.status_code == 404
+
+
+def test_ambassador_payout_request_persists_bundle_and_rejects_duplicates(world):
+    """A payout request must persist its Paystack recipient and reserve only unlocked referrals."""
+    app_module = __import__("app")
+    now = datetime.utcnow()
+
+    ambassador = app_module.Ambassador(
+        user_id=world["student_a"].id,
+        referral_code="QAAMBASSADOR",
+        status="active",
+    )
+    db.session.add(ambassador)
+    db.session.flush()
+
+    payment = app_module.Payment(
+        user_id=world["student_b"].id,
+        content_item_id=None,
+        amount=1000,
+        provider="paystack",
+        reference="qa-ambassador-payout-payment",
+        provider_reference="qa-ambassador-payout-provider",
+        payment_type="subscription",
+        plan="plus",
+        status="success",
+        subscription_starts_at=now - timedelta(days=30),
+        subscription_expires_at=now - timedelta(days=1),
+    )
+    db.session.add(payment)
+    db.session.flush()
+
+    referral = app_module.Referral(
+        ambassador_id=ambassador.id,
+        referred_user_id=world["student_b"].id,
+        referral_code_used=ambassador.referral_code,
+        status="activated",
+        first_payment_id=payment.id,
+        first_payment_at=now - timedelta(days=30),
+        commission_rate_applied=10,
+        commission_amount=600,
+        unlock_at=now - timedelta(days=1),
+    )
+    db.session.add(referral)
+    db.session.commit()
+
+    client = _client_for(world["student_a"].id)
+    endpoint = "/ambassador/payouts/request"
+    headers = _csrf(world["student_a"].id)
+
+    missing_names = client.post(
+        endpoint,
+        json={"payout_destination": "+254712345678"},
+        headers=headers,
+    )
+    assert missing_names.status_code == 400
+    assert app_module.AmbassadorPayout.query.count() == 0
+    assert referral.payout_id is None
+
+    payload = {
+        "payout_destination": "+254712345678",
+        "recipient_first_name": "QA",
+        "recipient_last_name": "Student",
+    }
+    created = client.post(endpoint, json=payload, headers=headers)
+    assert created.status_code == 201, created.get_data(as_text=True)
+    response = created.get_json()
+    assert response == {"id": response["id"], "amount": 600, "status": "pending"}
+
+    payout = db.session.get(app_module.AmbassadorPayout, response["id"])
+    db.session.refresh(referral)
+    assert payout is not None
+    assert payout.ambassador_id == ambassador.id
+    assert payout.amount == 600
+    assert payout.status == "pending"
+    assert payout.payout_destination == "+254712345678"
+    assert payout.recipient_first_name == "QA"
+    assert payout.recipient_last_name == "Student"
+    assert referral.payout_id == payout.id
+
+    duplicate = client.post(endpoint, json=payload, headers=headers)
+    assert duplicate.status_code == 409
+    assert app_module.AmbassadorPayout.query.count() == 1
+
+
+def test_student_subscription_billing_registration_and_webhook_dispatch_contract(world, monkeypatch):
+    """Protect the existing refund routes and every non-transfer Paystack dispatch branch."""
+    import app as app_module
+
+    handlers = app_module._student_subscription_billing
+    assert isinstance(handlers, dict)
+    assert set(handlers) == {
+        "record_usage",
+        "quote",
+        "subscription_created",
+        "recurring_charge",
+        "refund_webhook",
+        "subscription_webhook",
+    }
+
+    registered_paths = {rule.rule for rule in app_module.app.url_map.iter_rules()}
+    assert {
+        "/subscription/refund-policy",
+        "/subscription/refund-quote",
+        "/subscription/refund-request",
+        "/subscription/cancel",
+        "/admin/subscription-refunds",
+        "/admin/subscription-refunds/<int:refund_id>/execute",
+    } <= registered_paths
+
+    client = app_module.app.test_client()
+    monkeypatch.setattr(app_module, "PAYSTACK_SECRET_KEY", "")
+    unconfigured = client.post(
+        "/payment/paystack/webhook",
+        data=b"{}",
+        content_type="application/json",
+    )
+    assert unconfigured.status_code == 503
+
+    secret = "ci-only-webhook-dispatch-secret"
+    monkeypatch.setattr(app_module, "PAYSTACK_SECRET_KEY", secret)
+    calls = []
+    verified_references = []
+
+    monkeypatch.setitem(
+        handlers,
+        "subscription_created",
+        lambda db_arg, payload: calls.append(("subscription_created", payload)),
+    )
+    monkeypatch.setitem(
+        handlers,
+        "subscription_webhook",
+        lambda db_arg, event, payload: calls.append(("subscription_webhook", event, payload)),
+    )
+    monkeypatch.setitem(
+        handlers,
+        "refund_webhook",
+        lambda db_arg, event, payload: calls.append(("refund_webhook", event, payload)),
+    )
+    monkeypatch.setitem(
+        handlers,
+        "recurring_charge",
+        lambda db_arg, payload: calls.append(("recurring_charge", payload)),
+    )
+
+    def no_existing_payment(reference):
+        verified_references.append(reference)
+        return None
+
+    monkeypatch.setattr(app_module, "sync_paystack_payment_status", no_existing_payment)
+
+    def deliver(event, data):
+        payload = {"event": event, "data": data}
+        raw_body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        signature = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha512).hexdigest()
+        response = client.post(
+            "/payment/paystack/webhook",
+            data=raw_body,
+            content_type="application/json",
+            headers={"X-Paystack-Signature": signature},
+        )
+        assert response.status_code == 200, response.get_data(as_text=True)
+        assert response.get_json() == {"status": "ok"}
+        return payload
+
+    expected_calls = []
+    payload = deliver("subscription.create", {"subscription_code": "qa-subscription-created"})
+    expected_calls.append(("subscription_created", payload))
+
+    for event in ("subscription.not_renew", "subscription.disable", "invoice.payment_failed"):
+        payload = deliver(event, {"subscription_code": "qa-subscription-lifecycle"})
+        expected_calls.append(("subscription_webhook", event, payload))
+
+    for event in (
+        "refund.pending",
+        "refund.processing",
+        "refund.needs-attention",
+        "refund.processed",
+        "refund.failed",
+    ):
+        payload = deliver(event, {"transaction_reference": "qa-refund-transaction"})
+        expected_calls.append(("refund_webhook", event, payload))
+
+    recurring_payload = deliver("charge.success", {"reference": "qa-recurring-charge"})
+    expected_calls.append(("recurring_charge", recurring_payload))
+    assert verified_references == ["qa-recurring-charge"]
+
+    before_unknown_event = list(calls)
+    deliver("customer.updated", {})
+    assert calls == before_unknown_event
+    assert calls == expected_calls
+
+def test_ambassador_transfer_routes_delegate_to_mocked_provider_boundary(world, monkeypatch):
+    """Characterize the transfer call seam without inventing payout state transitions."""
+    import app as app_module
+    import admin_reconciled_ambassadors as admin_routes
+
+    ambassador = app_module.Ambassador.query.filter_by(user_id=world["student_a"].id).first()
+    if ambassador is None:
+        ambassador = app_module.Ambassador(
+            user_id=world["student_a"].id,
+            referral_code="QA-TRANSFER-BOUNDARY",
+            status="active",
+        )
+        db.session.add(ambassador)
+        db.session.flush()
+
+    payout = app_module.AmbassadorPayout(
+        ambassador_id=ambassador.id,
+        amount=600,
+        status="pending",
+        payout_destination="+254712345678",
+        recipient_first_name="QA",
+        recipient_last_name="Transfer",
+    )
+    db.session.add(payout)
+    db.session.commit()
+
+    reference = "qa-transfer-boundary-contract"
+    boundary_calls = []
+    applied_statuses = []
+
+    def fake_initiate(received_payout):
+        boundary_calls.append(("initiate", received_payout.id))
+        return reference, "success"
+
+    def fake_sync(received_payout):
+        boundary_calls.append(("sync", received_payout.id, received_payout.paystack_transfer_code))
+
+    def fake_apply(received_payout, status):
+        # Deliberately record the boundary only. The missing production helper
+        # owns money-state transitions; this mock must not invent them.
+        applied_statuses.append((received_payout.id, status))
+
+    monkeypatch.setattr(admin_routes, "initiate_paystack_transfer", fake_initiate, raising=False)
+    monkeypatch.setattr(admin_routes, "sync_paystack_transfer_status", fake_sync, raising=False)
+    monkeypatch.setattr(admin_routes, "_apply_paystack_transfer_result", fake_apply, raising=False)
+    monkeypatch.setattr(app_module, "_apply_paystack_transfer_result", fake_apply, raising=False)
+
+    admin_client = _client_for(world["admin"].id)
+    approved = admin_client.post(
+        f"/admin/payouts/{payout.id}/approve",
+        json={},
+        headers=_csrf(world["admin"].id),
+    )
+    assert approved.status_code == 200, approved.get_data(as_text=True)
+    assert approved.get_json() == {
+        "id": payout.id,
+        "status": "approved",
+        "paystack_transfer_code": reference,
+    }
+    db.session.refresh(payout)
+    assert payout.status == "approved"
+    assert payout.paystack_transfer_code == reference
+    assert boundary_calls == [("initiate", payout.id)]
+    assert applied_statuses == [(payout.id, "success")]
+
+    synced = admin_client.post(
+        f"/admin/payouts/{payout.id}/sync-status",
+        json={},
+        headers=_csrf(world["admin"].id),
+    )
+    assert synced.status_code == 200, synced.get_data(as_text=True)
+    assert synced.get_json() == {
+        "id": payout.id,
+        "status": "approved",
+        "rejection_reason": None,
+        "paid_at": None,
+    }
+    assert boundary_calls[-1] == ("sync", payout.id, reference)
+
+    secret = "ci-only-ambassador-transfer-webhook-secret"
+    monkeypatch.setattr(app_module, "PAYSTACK_SECRET_KEY", secret)
+    webhook_client = app_module.app.test_client()
+    for event, expected_status in (
+        ("transfer.success", "success"),
+        ("transfer.failed", "failed"),
+        ("transfer.reversed", "reversed"),
+    ):
+        payload = {"event": event, "data": {"reference": reference}}
+        raw_body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        signature = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha512).hexdigest()
+        response = webhook_client.post(
+            "/payment/paystack/webhook",
+            data=raw_body,
+            content_type="application/json",
+            headers={"X-Paystack-Signature": signature},
+        )
+        assert response.status_code == 200, response.get_data(as_text=True)
+        assert response.get_json() == {"status": "ok"}
+
+    assert applied_statuses == [
+        (payout.id, "success"),  # immediate transfer result from the mocked initiation
+        (payout.id, "success"),
+        (payout.id, "failed"),
+        (payout.id, "reversed"),
+    ]
+    # The mock is intentionally state-neutral; provider outcome handling remains unimplemented.
+    assert payout.status == "approved"
+    assert payout.paid_at is None
